@@ -535,7 +535,6 @@
             const adjustInput = document.getElementById('adjustDialogInput');
             const adjustCancel = document.getElementById('adjustDialogCancel');
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
-            const csrfToken = '{{ csrf_token() }}';
             let lastAdjustButton = null;
 
             function openAdjust(action, value) {
@@ -570,93 +569,6 @@
             function formatVndSigned(n) {
                 const sign = n > 0 ? '+' : '';
                 return sign + Math.abs(n).toLocaleString('vi-VN') + 'đ';
-            }
-
-            if (adjustForm) {
-                adjustForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const action = adjustForm.action;
-                    if (!action) {
-                        return;
-                    }
-
-                    const body = new FormData(adjustForm);
-
-                    try {
-                        const res = await fetch(action, {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-TOKEN': csrfToken,
-                                'X-Requested-With': 'XMLHttpRequest',
-                                'Accept': 'application/json',
-                            },
-                            credentials: 'include',
-                            body,
-                        });
-
-                        if (res.status === 403) {
-                            alert('Tài khoản của bạn không có quyền chỉnh sửa.');
-                            return;
-                        }
-                        if (res.status === 419) {
-                            alert('Phiên đăng nhập đã hết hạn. Vui lòng tải lại trang và thử lại.');
-                            return;
-                        }
-
-                        const contentType = res.headers.get('content-type') || '';
-                        if (!contentType.includes('application/json')) {
-                            if (res.redirected || res.url.includes('/login')) {
-                                window.location.href = res.url || '{{ route('login') }}';
-                                return;
-                            }
-
-                            window.location.reload();
-                            return;
-                        }
-
-                        const data = await res.json().catch(() => null);
-                        if (res.ok && data && data.ok) {
-                            if (typeof adjustDialog.close === 'function') {
-                                adjustDialog.close();
-                            }
-
-                            const adj = Number(data.price_adjustment ?? 0);
-                            if (lastAdjustButton) {
-                                lastAdjustButton.dataset.value = String(adj);
-
-                                const spanId = lastAdjustButton.dataset.spanId || '';
-                                const span = spanId ? document.getElementById(spanId) : null;
-                                const cPrice = Number(lastAdjustButton.dataset.cprice || 0);
-                                const own = Number(lastAdjustButton.dataset.own || 0);
-
-                                if (span) {
-                                    if (!adj) {
-                                        span.style.display = 'none';
-                                    } else {
-                                        const adjDiff = cPrice + adj - own;
-                                        span.textContent = formatVndSigned(adjDiff);
-                                        span.style.display = 'inline';
-                                        span.style.color = adjDiff > 0 ? '#991b1b' : (adjDiff < 0 ? '#166534' : '#111827');
-                                    }
-                                } else {
-                                    window.location.reload();
-                                }
-                            } else {
-                                window.location.reload();
-                            }
-                            return;
-                        }
-
-                        if (data && data.errors) {
-                            alert(Object.values(data.errors).flat().join('\n'));
-                            return;
-                        }
-
-                        alert('Không lưu được. Vui lòng thử lại.');
-                    } catch (err) {
-                        alert('Không lưu được. Vui lòng thử lại.');
-                    }
-                });
             }
 
             const deleteDialog = document.getElementById('deleteDialog');
