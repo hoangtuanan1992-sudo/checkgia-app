@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class CompetitorController extends Controller
 {
@@ -186,7 +187,23 @@ class CompetitorController extends Controller
     public function updatePriceAdjustment(Request $request, Competitor $competitor): RedirectResponse
     {
         $product = $competitor->product;
-        abort_unless($product && $product->user_id === $request->user()->effectiveUserId(), 404);
+        $user = $request->user();
+        $effectiveUserId = $user ? $user->effectiveUserId() : null;
+        if (! $product || ! $user || (int) $product->user_id !== (int) $effectiveUserId) {
+            Log::warning('price_adjustment_not_allowed', [
+                'competitor_id' => (int) $competitor->id,
+                'product_id' => (int) ($competitor->product_id ?? 0),
+                'product_user_id' => (int) ($product->user_id ?? 0),
+                'user_id' => (int) ($user?->id ?? 0),
+                'effective_user_id' => (int) ($effectiveUserId ?? 0),
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Không có quyền hoặc không tìm thấy dữ liệu.'], 404);
+            }
+
+            abort(404);
+        }
 
         $data = $request->validate([
             'price_adjustment' => ['nullable', 'string', 'max:64'],

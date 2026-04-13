@@ -571,6 +571,70 @@
                 return sign + Math.abs(n).toLocaleString('vi-VN') + 'đ';
             }
 
+            if (adjustForm) {
+                adjustForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const action = adjustForm.action;
+                    if (!action) {
+                        return;
+                    }
+
+                    const body = new FormData(adjustForm);
+
+                    try {
+                        const res = await fetch(action, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': csrfToken,
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json',
+                            },
+                            credentials: 'include',
+                            body,
+                        });
+
+                        const contentType = res.headers.get('content-type') || '';
+                        const data = contentType.includes('application/json') ? await res.json().catch(() => null) : null;
+
+                        if (!res.ok) {
+                            alert((data && (data.message || data.error)) ? (data.message || data.error) : `Không lưu được (HTTP ${res.status}).`);
+                            return;
+                        }
+
+                        if (typeof adjustDialog.close === 'function') {
+                            adjustDialog.close();
+                        }
+
+                        const adj = Number(data && data.price_adjustment !== undefined ? data.price_adjustment : Number(adjustInput.value || 0));
+                        if (lastAdjustButton) {
+                            lastAdjustButton.dataset.value = String(adj);
+
+                            const spanId = lastAdjustButton.dataset.spanId || '';
+                            const span = spanId ? document.getElementById(spanId) : null;
+                            const cPrice = Number(lastAdjustButton.dataset.cprice || 0);
+                            const own = Number(lastAdjustButton.dataset.own || 0);
+
+                            if (span) {
+                                if (!adj) {
+                                    span.style.display = 'none';
+                                } else {
+                                    const adjDiff = cPrice + adj - own;
+                                    span.textContent = formatVndSigned(adjDiff);
+                                    span.style.display = 'inline';
+                                    span.style.color = adjDiff > 0 ? '#991b1b' : (adjDiff < 0 ? '#166534' : '#111827');
+                                }
+                            } else {
+                                window.location.reload();
+                            }
+                        } else {
+                            window.location.reload();
+                        }
+                    } catch (err) {
+                        alert('Không lưu được. Vui lòng thử lại.');
+                    }
+                });
+            }
+
             const deleteDialog = document.getElementById('deleteDialog');
             const deleteCancel = document.getElementById('deleteDialogCancel');
             const deleteConfirm = document.getElementById('deleteDialogConfirm');
