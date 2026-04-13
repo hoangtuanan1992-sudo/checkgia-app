@@ -564,41 +564,6 @@
                 });
             }
 
-            if (adjustForm) {
-                adjustForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const action = adjustForm.action;
-                    if (!action) {
-                        return;
-                    }
-
-                    const body = new FormData(adjustForm);
-
-                    try {
-                        const res = await fetch(action, {
-                            method: 'POST',
-                            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'text/html' },
-                            body,
-                            redirect: 'follow',
-                        });
-
-                        if (res.redirected) {
-                            window.location.href = res.url;
-                            return;
-                        }
-
-                        if (!res.ok) {
-                            window.location.reload();
-                            return;
-                        }
-
-                        window.location.reload();
-                    } catch (err) {
-                        window.location.reload();
-                    }
-                });
-            }
-
             const deleteDialog = document.getElementById('deleteDialog');
             const deleteCancel = document.getElementById('deleteDialogCancel');
             const deleteConfirm = document.getElementById('deleteDialogConfirm');
