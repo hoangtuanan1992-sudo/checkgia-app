@@ -202,9 +202,9 @@ class CompetitorController extends Controller
         $sign = 1;
         if (str_starts_with($input, '-')) {
             $sign = -1;
-            $input = trim(mb_substr($input, 1));
+            $input = trim(substr($input, 1));
         } elseif (str_starts_with($input, '+')) {
-            $input = trim(mb_substr($input, 1));
+            $input = trim(substr($input, 1));
         }
 
         $digits = preg_replace('/[^0-9]/', '', $input) ?? '';
