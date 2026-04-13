@@ -273,7 +273,6 @@
                                                                 data-action="{{ route('competitors.adjustment.update', $c) }}"
                                                                 data-value="{{ $adj }}"
                                                                 title="Điều chỉnh giá (+/-)"
-                                                                onclick="event.preventDefault();"
                                                             >
                                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                                                     <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -409,27 +408,6 @@
         </div>
     </dialog>
 
-    <dialog id="adjustmentDialog" class="dialog">
-        <div class="dialog-header">
-            <h3 class="card-title" style="font-size:18px">Điều chỉnh giá</h3>
-            <p class="card-sub">Nhập giá trị điều chỉnh (+/-)</p>
-        </div>
-        <div class="dialog-body">
-            <form id="adjustmentForm" method="POST" action="">
-                @csrf
-                @method('PUT')
-                <div class="field" style="margin-top:0">
-                    <label class="label" for="adjustmentInput">Giá trị</label>
-                    <input class="input" id="adjustmentInput" name="price_adjustment" type="text" required placeholder="+100000 hoặc -50000">
-                </div>
-                <div class="actions" style="justify-content:flex-end">
-                    <button class="btn btn-secondary" type="button" id="adjustmentCancel">Huỷ</button>
-                    <button class="btn" type="submit" id="adjustmentSave">Lưu</button>
-                </div>
-            </form>
-        </div>
-    </dialog>
-
     <dialog id="deleteDialog" class="dialog">
         <div class="dialog-header">
             <h3 class="card-title" style="font-size:18px">Xoá sản phẩm?</h3>
@@ -518,12 +496,6 @@
             const del = document.getElementById('urlDialogDelete');
             const clear = document.getElementById('urlDialogClear');
             const openButtons = document.querySelectorAll('.js-edit-url');
-            const adjButtons = document.querySelectorAll('.js-edit-adjustment');
-            const adjDialog = document.getElementById('adjustmentDialog');
-            const adjForm = document.getElementById('adjustmentForm');
-            const adjInput = document.getElementById('adjustmentInput');
-            const adjCancel = document.getElementById('adjustmentCancel');
-            const adjSave = document.getElementById('adjustmentSave');
 
             function open(action, value, fieldName) {
                 form.action = action;
@@ -542,28 +514,6 @@
                     open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
                 });
             });
-
-            adjButtons.forEach((btn) => {
-                btn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    adjForm.action = btn.dataset.action;
-                    adjInput.value = btn.dataset.value || '0';
-                    if (typeof adjDialog.showModal === 'function') {
-                        adjDialog.showModal();
-                    }
-                    adjInput.focus();
-                });
-            });
-
-            if (adjCancel) {
-                adjCancel.addEventListener('click', () => adjDialog.close());
-            }
-            if (adjDialog) {
-                adjDialog.addEventListener('click', (e) => {
-                    if (e.target === adjDialog) adjDialog.close();
-                });
-            }
 
             cancel.addEventListener('click', () => dialog.close());
             dialog.addEventListener('click', (e) => {
@@ -596,7 +546,10 @@
             }
 
             adjustButtons.forEach((btn) => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
                     openAdjust(btn.dataset.action, btn.dataset.value);
                 });
             });
