@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class AdminSettingController extends Controller
@@ -14,7 +16,13 @@ class AdminSettingController extends Controller
     {
         $setting = AppSetting::current() ?? new AppSetting;
 
-        return view('admin.settings.edit', compact('setting'));
+        $demoUsers = User::query()
+            ->where('role', 'owner')
+            ->whereNull('parent_user_id')
+            ->orderBy('id')
+            ->get(['id', 'name', 'email', 'parent_user_id', 'role']);
+
+        return view('admin.settings.edit', compact('setting', 'demoUsers'));
     }
 
     public function update(Request $request): RedirectResponse
@@ -28,6 +36,7 @@ class AdminSettingController extends Controller
             'mail_encryption' => ['nullable', 'in:,tls,ssl'],
             'mail_from_address' => ['nullable', 'email', 'max:255'],
             'mail_from_name' => ['nullable', 'string', 'max:255'],
+            'demo_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'owner')->whereNull('parent_user_id')],
         ]);
 
         $setting = AppSetting::current() ?? new AppSetting;
@@ -40,6 +49,10 @@ class AdminSettingController extends Controller
 
         if (array_key_exists('mail_encryption', $data) && $data['mail_encryption'] === '') {
             $data['mail_encryption'] = null;
+        }
+
+        if (array_key_exists('demo_user_id', $data) && (string) $data['demo_user_id'] === '') {
+            $data['demo_user_id'] = null;
         }
 
         $setting->fill($data);

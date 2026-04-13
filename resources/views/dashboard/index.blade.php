@@ -171,7 +171,14 @@
                                 @php($latestTimes = $product->competitors->map(fn($c) => $c->prices->first()?->fetched_at)->filter())
                                 @php($lastTime = $latestTimes->max())
                                 @php($lastUpdated = collect([$lastTime, $product->last_scraped_at])->filter()->max())
-                                @php($minDiff = $product->competitors->map(fn($c) => $c->prices->first()?->price)->filter()->map(fn($p) => (int) $p - $own)->min())
+                                @php($minDiff = $product->competitors->map(function ($c) use ($own) {
+                                    $p = $c->prices->first()?->price;
+                                    if (is_null($p)) {
+                                        return null;
+                                    }
+
+                                    return (int) $p + (int) ($c->price_adjustment ?? 0) - $own;
+                                })->filter(fn ($v) => ! is_null($v))->min())
                                 <tr
                                     data-product-row="{{ $product->id }}"
                                     data-row-order="{{ $idx }}"
@@ -230,11 +237,13 @@
                                         @php($cPrice = $latest?->price)
                                         @php($prevPrice = $prev?->price)
                                         @php($diff = is_null($cPrice) ? null : ((int) $cPrice - $own))
+                                        @php($adj = (int) ($c?->price_adjustment ?? 0))
+                                        @php($adjDiff = is_null($cPrice) ? null : ((int) $cPrice + $adj - $own))
                                         @php($delta = (! is_null($cPrice) && ! is_null($prevPrice)) ? ((int) $cPrice - (int) $prevPrice) : null)
                                         <td>
                                             @if($c)
                                                 <div style="display:flex;flex-direction:column;gap:4px;padding-top:6px">
-                                                    <div style="font-weight:600;font-size:13px">
+                                                    <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
                                                         @if(is_null($diff))
                                                             <span class="hint" style="margin-top:0">---</span>
                                                         @elseif($diff === 0)
@@ -243,6 +252,33 @@
                                                             <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)">+{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @else
                                                             <a href="{{ $c->url }}" target="_blank" style="color:var(--success)">{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                        @endif
+
+                                                        @if(! is_null($adjDiff))
+                                                            @if($adj !== 0)
+                                                                @php($adjColor = $adjDiff > 0 ? '#991b1b' : ($adjDiff < 0 ? '#166534' : '#111827'))
+                                                                <span style="font-weight:800;color:{{ $adjColor }}">
+                                                                    @if($adjDiff > 0)
+                                                                        +{{ number_format($adjDiff, 0, ',', '.') }}đ
+                                                                    @elseif($adjDiff < 0)
+                                                                        {{ number_format($adjDiff, 0, ',', '.') }}đ
+                                                                    @else
+                                                                        0đ
+                                                                    @endif
+                                                                </span>
+                                                            @endif
+                                                            <button
+                                                                type="button"
+                                                                class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                                data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                                data-value="{{ $adj }}"
+                                                                title="Điều chỉnh giá (+/-)"
+                                                            >
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                                </svg>
+                                                            </button>
                                                         @endif
                                                     </div>
                                                     <div style="display:flex;align-items:center;gap:8px">
@@ -344,6 +380,28 @@
                 <div class="actions" style="justify-content:flex-end">
                     <button class="btn btn-secondary" type="button" id="urlDialogCancel">Huỷ</button>
                     <button class="btn btn-secondary" type="button" id="urlDialogDelete">Xoá</button>
+                    <button class="btn" type="submit">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <dialog id="adjustDialog" class="dialog">
+        <div class="dialog-header">
+            <h3 class="card-title" style="font-size:18px">Điều chỉnh giá</h3>
+            <p class="card-sub">Nhập số + hoặc - để cân bằng cấu hình</p>
+        </div>
+        <div class="dialog-body">
+            <form id="adjustDialogForm" method="POST" action="">
+                @csrf
+                @method('PUT')
+                <div class="field" style="margin-top:0">
+                    <label class="label" for="adjustDialogInput">Giá điều chỉnh (+/-)</label>
+                    <input class="input" id="adjustDialogInput" name="price_adjustment" type="text" inputmode="numeric" placeholder="+200000 hoặc -200000">
+                    @error('price_adjustment')<div class="error">{{ $message }}</div>@enderror
+                </div>
+                <div class="actions" style="justify-content:flex-end">
+                    <button class="btn btn-secondary" type="button" id="adjustDialogCancel">Huỷ</button>
                     <button class="btn" type="submit">Lưu</button>
                 </div>
             </form>
@@ -468,6 +526,37 @@
                     input.required = false;
                     input.value = '';
                     form.requestSubmit();
+                });
+            }
+
+            const adjustDialog = document.getElementById('adjustDialog');
+            const adjustForm = document.getElementById('adjustDialogForm');
+            const adjustInput = document.getElementById('adjustDialogInput');
+            const adjustCancel = document.getElementById('adjustDialogCancel');
+            const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
+
+            function openAdjust(action, value) {
+                adjustForm.action = action;
+                adjustInput.value = value || '0';
+                if (typeof adjustDialog.showModal === 'function') {
+                    adjustDialog.showModal();
+                }
+                adjustInput.focus();
+                adjustInput.select();
+            }
+
+            adjustButtons.forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    openAdjust(btn.dataset.action, btn.dataset.value);
+                });
+            });
+
+            if (adjustCancel) {
+                adjustCancel.addEventListener('click', () => adjustDialog.close());
+            }
+            if (adjustDialog) {
+                adjustDialog.addEventListener('click', (e) => {
+                    if (e.target === adjustDialog) adjustDialog.close();
                 });
             }
 

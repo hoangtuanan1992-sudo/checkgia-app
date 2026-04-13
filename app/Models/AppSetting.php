@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
     'mail_encryption',
     'mail_from_address',
     'mail_from_name',
+    'demo_user_id',
 ])]
 class AppSetting extends Model
 {
@@ -23,6 +24,7 @@ class AppSetting extends Model
     protected function casts(): array
     {
         return [
+            'demo_user_id' => 'integer',
             'mail_port' => 'integer',
             'mail_password' => 'encrypted',
         ];

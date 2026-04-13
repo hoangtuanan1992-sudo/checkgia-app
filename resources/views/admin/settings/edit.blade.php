@@ -95,6 +95,33 @@
                         </div>
                     </div>
 
+                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Demo</h2>
+                            <p class="card-sub">Chọn tài khoản demo để truy cập nhanh từ trang chủ</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+                                <div class="field" style="margin-top:0">
+                                    <label class="label" for="demo_user_id">Tài khoản demo (Shop)</label>
+                                    <select class="input" id="demo_user_id" name="demo_user_id">
+                                        <option value="" @selected(old('demo_user_id', $setting->demo_user_id) === null || (string) old('demo_user_id', $setting->demo_user_id) === '')>Không dùng demo</option>
+                                        @foreach($demoUsers as $u)
+                                            <option value="{{ $u->id }}" @selected((string) old('demo_user_id', $setting->demo_user_id) === (string) $u->id)>
+                                                #{{ $u->id }} - {{ $u->name }} ({{ $u->email }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @error('demo_user_id')<div class="error">{{ $message }}</div>@enderror
+                                    <div class="hint" style="margin-top:6px">Link demo: <a href="{{ route('demo') }}" target="_blank">{{ route('demo') }}</a></div>
+                                </div>
+                                <div class="hint" style="margin-top:0">
+                                    Chỉ hiển thị các Shop (role owner, không phải sub-user).
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="actions" style="justify-content:flex-end">
                         <button class="btn" type="submit">Lưu</button>
                     </div>

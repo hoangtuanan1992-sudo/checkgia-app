@@ -12,6 +12,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardExportController;
 use App\Http\Controllers\DashboardProductController;
 use App\Http\Controllers\DashboardScrapeNowController;
+use App\Http\Controllers\DemoController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductHistoryController;
 use App\Http\Controllers\ReportController;
@@ -24,6 +25,8 @@ Route::get('/', function () {
 
     return view('welcome');
 })->name('home');
+
+Route::get('/demo', DemoController::class)->name('demo');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -81,6 +84,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/products/{product}/competitors/{competitor}', [CompetitorController::class, 'destroy'])->name('products.competitors.destroy');
         Route::post('/competitors/{competitor}/prices', [CompetitorController::class, 'storePrice'])->name('competitors.prices.store');
         Route::put('/competitors/{competitor}/url', [CompetitorController::class, 'updateUrl'])->name('competitors.url.update');
+        Route::put('/competitors/{competitor}/price-adjustment', [CompetitorController::class, 'updatePriceAdjustment'])->name('competitors.adjustment.update');
         Route::post('/competitors/{competitor}/scrape', [CompetitorController::class, 'scrapeLatestPrice'])->name('competitors.scrape');
     });
 

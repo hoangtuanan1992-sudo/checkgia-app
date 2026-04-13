@@ -183,6 +183,42 @@ class CompetitorController extends Controller
         return back()->with('status', 'Đã thêm giá đối thủ');
     }
 
+    public function updatePriceAdjustment(Request $request, Competitor $competitor): RedirectResponse
+    {
+        $product = $competitor->product;
+        abort_unless($product && $product->user_id === $request->user()->effectiveUserId(), 404);
+
+        $data = $request->validate([
+            'price_adjustment' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        $input = trim((string) ($data['price_adjustment'] ?? ''));
+        if ($input === '') {
+            $competitor->update(['price_adjustment' => 0]);
+
+            return back()->with('status', 'Đã lưu điều chỉnh giá');
+        }
+
+        $sign = 1;
+        $first = mb_substr($input, 0, 1);
+        if ($first === '-') {
+            $sign = -1;
+            $input = trim(mb_substr($input, 1));
+        } elseif ($first === '+') {
+            $input = trim(mb_substr($input, 1));
+        }
+
+        $digits = preg_replace('/[^0-9]/', '', $input) ?? '';
+        if ($digits === '') {
+            return back()->withErrors(['price_adjustment' => 'Giá điều chỉnh không hợp lệ.']);
+        }
+
+        $adjustment = $sign * (int) $digits;
+        $competitor->update(['price_adjustment' => $adjustment]);
+
+        return back()->with('status', 'Đã lưu điều chỉnh giá');
+    }
+
     public function scrapeLatestPrice(Request $request, Competitor $competitor): RedirectResponse
     {
         $product = $competitor->product;
