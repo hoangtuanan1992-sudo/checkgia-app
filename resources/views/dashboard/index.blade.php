@@ -548,6 +548,51 @@
                 adjustInput.select();
             }
 
+            function formatAdjustmentValue(value) {
+                const trimmed = String(value ?? '').trim();
+                const sign = trimmed.startsWith('-') ? '-' : trimmed.startsWith('+') ? '+' : '';
+                const digits = trimmed.replace(/[^\d]/g, '');
+                if (!digits) {
+                    return sign;
+                }
+
+                const formattedDigits = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+                return sign + formattedDigits;
+            }
+
+            function setCaretByDigitIndex(input, digitIndex) {
+                const value = input.value;
+                const hasSign = value.startsWith('-') || value.startsWith('+');
+                const start = hasSign ? 1 : 0;
+                let digitsSeen = 0;
+                let pos = start;
+
+                while (pos < value.length && digitsSeen < digitIndex) {
+                    if (/\d/.test(value[pos])) {
+                        digitsSeen += 1;
+                    }
+                    pos += 1;
+                }
+
+                input.setSelectionRange(pos, pos);
+            }
+
+            function formatAdjustmentInput(input) {
+                const oldValue = input.value;
+                const caret = input.selectionStart ?? oldValue.length;
+                const prefix = oldValue.slice(0, caret);
+                const digitIndex = (prefix.replace(/[^\d]/g, '')).length;
+
+                const nextValue = formatAdjustmentValue(oldValue);
+                if (nextValue === oldValue) {
+                    return;
+                }
+
+                input.value = nextValue;
+                setCaretByDigitIndex(input, digitIndex);
+            }
+
             adjustButtons.forEach((btn) => {
                 btn.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -570,6 +615,12 @@
             function formatVndSigned(n) {
                 const sign = n > 0 ? '+' : '';
                 return sign + Math.abs(n).toLocaleString('vi-VN') + 'đ';
+            }
+
+            if (adjustInput) {
+                adjustInput.addEventListener('input', () => {
+                    formatAdjustmentInput(adjustInput);
+                });
             }
 
             if (adjustForm) {
