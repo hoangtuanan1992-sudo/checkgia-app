@@ -188,7 +188,6 @@ class CompetitorController extends Controller
         $product = $competitor->product;
         $user = $request->user();
 
-        // Cho phép Admin hoặc user hiện tại thao tác
         if (! $product || ! $user || ($user->role !== 'admin' && (int) $product->user_id !== (int) $user->effectiveUserId())) {
             if ($request->expectsJson()) {
                 return response()->json(['message' => 'Không có quyền thao tác.'], 403);

@@ -535,6 +535,7 @@
             const adjustInput = document.getElementById('adjustDialogInput');
             const adjustCancel = document.getElementById('adjustDialogCancel');
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
+            const csrfToken = '{{ csrf_token() }}';
             let lastAdjustButton = null;
 
             function openAdjust(action, value) {
