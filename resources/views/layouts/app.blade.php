@@ -57,7 +57,7 @@
 <body>
     <nav>
         <a class="brand" href="{{ route('home') }}" style="display:flex;align-items:center;gap:10px">
-            <img src="https://checkgia.id.vn/brand-logo.jpg" alt="Laravel" style="height:70px;width:auto;border-radius:6px;display:block">
+            <img src="https://checkgia.id.vn/brand-logo.jpg" alt="Check Giá" style="height:70px;width:auto;border-radius:6px;display:block">
         </a>
         @auth
             <div style="display:flex;gap:8px;align-items:center">
