@@ -84,10 +84,11 @@ Route::middleware('auth')->group(function () {
         Route::delete('/products/{product}/competitors/{competitor}', [CompetitorController::class, 'destroy'])->name('products.competitors.destroy');
         Route::post('/competitors/{competitor}/prices', [CompetitorController::class, 'storePrice'])->name('competitors.prices.store');
         Route::put('/competitors/{competitor}/url', [CompetitorController::class, 'updateUrl'])->name('competitors.url.update');
-        Route::match(['put', 'post'], '/competitors/{competitor}/price-adjustment', [CompetitorController::class, 'updatePriceAdjustment'])->name('competitors.adjustment.update');
-        Route::get('/competitors/{competitor}/price-adjustment', fn () => redirect()->route('dashboard'));
         Route::post('/competitors/{competitor}/scrape', [CompetitorController::class, 'scrapeLatestPrice'])->name('competitors.scrape');
     });
+
+    Route::match(['put', 'post'], '/competitors/{competitor}/price-adjustment', [CompetitorController::class, 'updatePriceAdjustment'])->name('competitors.adjustment.update');
+    Route::get('/competitors/{competitor}/price-adjustment', fn () => redirect()->route('dashboard'));
 
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');
 });

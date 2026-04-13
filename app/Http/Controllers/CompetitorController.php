@@ -9,7 +9,6 @@ use App\Models\Product;
 use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 
 class CompetitorController extends Controller
 {
@@ -184,25 +183,17 @@ class CompetitorController extends Controller
         return back()->with('status', 'Đã thêm giá đối thủ');
     }
 
-    public function updatePriceAdjustment(Request $request, Competitor $competitor): RedirectResponse
+    public function updatePriceAdjustment(Request $request, Competitor $competitor)
     {
         $product = $competitor->product;
         $user = $request->user();
-        $effectiveUserId = $user ? $user->effectiveUserId() : null;
-        if (! $product || ! $user || (int) $product->user_id !== (int) $effectiveUserId) {
-            Log::warning('price_adjustment_not_allowed', [
-                'competitor_id' => (int) $competitor->id,
-                'product_id' => (int) ($competitor->product_id ?? 0),
-                'product_user_id' => (int) ($product->user_id ?? 0),
-                'user_id' => (int) ($user?->id ?? 0),
-                'effective_user_id' => (int) ($effectiveUserId ?? 0),
-            ]);
 
+        // Cho phép Admin hoặc user hiện tại thao tác
+        if (! $product || ! $user || ($user->role !== 'admin' && (int) $product->user_id !== (int) $user->effectiveUserId())) {
             if ($request->expectsJson()) {
-                return response()->json(['message' => 'Không có quyền hoặc không tìm thấy dữ liệu.'], 404);
+                return response()->json(['message' => 'Không có quyền thao tác.'], 403);
             }
-
-            abort(404);
+            abort(403);
         }
 
         $data = $request->validate([
