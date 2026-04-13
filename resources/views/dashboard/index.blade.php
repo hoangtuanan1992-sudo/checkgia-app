@@ -414,16 +414,18 @@
             <p class="card-sub">Nhập giá trị điều chỉnh (+/-)</p>
         </div>
         <div class="dialog-body">
-            <div id="adjustmentForm" data-action="">
+            <form id="adjustmentForm" method="POST" action="">
+                @csrf
+                @method('PUT')
                 <div class="field" style="margin-top:0">
                     <label class="label" for="adjustmentInput">Giá trị</label>
-                    <input class="input" id="adjustmentInput" name="adjustment" type="text" required placeholder="+100000 hoặc -50000">
+                    <input class="input" id="adjustmentInput" name="price_adjustment" type="text" required placeholder="+100000 hoặc -50000">
                 </div>
                 <div class="actions" style="justify-content:flex-end">
                     <button class="btn btn-secondary" type="button" id="adjustmentCancel">Huỷ</button>
-                    <button class="btn" type="button" id="adjustmentSave">Lưu</button>
+                    <button class="btn" type="submit" id="adjustmentSave">Lưu</button>
                 </div>
-            </div>
+            </form>
         </div>
     </dialog>
 
@@ -543,7 +545,7 @@
             adjButtons.forEach((btn) => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    adjForm.dataset.action = btn.dataset.action;
+                    adjForm.action = btn.dataset.action;
                     adjInput.value = btn.dataset.value || '0';
                     if (typeof adjDialog.showModal === 'function') {
                         adjDialog.showModal();
@@ -558,42 +560,6 @@
             if (adjDialog) {
                 adjDialog.addEventListener('click', (e) => {
                     if (e.target === adjDialog) adjDialog.close();
-                });
-            }
-
-            if (adjSave) {
-                adjSave.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const action = adjForm.dataset.action;
-                    const adjustment = adjInput.value;
-                    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
-                    fetch(action, {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({ adjustment: adjustment })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status) {
-                            window.location.reload();
-                        } else if (data.errors) {
-                            alert(Object.values(data.errors).flat().join('\\n'));
-                        } else {
-                            alert('Có lỗi xảy ra.');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Có lỗi xảy ra khi lưu điều chỉnh giá.');
-                    })
-                    .finally(() => {
-                        adjDialog.close();
-                    });
                 });
             }
 

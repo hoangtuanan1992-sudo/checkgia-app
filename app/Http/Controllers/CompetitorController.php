@@ -200,11 +200,10 @@ class CompetitorController extends Controller
         }
 
         $sign = 1;
-        $first = mb_substr($input, 0, 1);
-        if ($first === '-') {
+        if (str_starts_with($input, '-')) {
             $sign = -1;
             $input = trim(mb_substr($input, 1));
-        } elseif ($first === '+') {
+        } elseif (str_starts_with($input, '+')) {
             $input = trim(mb_substr($input, 1));
         }
 
