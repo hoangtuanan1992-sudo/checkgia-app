@@ -613,7 +613,7 @@
             }
 
             function formatVndSigned(n) {
-                const sign = n > 0 ? '+' : '';
+                const sign = n > 0 ? '+' : n < 0 ? '-' : '';
                 return sign + Math.abs(n).toLocaleString('vi-VN') + 'đ';
             }
 
