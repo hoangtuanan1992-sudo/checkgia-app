@@ -12,7 +12,7 @@
         body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
         a{color:var(--accent);text-decoration:none}
         a:hover{color:var(--accent-hover)}
-        nav{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:rgba(255,255,255,.85);border-bottom:1px solid var(--border);backdrop-filter:saturate(180%) blur(10px);position:sticky;top:0;z-index:100}
+        nav{display:flex;align-items:center;justify-content:space-between;gap:0px;padding:0px 18px;background:rgba(255,255,255,.85);border-bottom:1px solid var(--border);backdrop-filter:saturate(180%) blur(10px);position:sticky;top:0;z-index:100}
         .brand{font-weight:700;letter-spacing:.4px}
         .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid rgba(13,110,253,.25);background:var(--accent);color:#fff;cursor:pointer}
         .btn:hover{background:var(--accent-hover);border-color:rgba(13,110,253,.35)}
@@ -57,8 +57,7 @@
 <body>
     <nav>
         <a class="brand" href="{{ route('home') }}" style="display:flex;align-items:center;gap:10px">
-            <img src="{{ asset('brand-logo.jpg') }}" alt="{{ config('app.name') }}" style="height:28px;width:auto;border-radius:6px;display:block">
-            <span>{{ config('app.name') }}</span>
+            <img src="https://checkgia.id.vn/brand-logo.jpg" alt="Laravel" style="height:70px;width:auto;border-radius:6px;display:block">
         </a>
         @auth
             <div style="display:flex;gap:8px;align-items:center">
