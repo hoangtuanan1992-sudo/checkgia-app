@@ -273,6 +273,7 @@
                                                                 data-action="{{ route('competitors.adjustment.update', $c) }}"
                                                                 data-value="{{ $adj }}"
                                                                 title="Điều chỉnh giá (+/-)"
+                                                                onclick="event.preventDefault();"
                                                             >
                                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                                                     <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -544,6 +545,7 @@
 
             adjButtons.forEach((btn) => {
                 btn.addEventListener('click', (e) => {
+                    e.preventDefault();
                     e.stopPropagation();
                     adjForm.action = btn.dataset.action;
                     adjInput.value = btn.dataset.value || '0';
