@@ -196,6 +196,10 @@ class CompetitorController extends Controller
         if ($input === '') {
             $competitor->update(['price_adjustment' => 0]);
 
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => true, 'price_adjustment' => 0]);
+            }
+
             return back()->with('status', 'Đã lưu điều chỉnh giá');
         }
 
@@ -209,11 +213,19 @@ class CompetitorController extends Controller
 
         $digits = preg_replace('/[^0-9]/', '', $input) ?? '';
         if ($digits === '') {
+            if ($request->expectsJson()) {
+                return response()->json(['errors' => ['price_adjustment' => ['Giá điều chỉnh không hợp lệ.']]], 422);
+            }
+
             return back()->withErrors(['price_adjustment' => 'Giá điều chỉnh không hợp lệ.']);
         }
 
         $adjustment = $sign * (int) $digits;
         $competitor->update(['price_adjustment' => $adjustment]);
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'price_adjustment' => $adjustment]);
+        }
 
         return back()->with('status', 'Đã lưu điều chỉnh giá');
     }

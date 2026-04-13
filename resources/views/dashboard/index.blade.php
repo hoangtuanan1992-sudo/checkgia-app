@@ -564,6 +564,46 @@
                 });
             }
 
+            if (adjustForm) {
+                adjustForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const action = adjustForm.action;
+                    if (!action) {
+                        return;
+                    }
+
+                    const body = new FormData(adjustForm);
+
+                    try {
+                        const res = await fetch(action, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': csrfToken,
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json',
+                            },
+                            credentials: 'same-origin',
+                            body,
+                        });
+
+                        const data = await res.json().catch(() => null);
+                        if (res.ok && data && data.ok) {
+                            window.location.reload();
+                            return;
+                        }
+
+                        if (data && data.errors) {
+                            alert(Object.values(data.errors).flat().join('\n'));
+                            return;
+                        }
+
+                        window.location.reload();
+                    } catch (err) {
+                        window.location.reload();
+                    }
+                });
+            }
+
             const deleteDialog = document.getElementById('deleteDialog');
             const deleteCancel = document.getElementById('deleteDialogCancel');
             const deleteConfirm = document.getElementById('deleteDialogConfirm');
