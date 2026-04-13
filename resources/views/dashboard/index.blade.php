@@ -255,23 +255,24 @@
                                                         @endif
 
                                                         @if(! is_null($adjDiff))
-                                                            @if($adj !== 0)
-                                                                @php($adjColor = $adjDiff > 0 ? '#991b1b' : ($adjDiff < 0 ? '#166534' : '#111827'))
-                                                                <span style="font-weight:800;color:{{ $adjColor }}">
-                                                                    @if($adjDiff > 0)
-                                                                        +{{ number_format($adjDiff, 0, ',', '.') }}đ
-                                                                    @elseif($adjDiff < 0)
-                                                                        {{ number_format($adjDiff, 0, ',', '.') }}đ
-                                                                    @else
-                                                                        0đ
-                                                                    @endif
-                                                                </span>
-                                                            @endif
+                                                            @php($adjColor = $adjDiff > 0 ? '#991b1b' : ($adjDiff < 0 ? '#166534' : '#111827'))
+                                                            <span id="adjDiff-{{ $c->id }}" style="display:{{ $adj !== 0 ? 'inline' : 'none' }};font-weight:800;color:{{ $adjColor }}">
+                                                                @if($adjDiff > 0)
+                                                                    +{{ number_format($adjDiff, 0, ',', '.') }}đ
+                                                                @elseif($adjDiff < 0)
+                                                                    {{ number_format($adjDiff, 0, ',', '.') }}đ
+                                                                @else
+                                                                    0đ
+                                                                @endif
+                                                            </span>
                                                             <button
                                                                 type="button"
                                                                 class="icon-btn icon-btn-sm js-edit-adjustment"
                                                                 data-action="{{ route('competitors.adjustment.update', $c) }}"
                                                                 data-value="{{ $adj }}"
+                                                                data-span-id="adjDiff-{{ $c->id }}"
+                                                                data-own="{{ $own }}"
+                                                                data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
                                                                 title="Điều chỉnh giá (+/-)"
                                                             >
                                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -535,6 +536,7 @@
             const adjustCancel = document.getElementById('adjustDialogCancel');
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
             const csrfToken = '{{ csrf_token() }}';
+            let lastAdjustButton = null;
 
             function openAdjust(action, value) {
                 adjustForm.action = action;
@@ -551,6 +553,7 @@
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
+                    lastAdjustButton = btn;
                     openAdjust(btn.dataset.action, btn.dataset.value);
                 });
             });
@@ -562,6 +565,11 @@
                 adjustDialog.addEventListener('click', (e) => {
                     if (e.target === adjustDialog) adjustDialog.close();
                 });
+            }
+
+            function formatVndSigned(n) {
+                const sign = n > 0 ? '+' : '';
+                return sign + Math.abs(n).toLocaleString('vi-VN') + 'đ';
             }
 
             if (adjustForm) {
@@ -588,7 +596,34 @@
 
                         const data = await res.json().catch(() => null);
                         if (res.ok && data && data.ok) {
-                            window.location.reload();
+                            if (typeof adjustDialog.close === 'function') {
+                                adjustDialog.close();
+                            }
+
+                            const adj = Number(data.price_adjustment ?? 0);
+                            if (lastAdjustButton) {
+                                lastAdjustButton.dataset.value = String(adj);
+
+                                const spanId = lastAdjustButton.dataset.spanId || '';
+                                const span = spanId ? document.getElementById(spanId) : null;
+                                const cPrice = Number(lastAdjustButton.dataset.cprice || 0);
+                                const own = Number(lastAdjustButton.dataset.own || 0);
+
+                                if (span) {
+                                    if (!adj) {
+                                        span.style.display = 'none';
+                                    } else {
+                                        const adjDiff = cPrice + adj - own;
+                                        span.textContent = formatVndSigned(adjDiff);
+                                        span.style.display = 'inline';
+                                        span.style.color = adjDiff > 0 ? '#991b1b' : (adjDiff < 0 ? '#166534' : '#111827');
+                                    }
+                                } else {
+                                    window.location.reload();
+                                }
+                            } else {
+                                window.location.reload();
+                            }
                             return;
                         }
 
@@ -597,9 +632,9 @@
                             return;
                         }
 
-                        window.location.reload();
+                        alert('Không lưu được. Vui lòng thử lại.');
                     } catch (err) {
-                        window.location.reload();
+                        alert('Không lưu được. Vui lòng thử lại.');
                     }
                 });
             }
