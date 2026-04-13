@@ -270,7 +270,7 @@
                                                             <button
                                                                 type="button"
                                                                 class="icon-btn icon-btn-sm js-edit-adjustment"
-                                                                data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                                data-action="{{ route('competitors.price-adjustment.update', $c) }}"
                                                                 data-value="{{ $adj }}"
                                                                 title="Điều chỉnh giá (+/-)"
                                                             >
