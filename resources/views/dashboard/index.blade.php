@@ -534,6 +534,7 @@
             const adjustInput = document.getElementById('adjustDialogInput');
             const adjustCancel = document.getElementById('adjustDialogCancel');
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
+            const csrfToken = '{{ csrf_token() }}';
 
             function openAdjust(action, value) {
                 adjustForm.action = action;
@@ -560,6 +561,41 @@
             if (adjustDialog) {
                 adjustDialog.addEventListener('click', (e) => {
                     if (e.target === adjustDialog) adjustDialog.close();
+                });
+            }
+
+            if (adjustForm) {
+                adjustForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const action = adjustForm.action;
+                    if (!action) {
+                        return;
+                    }
+
+                    const body = new FormData(adjustForm);
+
+                    try {
+                        const res = await fetch(action, {
+                            method: 'POST',
+                            headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'text/html' },
+                            body,
+                            redirect: 'follow',
+                        });
+
+                        if (res.redirected) {
+                            window.location.href = res.url;
+                            return;
+                        }
+
+                        if (!res.ok) {
+                            window.location.reload();
+                            return;
+                        }
+
+                        window.location.reload();
+                    } catch (err) {
+                        window.location.reload();
+                    }
                 });
             }
 
