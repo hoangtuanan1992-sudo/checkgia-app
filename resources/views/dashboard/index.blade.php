@@ -496,6 +496,11 @@
             const del = document.getElementById('urlDialogDelete');
             const clear = document.getElementById('urlDialogClear');
             const openButtons = document.querySelectorAll('.js-edit-url');
+            const adjButtons = document.querySelectorAll('.js-edit-adjustment');
+            const adjDialog = document.getElementById('adjustmentDialog');
+            const adjForm = document.getElementById('adjustmentForm');
+            const adjInput = document.getElementById('adjustmentInput');
+            const adjCancel = document.getElementById('adjustmentCancel');
 
             function open(action, value, fieldName) {
                 form.action = action;
@@ -514,6 +519,27 @@
                     open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
                 });
             });
+
+            adjButtons.forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    adjForm.action = btn.dataset.action;
+                    adjInput.value = btn.dataset.value || '0';
+                    if (typeof adjDialog.showModal === 'function') {
+                        adjDialog.showModal();
+                    }
+                    adjInput.focus();
+                });
+            });
+
+            if (adjCancel) {
+                adjCancel.addEventListener('click', () => adjDialog.close());
+            }
+            if (adjDialog) {
+                adjDialog.addEventListener('click', (e) => {
+                    if (e.target === adjDialog) adjDialog.close();
+                });
+            }
 
             cancel.addEventListener('click', () => dialog.close());
             dialog.addEventListener('click', (e) => {
