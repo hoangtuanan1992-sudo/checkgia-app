@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ config('app.name') }}</title>
+    <link rel="icon" href="{{ asset('brand-logo.jpg') }}" type="image/jpeg">
+    <link rel="apple-touch-icon" href="{{ asset('brand-logo.jpg') }}">
     <style>
         :root{--bg:#f5f7fb;--card:#ffffff;--muted:#6b7280;--text:#111827;--border:#e5e7eb;--accent:#0d6efd;--accent-hover:#0b5ed7;--danger:#dc3545;--success:#16a34a;--table-head:#0d6efd}
         *{box-sizing:border-box}
@@ -54,7 +56,10 @@
 </head>
 <body>
     <nav>
-        <a class="brand" href="{{ route('home') }}">{{ config('app.name') }}</a>
+        <a class="brand" href="{{ route('home') }}" style="display:flex;align-items:center;gap:10px">
+            <img src="{{ asset('brand-logo.jpg') }}" alt="{{ config('app.name') }}" style="height:28px;width:auto;border-radius:6px;display:block">
+            <span>{{ config('app.name') }}</span>
+        </a>
         @auth
             <div style="display:flex;gap:8px;align-items:center">
                 <a class="btn btn-secondary" href="{{ route('dashboard') }}">Dashboard</a>

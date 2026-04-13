@@ -4,6 +4,8 @@
         <meta charset="utf-8"/>
         <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
         <title>{{ config('app.name', 'Check Giá') }} - The Financial Sentinel</title>
+        <link href="{{ asset('brand-logo.jpg') }}" rel="icon" type="image/jpeg"/>
+        <link href="{{ asset('brand-logo.jpg') }}" rel="apple-touch-icon"/>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Space+Grotesk:wght@500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
         <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
         <script id="tailwind-config">
@@ -85,7 +87,10 @@
         @php($loginUrl = route('login'))
         <nav class="fixed top-0 w-full z-50 glass-nav shadow-sm">
             <div class="flex justify-between items-center px-4 sm:px-8 py-4 max-w-7xl mx-auto">
-                <a class="text-2xl font-bold tracking-tight text-[#1c1c1a] font-headline" href="{{ route('home') }}">Check Giá</a>
+                <a class="flex items-center gap-3 text-[#1c1c1a] font-headline" href="{{ route('home') }}">
+                    <img alt="{{ config('app.name', 'Check Giá') }}" class="h-9 w-auto rounded-lg" src="{{ asset('brand-logo.jpg') }}"/>
+                    <span class="text-2xl font-bold tracking-tight">{{ config('app.name', 'Check Giá') }}</span>
+                </a>
                 <div class="hidden md:flex items-center gap-8">
                     <a class="text-[#1c1c1a] opacity-70 hover:opacity-100 transition-opacity duration-200 font-label text-sm uppercase tracking-wider" href="#features">Tính năng</a>
                     <a class="text-blue-700 font-semibold border-b-2 border-blue-700 font-label text-sm uppercase tracking-wider" href="#pricing">Bảng giá</a>
