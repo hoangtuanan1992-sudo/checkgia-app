@@ -590,9 +590,29 @@
                                 'X-Requested-With': 'XMLHttpRequest',
                                 'Accept': 'application/json',
                             },
-                            credentials: 'same-origin',
+                            credentials: 'include',
                             body,
                         });
+
+                        if (res.status === 403) {
+                            alert('Tài khoản của bạn không có quyền chỉnh sửa.');
+                            return;
+                        }
+                        if (res.status === 419) {
+                            alert('Phiên đăng nhập đã hết hạn. Vui lòng tải lại trang và thử lại.');
+                            return;
+                        }
+
+                        const contentType = res.headers.get('content-type') || '';
+                        if (!contentType.includes('application/json')) {
+                            if (res.redirected || res.url.includes('/login')) {
+                                window.location.href = res.url || '{{ route('login') }}';
+                                return;
+                            }
+
+                            window.location.reload();
+                            return;
+                        }
 
                         const data = await res.json().catch(() => null);
                         if (res.ok && data && data.ok) {
