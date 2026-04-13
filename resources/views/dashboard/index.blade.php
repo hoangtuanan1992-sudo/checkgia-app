@@ -414,18 +414,16 @@
             <p class="card-sub">Nhập giá trị điều chỉnh (+/-)</p>
         </div>
         <div class="dialog-body">
-            <form id="adjustmentForm" method="POST" action="">
-                @csrf
-                @method('PUT')
+            <div id="adjustmentForm" data-action="">
                 <div class="field" style="margin-top:0">
                     <label class="label" for="adjustmentInput">Giá trị</label>
                     <input class="input" id="adjustmentInput" name="adjustment" type="text" required placeholder="+100000 hoặc -50000">
                 </div>
                 <div class="actions" style="justify-content:flex-end">
                     <button class="btn btn-secondary" type="button" id="adjustmentCancel">Huỷ</button>
-                    <button class="btn" type="submit">Lưu</button>
+                    <button class="btn" type="button" id="adjustmentSave">Lưu</button>
                 </div>
-            </form>
+            </div>
         </div>
     </dialog>
 
@@ -522,6 +520,7 @@
             const adjForm = document.getElementById('adjustmentForm');
             const adjInput = document.getElementById('adjustmentInput');
             const adjCancel = document.getElementById('adjustmentCancel');
+            const adjSave = document.getElementById('adjustmentSave');
 
             function open(action, value, fieldName) {
                 form.action = action;
@@ -544,7 +543,7 @@
             adjButtons.forEach((btn) => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    adjForm.action = btn.dataset.action;
+                    adjForm.dataset.action = btn.dataset.action;
                     adjInput.value = btn.dataset.value || '0';
                     if (typeof adjDialog.showModal === 'function') {
                         adjDialog.showModal();
@@ -562,10 +561,10 @@
                 });
             }
 
-            if (adjForm) {
-                adjForm.addEventListener('submit', (e) => {
+            if (adjSave) {
+                adjSave.addEventListener('click', (e) => {
                     e.preventDefault();
-                    const action = adjForm.action;
+                    const action = adjForm.dataset.action;
                     const adjustment = adjInput.value;
                     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
