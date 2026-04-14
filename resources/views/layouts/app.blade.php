@@ -12,7 +12,7 @@
         body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
         a{color:var(--accent);text-decoration:none}
         a:hover{color:var(--accent-hover)}
-        nav{display:flex;align-items:center;justify-content:space-between;gap:0px;padding:0px 18px;background:rgba(255,255,255,.85);border-bottom:1px solid var(--border);backdrop-filter:saturate(180%) blur(10px);position:sticky;top:0;z-index:100}
+        nav{display:flex;align-items:center;justify-content:space-between;gap:0px;padding:0px 18px;background:rgba(255,255,255,.85);border-bottom:1px solid var(--border);backdrop-filter:saturate(180%) blur(10px);/* position: sticky; */top:0;z-index:100}
         .brand{font-weight:700;letter-spacing:.4px}
         .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;border:1px solid rgba(13,110,253,.25);background:var(--accent);color:#fff;cursor:pointer}
         .btn:hover{background:var(--accent-hover);border-color:rgba(13,110,253,.35)}
@@ -43,9 +43,9 @@
         .dialog::backdrop{background:rgba(17,24,39,.38)}
         .dialog-header{padding:16px 16px 0}
         .dialog-body{padding:12px 16px 16px}
-        .table-wrap{width:100%;overflow-x:auto;overflow-y:visible}
+        .table-wrap{overflow-x:auto !important;overflow-y:auto !important;max-height:93vh}
         .table{width:100%;border-collapse:separate;border-spacing:0}
-        .table thead th{background:var(--table-head);color:#fff;padding:10px 12px;font-weight:600;font-size:13px;border-right:1px solid rgba(255,255,255,.22);white-space:nowrap}
+        .table thead th{position:sticky !important;top:0 !important;z-index:999 !important;background-color:#007bff !important;color:#ffffff !important;box-shadow:0 2px 4px rgba(0,0,0,0.1);padding:10px 12px;font-weight:600;font-size:13px;border-right:1px solid rgba(255,255,255,.22);white-space:nowrap}
         .table thead th:last-child{border-right:none}
         .table tbody td{background:var(--card);border-bottom:1px solid var(--border);padding:12px}
         .table tbody tr:first-child td{border-top:1px solid var(--border)}
