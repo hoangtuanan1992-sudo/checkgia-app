@@ -90,7 +90,7 @@
                                     <span style="font-weight:700;flex:0 0 auto">#{{ $e['product_id'] }}</span>
                                     <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis">{{ $e['product_name'] }}</span>
                                     <span class="hint" style="margin-top:0;flex:0 0 auto">{{ $e['site_name'] }}</span>
-                                    <span style="font-weight:700;flex:0 0 auto;color:{{ $isUp ? 'var(--danger)' : 'var(--success)' }}">
+                                    <span style="font-weight:700;flex:0 0 auto;color:{{ $isUp ? 'var(--success)' : 'var(--danger)' }}">
                                         {{ $isUp ? 'Tăng' : 'Giảm' }} {{ $e['delta_text'] }}
                                     </span>
                                 </a>
@@ -249,13 +249,13 @@
                                                         @elseif($diff === 0)
                                                             <a href="{{ $c->url }}" target="_blank" style="color:#6b7280">không chênh</a>
                                                         @elseif($diff > 0)
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)">+{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--success)">+{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @else
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--success)">{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)">{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @endif
 
                                                         @if(! is_null($adjDiff))
-                                                            @php($adjColor = $adjDiff > 0 ? '#991b1b' : ($adjDiff < 0 ? '#166534' : '#111827'))
+                                                            @php($adjColor = $adjDiff > 0 ? '#166534' : ($adjDiff < 0 ? '#991b1b' : '#111827'))
                                                             <span id="adjDiff-{{ $c->id }}" style="display:{{ $adj !== 0 ? 'inline' : 'none' }};font-weight:800;color:{{ $adjColor }}">
                                                                 @if($adjDiff > 0)
                                                                     +{{ number_format($adjDiff, 0, ',', '.') }}đ
@@ -299,11 +299,11 @@
                                                             @if(! is_null($delta) && $delta !== 0)
                                                                 <span title="{{ $delta > 0 ? 'Tăng' : 'Giảm' }} {{ number_format(abs($delta), 0, ',', '.') }}đ" style="display:inline-flex;align-items:center">
                                                                     @if($delta > 0)
-                                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--danger)">
+                                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--success)">
                                                                             <path d="M12 5l6 6h-4v8h-4v-8H6l6-6z" fill="currentColor"/>
                                                                         </svg>
                                                                     @else
-                                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--success)">
+                                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--danger)">
                                                                             <path d="M12 19l-6-6h4V5h4v8h4l-6 6z" fill="currentColor"/>
                                                                         </svg>
                                                                     @endif
@@ -673,7 +673,7 @@
                                     const adjDiff = cPrice + adj - own;
                                     span.textContent = formatVndSigned(adjDiff);
                                     span.style.display = 'inline';
-                                    span.style.color = adjDiff > 0 ? '#991b1b' : (adjDiff < 0 ? '#166534' : '#111827');
+                                    span.style.color = adjDiff > 0 ? '#166534' : (adjDiff < 0 ? '#991b1b' : '#111827');
                                 }
                             } else {
                                 window.location.reload();
