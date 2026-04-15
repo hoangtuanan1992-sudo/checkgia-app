@@ -728,17 +728,45 @@
                         method: 'DELETE',
                         headers: {
                             'X-CSRF-TOKEN': csrf,
+                            'X-Requested-With': 'XMLHttpRequest',
                             'Accept': 'application/json',
                         },
+                        credentials: 'include',
                     });
 
+                    const contentType = res.headers.get('content-type') || '';
+                    const data = contentType.includes('application/json') ? await res.json().catch(() => null) : null;
+
                     if (!res.ok) {
-                        throw new Error('delete_failed');
+                        if (res.status === 403) {
+                            alert('Bạn không có quyền xoá.');
+                            return;
+                        }
+                        if (res.status === 419) {
+                            alert('Phiên đăng nhập đã hết hạn. Vui lòng tải lại trang và thử lại.');
+                            return;
+                        }
+                        if (data && data.message) {
+                            alert(data.message);
+                            return;
+                        }
+                        if (!contentType.includes('application/json') && (res.redirected || (res.url && res.url.includes('/login')))) {
+                            window.location.href = res.url;
+                            return;
+                        }
+                        alert(`Xoá thất bại (HTTP ${res.status}).`);
+                        return;
+                    }
+
+                    if (data && data.ok === false) {
+                        alert('Xoá thất bại.');
+                        return;
                     }
 
                     const row = document.querySelector(`[data-product-row="${pendingDelete.productId}"]`);
                     if (row) row.remove();
                 } catch (e) {
+                    alert('Xoá thất bại. Vui lòng thử lại.');
                 } finally {
                     deleteConfirm.disabled = false;
                     pendingDelete = null;
