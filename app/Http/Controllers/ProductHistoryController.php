@@ -11,7 +11,12 @@ class ProductHistoryController extends Controller
 {
     public function show(Request $request, Product $product): View
     {
-        abort_unless($product->user_id === $request->user()->effectiveUserId(), 404);
+        $user = $request->user();
+        abort_unless($user, 403);
+
+        if (! $user->isAdmin() && (int) $product->user_id !== (int) $user->effectiveUserId()) {
+            abort(404);
+        }
 
         $days = (int) $request->query('days', 30);
         $days = in_array($days, [7, 30, 90], true) ? $days : 30;
