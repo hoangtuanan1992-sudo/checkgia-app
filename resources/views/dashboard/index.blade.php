@@ -214,8 +214,8 @@
                                                     title="Sửa link sản phẩm của bạn"
                                                 >
                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                                     </svg>
                                                 </button>
                                                 @if($product->product_url)
@@ -292,8 +292,8 @@
                                                                 data-value="{{ $c->url }}"
                                                                 title="Sửa URL">
                                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                                <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                                <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                                <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                                             </svg>
                                                         </button>
                                                         @if($cPrice)
@@ -328,8 +328,8 @@
                                                         title="Thêm URL"
                                                     >
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                            <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                            <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                                         </svg>
                                                     </button>
                                                 </div>
@@ -363,7 +363,7 @@
                     </table>
                 </div>
 
-                <div id="comparisonCardView" style="display:none;flex-direction:column;gap:14px;width:100%">
+                <div id="comparisonCardView" style="display:none;flex-direction:column;gap:14px;width:100%;background:var(--bg);padding:12px;border-radius:14px;border:1px solid var(--border)">
                     @forelse($products as $idx => $product)
                         @php($own = (int) $product->price)
                         @php($map = $product->competitors->keyBy('competitor_site_id'))
@@ -390,7 +390,7 @@
                             data-own-price="{{ $own }}"
                             data-last-updated="{{ $lastUpdated?->timestamp ?? 0 }}"
                             data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
-                            style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0"
+                            style="max-width:none;border-radius:14px;margin-top:0"
                         >
                             <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
                                 <div style="min-width:0">
@@ -495,8 +495,8 @@
                                                 title="Sửa URL"
                                             >
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                    <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                                 </svg>
                                             </button>
 
