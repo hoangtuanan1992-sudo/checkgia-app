@@ -662,27 +662,49 @@
             const clear = document.getElementById('urlDialogClear');
             const openButtons = document.querySelectorAll('.js-edit-url');
 
+            function showDialog(el) {
+                if (!el) return false;
+                if (typeof el.showModal === 'function') {
+                    el.showModal();
+                    return true;
+                }
+                el.setAttribute('open', '');
+                return true;
+            }
+
+            function closeDialog(el) {
+                if (!el) return false;
+                if (typeof el.close === 'function') {
+                    el.close();
+                    return true;
+                }
+                el.removeAttribute('open');
+                return true;
+            }
+
             function open(action, value, fieldName) {
                 form.action = action;
                 input.value = value || '';
                 input.name = fieldName || 'url';
                 input.required = true;
                 if (clear) clear.value = '0';
-                if (typeof dialog.showModal === 'function') {
-                    dialog.showModal();
-                }
+                showDialog(dialog);
                 input.focus();
             }
 
             openButtons.forEach((btn) => {
-                btn.addEventListener('click', () => {
+                btn.addEventListener('click', (e) => {
+                    if (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
                     open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
                 });
             });
 
-            cancel.addEventListener('click', () => dialog.close());
+            cancel.addEventListener('click', () => closeDialog(dialog));
             dialog.addEventListener('click', (e) => {
-                if (e.target === dialog) dialog.close();
+                if (e.target === dialog) closeDialog(dialog);
             });
 
             if (del) {
