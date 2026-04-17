@@ -117,6 +117,10 @@ class CompetitorController extends Controller
 
     public function upsertUrl(Request $request, Product $product, CompetitorSite $competitorSite): RedirectResponse
     {
+        if ($request->isMethod('get')) {
+            return redirect()->route('dashboard');
+        }
+
         abort_unless($product->user_id === $request->user()->effectiveUserId() && $competitorSite->user_id === $request->user()->effectiveUserId(), 404);
 
         $data = $request->validate([
