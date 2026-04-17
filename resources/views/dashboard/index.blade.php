@@ -461,10 +461,12 @@
                                             @if(is_null($adjDiff))
                                                 <span class="hint" style="margin-top:0">---</span>
                                             @else
-                                                <span id="adjDiffCard-{{ $c->id }}" class="compare-diff-pill compare-diff-{{ $diffSign }}" data-pill="1">
-                                                    {{ $adjDiff > 0 ? '+' : ($adjDiff < 0 ? '-' : '') }}{{ number_format(abs($adjDiff), 0, ',', '.') }}
-                                                    <span class="compare-diff-arrow">{{ $diffArrow }}</span>
-                                                </span>
+                                                <a href="{{ $c->url }}" target="_blank" style="text-decoration:none">
+                                                    <span id="adjDiffCard-{{ $c->id }}" class="compare-diff-pill compare-diff-{{ $diffSign }}" data-pill="1">
+                                                        {{ $adjDiff > 0 ? '+' : ($adjDiff < 0 ? '-' : '') }}{{ number_format(abs($adjDiff), 0, ',', '.') }}
+                                                        <span class="compare-diff-arrow">{{ $diffArrow }}</span>
+                                                    </span>
+                                                </a>
                                             @endif
                                         </div>
                                         <div class="compare-card-cell-actions">
