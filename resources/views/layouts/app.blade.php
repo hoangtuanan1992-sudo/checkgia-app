@@ -59,7 +59,7 @@
         .compare-card-title-mobile{display:none}
         .compare-card-delete{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:14px;border:1px solid rgba(220,53,69,.18);background:rgba(220,53,69,.12);color:#b42318;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
         .compare-card-delete:hover{background:rgba(220,53,69,.16)}
-        .compare-card-own-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;background:linear-gradient(90deg,rgba(13,110,253,.12),rgba(13,110,253,.03))}
+        .compare-card-own-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;/* background: linear-gradient(90deg, rgba(13, 110, 253, .12), rgba(13, 110, 253, .03)); */}
         .compare-card-own-label{color:var(--muted);font-size:13px}
         .compare-card-own-price{font-weight:900;font-size:22px;color:var(--accent)}
         .compare-card-table-head{display:grid;grid-template-columns:1.15fr 0.9fr 0.9fr 88px;gap:10px;padding:10px 18px;background:rgba(17,24,39,.03);color:var(--muted);font-size:12px;font-weight:700;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
@@ -97,7 +97,7 @@
             .compare-card-title-full{display:none}
             .compare-card-title-mobile{display:block;white-space:normal;overflow:visible}
             .compare-card-header{padding:14px 14px 10px}
-            .compare-card-delete{width:40px;height:40px;border-radius:14px}
+            .compare-card-delete{margin-top:71px;width:32px;height:32px;border-radius:14px}
             .compare-card-own-row{padding:10px 14px}
             .compare-card-own-price{font-size:20px}
             .compare-card-table-head{grid-template-columns:1fr 0.9fr 1fr 74px;gap:8px;padding:10px 14px}
