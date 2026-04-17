@@ -52,10 +52,10 @@
         .table tbody td:first-child{border-left:1px solid var(--border)}
         .table tbody td:last-child{border-right:1px solid var(--border)}
         .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#eef2ff;border:1px solid #e0e7ff;color:#3730a3;font-size:12px}
-        .compare-card{position:relative;background:rgba(255,255,255,.88);backdrop-filter:saturate(180%) blur(12px)}
+        .compare-card{position:relative;background:rgba(255,255,255,.88);backdrop-filter:saturate(180%) blur(12px);border:1px solid rgba(17,24,39,.18)}
         .compare-card-header{padding:16px 18px 10px}
         .compare-card-title{font-weight:800;font-size:18px;line-height:1.2}
-        .compare-card-title-full{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+        .compare-card-title-full{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:97%;display:block}
         .compare-card-title-mobile{display:none}
         .compare-card-delete{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:14px;border:1px solid rgba(220,53,69,.18);background:rgba(220,53,69,.12);color:#b42318;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
         .compare-card-delete:hover{background:rgba(220,53,69,.16)}
@@ -73,7 +73,7 @@
         .compare-diff-neg{background:rgba(220,53,69,.14);color:#991b1b}
         .compare-diff-zero{background:rgba(107,114,128,.14);color:#374151}
         .compare-diff-arrow{font-weight:900}
-        .compare-card-addlink{width:100%;border:2px dashed rgba(107,114,128,.45);background:transparent;border-radius:14px;padding:12px 14px;font-weight:800;color:#111827;cursor:pointer}
+        .compare-card-addlink{width:100%;border:1px dashed rgba(107,114,128,.45);background:transparent;border-radius:14px;padding:12px 14px;font-weight:800;color:#111827;cursor:pointer}
         .compare-card-addlink:hover{background:rgba(17,24,39,.03)}
         .history-page .btn{padding:8px 10px}
         .history-series-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
