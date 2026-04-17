@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <div class="card" style="max-width:980px">
+    <div class="card history-page" style="max-width:980px">
         <div class="card-header">
             <h1 class="card-title">Lịch sử giá: {{ $competitor->name }}</h1>
             <p class="card-sub">Sản phẩm: {{ $product->name }}</p>
@@ -51,13 +51,13 @@
                     <p class="card-sub">Chọn các bên để hiển thị trên biểu đồ</p>
                 </div>
                 <div class="card-body" style="padding:8px 16px 16px">
-                    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
-                        <label style="display:flex;gap:8px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff">
+                    <div class="history-series-grid" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+                        <label class="history-series-item" style="display:flex;gap:8px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff">
                             <input type="checkbox" class="js-series-toggle" value="own" checked>
                             <span style="font-size:14px">Giá của bạn</span>
                         </label>
                         @foreach($competitors as $c)
-                            <label style="display:flex;gap:8px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff">
+                            <label class="history-series-item" style="display:flex;gap:8px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff">
                                 <input type="checkbox" class="js-series-toggle" value="{{ $c->id }}" @checked($c->id === $competitor->id)>
                                 <span style="font-size:14px">{{ $c->name }}</span>
                             </label>

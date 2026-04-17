@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <div class="card" style="max-width:980px">
+    <div class="card history-page" style="max-width:980px">
         <div class="card-header">
             <h1 class="card-title">Lịch sử giá: Giá của bạn</h1>
             <p class="card-sub">Sản phẩm: {{ $product->name }}</p>

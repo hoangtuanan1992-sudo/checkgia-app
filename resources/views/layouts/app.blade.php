@@ -65,11 +65,14 @@
         .compare-card-row-side{display:flex;align-items:center;gap:10px;flex:0 0 auto}
         .compare-card-diff{min-width:110px;text-align:right;font-weight:800}
         .compare-card-row-actions{display:flex;align-items:center;gap:8px}
+        .history-page .btn{padding:8px 10px}
+        .history-series-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+        .history-series-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
         @media (max-width: 768px){
             nav{flex-wrap:wrap;justify-content:center;gap:8px;padding:8px 10px}
             nav img{height:44px !important}
             nav > div{flex:1 1 100%;display:flex;flex-wrap:wrap;justify-content:center}
-            body{font-size:13px}
+            body{font-size:12px}
             .btn{padding:8px 10px;font-size:12px}
             .container{padding:12px;align-items:stretch}
             .card{max-width:none}
@@ -88,6 +91,16 @@
             .compare-card-row-side{justify-content:space-between;width:100%}
             .compare-card-diff{min-width:0;text-align:left}
             .compare-card-row-actions{gap:6px}
+            .history-page .card-title{font-size:18px}
+            .history-page .card-sub{font-size:12px}
+            .history-page .actions{gap:8px;flex-wrap:wrap}
+            .history-page .btn{padding:6px 8px;font-size:11px;border-radius:10px}
+            .history-page .pill{padding:5px 8px;font-size:11px}
+            .history-page .table{font-size:12px}
+            .history-page .table tbody td{padding:9px 10px}
+            .history-series-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:8px}
+            .history-series-item{padding:8px 10px !important}
+            .history-series-item span{font-size:12px !important}
         }
     </style>
 </head>
