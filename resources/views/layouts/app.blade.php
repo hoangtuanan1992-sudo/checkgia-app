@@ -52,19 +52,29 @@
         .table tbody td:first-child{border-left:1px solid var(--border)}
         .table tbody td:last-child{border-right:1px solid var(--border)}
         .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#eef2ff;border:1px solid #e0e7ff;color:#3730a3;font-size:12px}
-        .compare-card-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
-        .compare-card-header-left{min-width:0}
-        .compare-card-title{font-weight:700;overflow:hidden}
+        .compare-card{position:relative;background:rgba(255,255,255,.88);backdrop-filter:saturate(180%) blur(12px)}
+        .compare-card-header{padding:16px 18px 10px}
+        .compare-card-title{font-weight:800;font-size:18px;line-height:1.2}
         .compare-card-title-full{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
         .compare-card-title-mobile{display:none}
-        .compare-card-header-right{text-align:right;flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-        .compare-card-own-price{font-weight:800;color:var(--accent)}
-        .compare-card-row{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px}
-        .compare-card-row-main{min-width:0}
-        .compare-card-site{font-weight:700}
-        .compare-card-row-side{display:flex;align-items:center;gap:10px;flex:0 0 auto}
-        .compare-card-diff{min-width:110px;text-align:right;font-weight:800}
-        .compare-card-row-actions{display:flex;align-items:center;gap:8px}
+        .compare-card-delete{position:absolute;top:10px;right:10px;width:44px;height:44px;border-radius:14px;border:1px solid rgba(220,53,69,.18);background:rgba(220,53,69,.12);color:#b42318;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+        .compare-card-delete:hover{background:rgba(220,53,69,.16)}
+        .compare-card-own-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;background:linear-gradient(90deg,rgba(13,110,253,.12),rgba(13,110,253,.03))}
+        .compare-card-own-label{color:var(--muted);font-size:13px}
+        .compare-card-own-price{font-weight:900;font-size:22px;color:var(--accent)}
+        .compare-card-table-head{display:grid;grid-template-columns:1.15fr 0.9fr 0.9fr 88px;gap:10px;padding:10px 18px;background:rgba(17,24,39,.03);color:var(--muted);font-size:12px;font-weight:700;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+        .compare-card-table-row{display:grid;grid-template-columns:1.15fr 0.9fr 0.9fr 88px;gap:10px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--border)}
+        .compare-card-cell-site{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .compare-card-cell-price{text-align:right}
+        .compare-card-cell-diff{text-align:right}
+        .compare-card-cell-actions{display:flex;justify-content:flex-end;gap:8px}
+        .compare-diff-pill{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;font-weight:900;line-height:1}
+        .compare-diff-pos{background:rgba(22,163,74,.14);color:#166534}
+        .compare-diff-neg{background:rgba(220,53,69,.14);color:#991b1b}
+        .compare-diff-zero{background:rgba(107,114,128,.14);color:#374151}
+        .compare-diff-arrow{font-weight:900}
+        .compare-card-addlink{width:100%;border:2px dashed rgba(107,114,128,.45);background:transparent;border-radius:14px;padding:12px 14px;font-weight:800;color:#111827;cursor:pointer}
+        .compare-card-addlink:hover{background:rgba(17,24,39,.03)}
         .history-page .btn{padding:8px 10px}
         .history-series-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
         .history-series-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
@@ -83,14 +93,18 @@
             .card-body{padding:8px 16px 16px}
             .icon-btn-sm{width:26px;height:26px;border-radius:9px}
             .icon-btn-sm svg{width:13px;height:13px}
-            .compare-card-header{padding:12px 14px;flex-direction:column;align-items:stretch}
-            .compare-card-header-right{flex-direction:row;align-items:center;justify-content:space-between;text-align:left}
+            .compare-card-title{font-size:17px}
             .compare-card-title-full{display:none}
             .compare-card-title-mobile{display:block;white-space:normal;overflow:visible}
-            .compare-card-row{padding:10px 14px;flex-direction:column;gap:8px}
-            .compare-card-row-side{justify-content:space-between;width:100%}
-            .compare-card-diff{min-width:0;text-align:left}
-            .compare-card-row-actions{gap:6px}
+            .compare-card-header{padding:14px 14px 10px}
+            .compare-card-delete{width:40px;height:40px;border-radius:14px}
+            .compare-card-own-row{padding:10px 14px}
+            .compare-card-own-price{font-size:20px}
+            .compare-card-table-head{grid-template-columns:1fr 0.9fr 1fr 74px;gap:8px;padding:10px 14px}
+            .compare-card-table-row{grid-template-columns:1fr 0.9fr 1fr 74px;gap:8px;padding:12px 14px}
+            .compare-card-cell-site{white-space:normal}
+            .compare-diff-pill{padding:7px 10px}
+            .compare-card-addlink{padding:12px 12px}
             .history-page .card-title{font-size:18px}
             .history-page .card-sub{font-size:12px}
             .history-page .actions{gap:8px;flex-wrap:wrap}
