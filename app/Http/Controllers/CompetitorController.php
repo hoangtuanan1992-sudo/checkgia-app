@@ -121,7 +121,11 @@ class CompetitorController extends Controller
             return redirect()->route('dashboard');
         }
 
-        abort_unless($product->user_id === $request->user()->effectiveUserId() && $competitorSite->user_id === $request->user()->effectiveUserId(), 404);
+        $user = $request->user();
+        abort_unless($user, 403);
+        if (! $user->isAdmin() && ((int) $product->user_id !== (int) $user->effectiveUserId() || (int) $competitorSite->user_id !== (int) $user->effectiveUserId())) {
+            abort(404);
+        }
 
         $data = $request->validate([
             'clear' => ['nullable', 'boolean'],
