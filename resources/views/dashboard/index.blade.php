@@ -147,10 +147,11 @@
                             @csrf
                             <button class="btn btn-secondary" type="submit">Cập nhật</button>
                         </form>
+                        <button class="btn btn-secondary" type="button" id="compareViewToggle" style="display:none">Dạng thẻ</button>
                         <button class="btn btn-secondary" type="button" id="filterReset">Reset</button>
                     </div>
                 </div>
-                <div class="table-wrap">
+                <div class="table-wrap" id="comparisonTableView">
                     <table class="table">
                         <thead>
                             <tr>
@@ -271,6 +272,7 @@
                                                                 data-action="{{ route('competitors.adjustment.update', $c) }}"
                                                                 data-value="{{ $adj }}"
                                                                 data-span-id="adjDiff-{{ $c->id }}"
+                                                                data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
                                                                 data-own="{{ $own }}"
                                                                 data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
                                                                 title="Điều chỉnh giá (+/-)"
@@ -359,6 +361,184 @@
                             @endforelse
                         </tbody>
                     </table>
+                </div>
+
+                <div id="comparisonCardView" style="display:none;flex-direction:column;gap:14px;width:100%">
+                    @forelse($products as $idx => $product)
+                        @php($own = (int) $product->price)
+                        @php($map = $product->competitors->keyBy('competitor_site_id'))
+                        @php($latestTimes = $product->competitors->map(fn($c) => $c->prices->first()?->fetched_at)->filter())
+                        @php($lastTime = $latestTimes->max())
+                        @php($lastUpdated = collect([$lastTime, $product->last_scraped_at])->filter()->max())
+                        @php($minDiff = $product->competitors->map(function ($c) use ($own) {
+                            $p = $c->prices->first()?->price;
+                            if (is_null($p)) {
+                                return null;
+                            }
+
+                            return (int) $p + (int) ($c->price_adjustment ?? 0) - $own;
+                        })->filter(fn ($v) => ! is_null($v))->min())
+                        @php($missingSites = $competitorSites->filter(fn ($s) => ! $map->has($s->id)))
+
+                        <div
+                            class="card"
+                            data-product-card="{{ $product->id }}"
+                            data-row-order="{{ $idx }}"
+                            data-product-name="{{ $product->name }}"
+                            data-product-id="{{ $product->id }}"
+                            data-group-id="{{ $product->product_group_id ?? '' }}"
+                            data-own-price="{{ $own }}"
+                            data-last-updated="{{ $lastUpdated?->timestamp ?? 0 }}"
+                            data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
+                            style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0"
+                        >
+                            <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+                                <div style="min-width:0">
+                                    <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ $product->name }}</div>
+                                    <div class="hint" style="margin-top:2px">ID: {{ $product->id }}</div>
+                                </div>
+                                <div style="text-align:right;flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+                                    <div>
+                                        <div class="hint" style="margin-top:0">Giá bạn</div>
+                                        <a href="{{ route('products.history', $product) }}" style="font-weight:800;color:var(--accent)">
+                                            {{ number_format($own, 0, ',', '.') }}đ
+                                        </a>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        class="btn btn-secondary js-delete-product"
+                                        data-action="{{ route('dashboard.products.destroy', $product) }}"
+                                        data-product-id="{{ $product->id }}"
+                                        style="padding:6px 10px;border-radius:10px"
+                                    >
+                                        Xoá
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                @foreach($competitorSites as $site)
+                                    @php($c = $map->get($site->id))
+                                    @if(! $c)
+                                        @continue
+                                    @endif
+
+                                    @php($latest = $c?->prices->first())
+                                    @php($prev = $c?->prices->skip(1)->first())
+                                    @php($cPrice = $latest?->price)
+                                    @php($prevPrice = $prev?->price)
+                                    @php($diff = is_null($cPrice) ? null : ((int) $cPrice - $own))
+                                    @php($adj = (int) ($c?->price_adjustment ?? 0))
+                                    @php($adjDiff = is_null($cPrice) ? null : ((int) $cPrice + $adj - $own))
+                                    @php($delta = (! is_null($cPrice) && ! is_null($prevPrice)) ? ((int) $cPrice - (int) $prevPrice) : null)
+                                    @php($adjColor = (! is_null($adjDiff) && $adjDiff > 0) ? '#166534' : ((! is_null($adjDiff) && $adjDiff < 0) ? '#991b1b' : '#111827'))
+
+                                    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px">
+                                        <div style="min-width:0">
+                                            <div style="font-weight:700">{{ $site->name }}</div>
+                                            <div class="hint" style="margin-top:2px">
+                                                @if($cPrice)
+                                                    <a href="{{ route('competitors.history', $c) }}" style="color:#6b7280">
+                                                        {{ number_format($cPrice, 0, ',', '.') }}đ
+                                                    </a>
+                                                @else
+                                                    ---
+                                                @endif
+
+                                                @if(! is_null($delta) && $delta !== 0)
+                                                    <span style="display:inline-flex;align-items:center;margin-left:8px" title="{{ $delta > 0 ? 'Tăng' : 'Giảm' }} {{ number_format(abs($delta), 0, ',', '.') }}đ">
+                                                        @if($delta > 0)
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--success)">
+                                                                <path d="M12 5l6 6h-4v8h-4v-8H6l6-6z" fill="currentColor"/>
+                                                            </svg>
+                                                        @else
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:var(--danger)">
+                                                                <path d="M12 19l-6-6h4V5h4v8h4l-6 6z" fill="currentColor"/>
+                                                            </svg>
+                                                        @endif
+                                                    </span>
+                                                @endif
+                                            </div>
+                                        </div>
+
+                                        <div style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
+                                            <div style="min-width:110px;text-align:right;font-weight:800">
+                                                @if(is_null($diff))
+                                                    <span class="hint" style="margin-top:0">---</span>
+                                                @elseif($diff === 0)
+                                                    <a href="{{ $c->url }}" target="_blank" style="color:#6b7280">0đ</a>
+                                                @elseif($diff > 0)
+                                                    <a href="{{ $c->url }}" target="_blank" style="color:var(--success)">+{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                @else
+                                                    <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)">{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                @endif
+
+                                                @if(! is_null($adjDiff))
+                                                    <span id="adjDiffCard-{{ $c->id }}" style="display:{{ $adj !== 0 ? 'inline' : 'none' }};margin-left:8px;font-weight:800;color:{{ $adjColor }}">
+                                                        @if($adjDiff > 0)
+                                                            +{{ number_format($adjDiff, 0, ',', '.') }}đ
+                                                        @elseif($adjDiff < 0)
+                                                            {{ number_format($adjDiff, 0, ',', '.') }}đ
+                                                        @else
+                                                            0đ
+                                                        @endif
+                                                    </span>
+                                                @endif
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                class="icon-btn icon-btn-sm js-edit-url"
+                                                data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                data-field="url"
+                                                data-value="{{ $c->url }}"
+                                                title="Sửa URL"
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                </svg>
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                data-value="{{ $adj }}"
+                                                data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
+                                                data-own="{{ $own }}"
+                                                data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                title="Điều chỉnh giá (+/-)"
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                @endforeach
+
+                                @if($missingSites->isNotEmpty())
+                                    <div style="padding:12px 16px">
+                                        <button type="button" class="btn btn-secondary js-add-link" data-target="addLink-{{ $product->id }}" style="padding:6px 10px;border-radius:10px">
+                                            + Thêm link
+                                        </button>
+                                    </div>
+                                    <div id="addLink-{{ $product->id }}" style="display:none;padding:0 16px 16px">
+                                        <select class="input js-add-link-select" data-target="addLink-{{ $product->id }}">
+                                            <option value="">Chọn đối thủ...</option>
+                                            @foreach($missingSites as $site)
+                                                <option value="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}">{{ $site->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @empty
+                        <div class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm trước.</div>
+                    @endforelse
                 </div>
             </div>
         </div>
@@ -661,19 +841,24 @@
                         if (lastAdjustButton) {
                             lastAdjustButton.dataset.value = String(adj);
 
-                            const spanId = lastAdjustButton.dataset.spanId || '';
-                            const span = spanId ? document.getElementById(spanId) : null;
+                            const spanIdsRaw = lastAdjustButton.dataset.spanIds || lastAdjustButton.dataset.spanId || '';
+                            const spanIds = spanIdsRaw.split(',').map((s) => s.trim()).filter(Boolean);
+                            const spans = spanIds.map((id) => document.getElementById(id)).filter(Boolean);
                             const cPrice = Number(lastAdjustButton.dataset.cprice || 0);
                             const own = Number(lastAdjustButton.dataset.own || 0);
 
-                            if (span) {
+                            if (spans.length) {
                                 if (!adj) {
-                                    span.style.display = 'none';
+                                    spans.forEach((span) => {
+                                        span.style.display = 'none';
+                                    });
                                 } else {
                                     const adjDiff = cPrice + adj - own;
-                                    span.textContent = formatVndSigned(adjDiff);
-                                    span.style.display = 'inline';
-                                    span.style.color = adjDiff > 0 ? '#166534' : (adjDiff < 0 ? '#991b1b' : '#111827');
+                                    spans.forEach((span) => {
+                                        span.textContent = formatVndSigned(adjDiff);
+                                        span.style.display = 'inline';
+                                        span.style.color = adjDiff > 0 ? '#166534' : (adjDiff < 0 ? '#991b1b' : '#111827');
+                                    });
                                 }
                             } else {
                                 window.location.reload();
@@ -765,6 +950,8 @@
 
                     const row = document.querySelector(`[data-product-row="${pendingDelete.productId}"]`);
                     if (row) row.remove();
+                    const card = document.querySelector(`[data-product-card="${pendingDelete.productId}"]`);
+                    if (card) card.remove();
                 } catch (e) {
                     alert('Xoá thất bại. Vui lòng thử lại.');
                 } finally {
@@ -772,6 +959,89 @@
                     pendingDelete = null;
                     deleteDialog.close();
                 }
+            });
+
+            const compareViewToggle = document.getElementById('compareViewToggle');
+            const comparisonTableView = document.getElementById('comparisonTableView');
+            const comparisonCardView = document.getElementById('comparisonCardView');
+            const compareViewKey = 'checkgia_compare_view';
+
+            function isMobileView() {
+                return window.matchMedia('(max-width: 768px)').matches;
+            }
+
+            function getStoredCompareView() {
+                try {
+                    const v = localStorage.getItem(compareViewKey);
+                    return v === 'cards' || v === 'table' ? v : 'table';
+                } catch (e) {
+                    return 'table';
+                }
+            }
+
+            function setCompareView(mode, persist) {
+                const nextMode = mode === 'cards' ? 'cards' : 'table';
+
+                if (comparisonCardView) {
+                    comparisonCardView.style.display = nextMode === 'cards' ? 'flex' : 'none';
+                }
+                if (comparisonTableView) {
+                    comparisonTableView.style.display = nextMode === 'cards' ? 'none' : '';
+                }
+
+                if (compareViewToggle) {
+                    compareViewToggle.dataset.mode = nextMode;
+                    compareViewToggle.textContent = nextMode === 'cards' ? 'Dạng bảng' : 'Dạng thẻ';
+                    compareViewToggle.style.display = isMobileView() ? 'none' : '';
+                }
+
+                if (persist) {
+                    try {
+                        localStorage.setItem(compareViewKey, nextMode);
+                    } catch (e) {
+                    }
+                }
+            }
+
+            let lastMobile = isMobileView();
+            setCompareView(lastMobile ? 'cards' : getStoredCompareView(), false);
+
+            if (compareViewToggle) {
+                compareViewToggle.addEventListener('click', () => {
+                    const current = compareViewToggle.dataset.mode || 'table';
+                    setCompareView(current === 'cards' ? 'table' : 'cards', true);
+                });
+            }
+
+            window.addEventListener('resize', () => {
+                const nowMobile = isMobileView();
+                if (nowMobile !== lastMobile) {
+                    setCompareView(nowMobile ? 'cards' : getStoredCompareView(), false);
+                    lastMobile = nowMobile;
+                }
+            });
+
+            document.querySelectorAll('.js-add-link').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const targetId = btn.dataset.target || '';
+                    const target = targetId ? document.getElementById(targetId) : null;
+                    if (!target) return;
+                    target.style.display = target.style.display === 'none' ? '' : 'none';
+                    const select = target.querySelector('select');
+                    if (select) select.focus();
+                });
+            });
+
+            document.querySelectorAll('.js-add-link-select').forEach((select) => {
+                select.addEventListener('change', () => {
+                    const action = select.value || '';
+                    if (!action) return;
+                    open(action, '', 'url');
+                    const wrapId = select.dataset.target || '';
+                    const wrap = wrapId ? document.getElementById(wrapId) : null;
+                    if (wrap) wrap.style.display = 'none';
+                    select.value = '';
+                });
             });
 
             const filterSearch = document.getElementById('filterSearch');
@@ -791,57 +1061,68 @@
             }
 
             function applyFiltersAndSort() {
-                if (!tbody) return;
-                const rows = Array.from(tbody.querySelectorAll('tr[data-product-row]'));
                 const q = (filterSearch?.value || '').trim().toLowerCase();
                 const group = filterGroup?.value || '';
-                    const sort = sortSelect?.value || 'row_asc';
+                const sort = sortSelect?.value || 'row_asc';
 
-                rows.forEach((row) => {
-                    const name = (row.dataset.productName || '').toLowerCase();
-                    const id = String(row.dataset.productId || '');
-                    const groupId = String(row.dataset.groupId || '');
+                function applyToItems(items, appendTo) {
+                    items.forEach((el) => {
+                        const name = (el.dataset.productName || '').toLowerCase();
+                        const id = String(el.dataset.productId || '');
+                        const groupId = String(el.dataset.groupId || '');
 
-                    let visible = true;
-                    if (q) {
-                        visible = name.includes(q) || id.includes(q);
-                    }
-                    if (visible && group) {
-                        if (group === '__none__') {
-                            visible = !groupId;
-                        } else {
-                            visible = groupId === group;
+                        let visible = true;
+                        if (q) {
+                            visible = name.includes(q) || id.includes(q);
                         }
-                    }
-                    row.style.display = visible ? '' : 'none';
-                });
+                        if (visible && group) {
+                            if (group === '__none__') {
+                                visible = !groupId;
+                            } else {
+                                visible = groupId === group;
+                            }
+                        }
+                        el.style.display = visible ? '' : 'none';
+                    });
 
-                const visibleRows = rows.filter((r) => r.style.display !== 'none');
-
-                visibleRows.sort((a, b) => {
+                    const visibleItems = items.filter((r) => r.style.display !== 'none');
+                    visibleItems.sort((a, b) => {
                         const aRow = parseNum(a.dataset.rowOrder) ?? 0;
                         const bRow = parseNum(b.dataset.rowOrder) ?? 0;
-                    const aLast = parseNum(a.dataset.lastUpdated) ?? 0;
-                    const bLast = parseNum(b.dataset.lastUpdated) ?? 0;
-                    const aPrice = parseNum(a.dataset.ownPrice) ?? 0;
-                    const bPrice = parseNum(b.dataset.ownPrice) ?? 0;
-                    const aDiff = parseNum(a.dataset.minDiff);
-                    const bDiff = parseNum(b.dataset.minDiff);
+                        const aLast = parseNum(a.dataset.lastUpdated) ?? 0;
+                        const bLast = parseNum(b.dataset.lastUpdated) ?? 0;
+                        const aPrice = parseNum(a.dataset.ownPrice) ?? 0;
+                        const bPrice = parseNum(b.dataset.ownPrice) ?? 0;
+                        const aDiff = parseNum(a.dataset.minDiff);
+                        const bDiff = parseNum(b.dataset.minDiff);
 
-                    const aDiffVal = aDiff === null ? Number.POSITIVE_INFINITY : aDiff;
-                    const bDiffVal = bDiff === null ? Number.POSITIVE_INFINITY : bDiff;
+                        const aDiffVal = aDiff === null ? Number.POSITIVE_INFINITY : aDiff;
+                        const bDiffVal = bDiff === null ? Number.POSITIVE_INFINITY : bDiff;
 
                         if (sort === 'row_asc') return aRow - bRow;
-                    if (sort === 'last_desc') return bLast - aLast;
-                    if (sort === 'last_asc') return aLast - bLast;
-                    if (sort === 'price_asc') return aPrice - bPrice;
-                    if (sort === 'price_desc') return bPrice - aPrice;
-                    if (sort === 'diff_asc') return aDiffVal - bDiffVal;
-                    if (sort === 'diff_desc') return bDiffVal - aDiffVal;
-                    return 0;
-                });
+                        if (sort === 'last_desc') return bLast - aLast;
+                        if (sort === 'last_asc') return aLast - bLast;
+                        if (sort === 'price_asc') return aPrice - bPrice;
+                        if (sort === 'price_desc') return bPrice - aPrice;
+                        if (sort === 'diff_asc') return aDiffVal - bDiffVal;
+                        if (sort === 'diff_desc') return bDiffVal - aDiffVal;
+                        return 0;
+                    });
 
-                visibleRows.forEach((row) => tbody.appendChild(row));
+                    if (appendTo) {
+                        visibleItems.forEach((el) => appendTo.appendChild(el));
+                    }
+                }
+
+                if (tbody) {
+                    const rows = Array.from(tbody.querySelectorAll('tr[data-product-row]'));
+                    applyToItems(rows, tbody);
+                }
+
+                if (comparisonCardView) {
+                    const cards = Array.from(comparisonCardView.querySelectorAll('[data-product-card]'));
+                    applyToItems(cards, comparisonCardView);
+                }
             }
 
             if (filterSearch) filterSearch.addEventListener('input', applyFiltersAndSort);
