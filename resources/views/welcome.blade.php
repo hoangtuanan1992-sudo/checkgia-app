@@ -305,7 +305,7 @@
                                     <span class="text-4xl font-headline font-bold text-primary">100,000</span>
                                     <span class="text-on-surface-variant font-label">VNĐ / tháng</span>
                                 </div>
-                                <p class="text-xs text-on-surface-variant mt-2">Thanh toán 1,200,000 VNĐ / năm</p>
+                                <p class="text-xs text-on-surface-variant mt-2">Thanh toán 1,500,000 VNĐ / năm</p>
                             </div>
                             <ul class="space-y-4 mb-10 text-sm text-left w-full">
                                 <li class="flex items-center gap-2"><span class="material-symbols-outlined text-primary text-lg">check_circle</span> Theo dõi 200 sản phẩm</li>
