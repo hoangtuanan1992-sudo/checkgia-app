@@ -87,6 +87,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/competitors/{competitor}/scrape', [CompetitorController::class, 'scrapeLatestPrice'])->name('competitors.scrape');
     });
 
+    Route::get('/dashboard/competitor-sites/{competitorSite}', fn () => redirect()->route('dashboard.competitors'))->name('dashboard.competitors.sites.show');
+
     Route::match(['put', 'post'], '/competitors/{competitor}/price-adjustment', [CompetitorController::class, 'updatePriceAdjustment'])->name('competitors.adjustment.update');
     Route::get('/competitors/{competitor}/price-adjustment', fn () => redirect()->route('dashboard'));
 
