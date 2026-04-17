@@ -363,7 +363,7 @@
                     </table>
                 </div>
 
-                <div id="comparisonCardView" style="display:none;flex-direction:column;gap:14px;width:100%;background:var(--bg);padding:12px;border-radius:14px;border:1px solid var(--border)">
+                <div id="comparisonCardView" style="display:none;flex-direction:column;gap:12px;width:100%">
                     @forelse($products as $idx => $product)
                         @php($own = (int) $product->price)
                         @php($map = $product->competitors->keyBy('competitor_site_id'))
@@ -390,17 +390,20 @@
                             data-own-price="{{ $own }}"
                             data-last-updated="{{ $lastUpdated?->timestamp ?? 0 }}"
                             data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
-                            style="max-width:none;border-radius:14px;margin-top:0"
+                            style="max-width:none;border-radius:16px;margin-top:0;overflow:hidden"
                         >
-                            <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-                                <div style="min-width:0">
-                                    <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ $product->name }}</div>
+                            <div class="compare-card-header">
+                                <div class="compare-card-header-left">
+                                    <div class="compare-card-title">
+                                        <span class="compare-card-title-full">{{ $product->name }}</span>
+                                        <span class="compare-card-title-mobile">{{ \Illuminate\Support\Str::limit($product->name, 117) }}</span>
+                                    </div>
                                     <div class="hint" style="margin-top:2px">ID: {{ $product->id }}</div>
                                 </div>
-                                <div style="text-align:right;flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-                                    <div>
+                                <div class="compare-card-header-right">
+                                    <div class="compare-card-own">
                                         <div class="hint" style="margin-top:0">Giá bạn</div>
-                                        <a href="{{ route('products.history', $product) }}" style="font-weight:800;color:var(--accent)">
+                                        <a href="{{ route('products.history', $product) }}" class="compare-card-own-price">
                                             {{ number_format($own, 0, ',', '.') }}đ
                                         </a>
                                     </div>
@@ -433,10 +436,10 @@
                                     @php($delta = (! is_null($cPrice) && ! is_null($prevPrice)) ? ((int) $cPrice - (int) $prevPrice) : null)
                                     @php($adjColor = (! is_null($adjDiff) && $adjDiff > 0) ? '#166534' : ((! is_null($adjDiff) && $adjDiff < 0) ? '#991b1b' : '#111827'))
 
-                                    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px">
-                                        <div style="min-width:0">
-                                            <div style="font-weight:700">{{ $site->name }}</div>
-                                            <div class="hint" style="margin-top:2px">
+                                    <div class="compare-card-row">
+                                        <div class="compare-card-row-main">
+                                            <div class="compare-card-site">{{ $site->name }}</div>
+                                            <div class="hint compare-card-site-sub" style="margin-top:2px">
                                                 @if($cPrice)
                                                     <a href="{{ route('competitors.history', $c) }}" style="color:#6b7280">
                                                         {{ number_format($cPrice, 0, ',', '.') }}đ
@@ -461,8 +464,8 @@
                                             </div>
                                         </div>
 
-                                        <div style="display:flex;align-items:center;gap:10px;flex:0 0 auto">
-                                            <div style="min-width:110px;text-align:right;font-weight:800">
+                                        <div class="compare-card-row-side">
+                                            <div class="compare-card-diff">
                                                 @if(is_null($diff))
                                                     <span class="hint" style="margin-top:0">---</span>
                                                 @elseif($diff === 0)
@@ -486,35 +489,37 @@
                                                 @endif
                                             </div>
 
-                                            <button
-                                                type="button"
-                                                class="icon-btn icon-btn-sm js-edit-url"
-                                                data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
-                                                data-field="url"
-                                                data-value="{{ $c->url }}"
-                                                title="Sửa URL"
-                                            >
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                    <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                    <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                </svg>
-                                            </button>
+                                            <div class="compare-card-row-actions">
+                                                <button
+                                                    type="button"
+                                                    class="icon-btn icon-btn-sm js-edit-url"
+                                                    data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                    data-field="url"
+                                                    data-value="{{ $c->url }}"
+                                                    title="Sửa URL"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    </svg>
+                                                </button>
 
-                                            <button
-                                                type="button"
-                                                class="icon-btn icon-btn-sm js-edit-adjustment"
-                                                data-action="{{ route('competitors.adjustment.update', $c) }}"
-                                                data-value="{{ $adj }}"
-                                                data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
-                                                data-own="{{ $own }}"
-                                                data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
-                                                title="Điều chỉnh giá (+/-)"
-                                            >
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                                </svg>
-                                            </button>
+                                                <button
+                                                    type="button"
+                                                    class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                    data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                    data-value="{{ $adj }}"
+                                                    data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
+                                                    data-own="{{ $own }}"
+                                                    data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                    title="Điều chỉnh giá (+/-)"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 @endforeach

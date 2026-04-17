@@ -52,14 +52,42 @@
         .table tbody td:first-child{border-left:1px solid var(--border)}
         .table tbody td:last-child{border-right:1px solid var(--border)}
         .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#eef2ff;border:1px solid #e0e7ff;color:#3730a3;font-size:12px}
+        .compare-card-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+        .compare-card-header-left{min-width:0}
+        .compare-card-title{font-weight:700;overflow:hidden}
+        .compare-card-title-full{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+        .compare-card-title-mobile{display:none}
+        .compare-card-header-right{text-align:right;flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+        .compare-card-own-price{font-weight:800;color:var(--accent)}
+        .compare-card-row{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px}
+        .compare-card-row-main{min-width:0}
+        .compare-card-site{font-weight:700}
+        .compare-card-row-side{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+        .compare-card-diff{min-width:110px;text-align:right;font-weight:800}
+        .compare-card-row-actions{display:flex;align-items:center;gap:8px}
         @media (max-width: 768px){
             nav{flex-wrap:wrap;justify-content:center;gap:8px;padding:8px 10px}
             nav img{height:44px !important}
             nav > div{flex:1 1 100%;display:flex;flex-wrap:wrap;justify-content:center}
+            body{font-size:13px}
             .btn{padding:8px 10px;font-size:12px}
             .container{padding:12px;align-items:stretch}
+            .card{max-width:none}
+            .card-title{font-size:20px}
+            .card-sub{font-size:13px}
+            .hint{font-size:12px}
             .card-header{padding:16px 16px 8px}
             .card-body{padding:8px 16px 16px}
+            .icon-btn-sm{width:26px;height:26px;border-radius:9px}
+            .icon-btn-sm svg{width:13px;height:13px}
+            .compare-card-header{padding:12px 14px;flex-direction:column;align-items:stretch}
+            .compare-card-header-right{flex-direction:row;align-items:center;justify-content:space-between;text-align:left}
+            .compare-card-title-full{display:none}
+            .compare-card-title-mobile{display:block;white-space:normal;overflow:visible}
+            .compare-card-row{padding:10px 14px;flex-direction:column;gap:8px}
+            .compare-card-row-side{justify-content:space-between;width:100%}
+            .compare-card-diff{min-width:0;text-align:left}
+            .compare-card-row-actions{gap:6px}
         }
     </style>
 </head>
