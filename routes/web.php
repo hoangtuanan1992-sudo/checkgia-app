@@ -70,7 +70,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/dashboard/products/{product}', [ProductController::class, 'destroyFromDashboard'])->name('dashboard.products.destroy');
         Route::put('/dashboard/products/{product}/competitor-sites/{competitorSite}', [CompetitorController::class, 'upsertUrl'])->name('dashboard.products.competitors.upsert');
         Route::post('/dashboard/competitor-sites', [DashboardCompetitorSetupController::class, 'storeSite'])->name('dashboard.competitors.sites.store');
-        Route::delete('/dashboard/competitor-sites/{competitorSite}', [DashboardCompetitorSetupController::class, 'destroySite'])->name('dashboard.competitors.sites.destroy');
+        Route::match(['delete', 'post'], '/dashboard/competitor-sites/{competitorSite}', [DashboardCompetitorSetupController::class, 'destroySite'])->name('dashboard.competitors.sites.destroy');
         Route::post('/dashboard/competitor-sites/{competitorSite}/move', [DashboardCompetitorSetupController::class, 'moveSite'])->name('dashboard.competitors.sites.move');
         Route::post('/dashboard/scrape-settings', [DashboardCompetitorSetupController::class, 'updateScrapeSettings'])->name('dashboard.scrape-settings.update');
         Route::put('/account/notifications', [AccountController::class, 'updateNotifications'])->name('account.notifications');

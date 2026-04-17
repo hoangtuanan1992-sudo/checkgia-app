@@ -74,7 +74,11 @@ class DashboardCompetitorSetupController extends Controller
 
     public function destroySite(Request $request, CompetitorSite $competitorSite): RedirectResponse
     {
-        abort_unless($competitorSite->user_id === $request->user()->effectiveUserId(), 404);
+        $user = $request->user();
+        abort_unless($user, 403);
+        if (! $user->isAdmin() && (int) $competitorSite->user_id !== (int) $user->effectiveUserId()) {
+            abort(404);
+        }
 
         $userId = $request->user()->effectiveUserId();
         $competitorSite->delete();
@@ -85,7 +89,11 @@ class DashboardCompetitorSetupController extends Controller
 
     public function moveSite(Request $request, CompetitorSite $competitorSite): RedirectResponse
     {
-        abort_unless($competitorSite->user_id === $request->user()->effectiveUserId(), 404);
+        $user = $request->user();
+        abort_unless($user, 403);
+        if (! $user->isAdmin() && (int) $competitorSite->user_id !== (int) $user->effectiveUserId()) {
+            abort(404);
+        }
 
         $data = $request->validate([
             'direction' => ['required', 'in:up,down'],
