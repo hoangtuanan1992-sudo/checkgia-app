@@ -52,6 +52,15 @@
         .table tbody td:first-child{border-left:1px solid var(--border)}
         .table tbody td:last-child{border-right:1px solid var(--border)}
         .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#eef2ff;border:1px solid #e0e7ff;color:#3730a3;font-size:12px}
+        @media (max-width: 768px){
+            nav{flex-wrap:wrap;justify-content:center;gap:8px;padding:8px 10px}
+            nav img{height:44px !important}
+            nav > div{flex:1 1 100%;display:flex;flex-wrap:wrap;justify-content:center}
+            .btn{padding:8px 10px;font-size:12px}
+            .container{padding:12px;align-items:stretch}
+            .card-header{padding:16px 16px 8px}
+            .card-body{padding:8px 16px 16px}
+        }
     </style>
 </head>
 <body>
