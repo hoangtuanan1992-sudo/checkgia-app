@@ -257,7 +257,7 @@
 
                                                         @if(! is_null($adjDiff))
                                                             @php($adjColor = $adjDiff > 0 ? '#166534' : ($adjDiff < 0 ? '#991b1b' : '#111827'))
-                                                            <span id="adjDiff-{{ $c->id }}" style="display:{{ $adj !== 0 ? 'inline' : 'none' }};font-weight:800;color:{{ $adjColor }}">
+                                                            <a href="{{ $c->url }}" target="_blank" id="adjDiff-{{ $c->id }}" style="display:{{ $adj !== 0 ? 'inline' : 'none' }};font-weight:800;color:{{ $adjColor }}">
                                                                 @if($adjDiff > 0)
                                                                     +{{ number_format($adjDiff, 0, ',', '.') }}đ
                                                                 @elseif($adjDiff < 0)
@@ -265,7 +265,7 @@
                                                                 @else
                                                                     0đ
                                                                 @endif
-                                                            </span>
+                                                            </a>
                                                             <button
                                                                 type="button"
                                                                 class="icon-btn icon-btn-sm js-edit-adjustment"
