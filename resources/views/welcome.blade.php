@@ -301,10 +301,6 @@
                             <div class="absolute -top-4 bg-primary text-on-primary px-4 py-1 rounded-full text-xs font-bold font-label uppercase">Tiết kiệm 50%</div>
                             <h3 class="text-xl font-headline font-bold mb-4">Gói Năm</h3>
                             <div class="flex flex-col items-center mb-8">
-                                <div class="flex items-baseline gap-1">
-                                    <span class="text-4xl font-headline font-bold text-primary">100,000</span>
-                                    <span class="text-on-surface-variant font-label">VNĐ / tháng</span>
-                                </div>
                                 <p class="text-xs text-on-surface-variant mt-2">Thanh toán 1,500,000 VNĐ / năm</p>
                             </div>
                             <ul class="space-y-4 mb-10 text-sm text-left w-full">
