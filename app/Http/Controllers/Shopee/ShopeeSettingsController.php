@@ -23,17 +23,8 @@ class ShopeeSettingsController extends Controller
             ->orderBy('name')
             ->get();
 
-        $products = ShopeeProduct::query()
-            ->with(['competitors' => function ($q) {
-                $q->with('shop:id,name')->orderBy('id');
-            }])
-            ->where('user_id', $ownerId)
-            ->latest()
-            ->get();
-
         return view('shopee.settings-owner', [
             'shops' => $shops,
-            'products' => $products,
         ]);
     }
 

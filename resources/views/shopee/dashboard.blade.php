@@ -23,6 +23,41 @@
                 <div class="pill" style="margin-bottom:14px">{{ session('status') }}</div>
             @endif
 
+            <div class="card" style="max-width:none;box-shadow:none;margin-top:0">
+                <div class="card-header">
+                    <h2 class="card-title" style="font-size:18px;margin:0">Thêm sản phẩm Shopee</h2>
+                    <p class="card-sub" style="margin-top:6px">Nhập link shop bạn, và nhập thêm link của đối thủ (nếu có) để so sánh</p>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ route('shopee.products.store') }}">
+                        @csrf
+                        <div class="field" style="margin-top:0">
+                            <label class="label">Link shop bạn (Shopee)</label>
+                            <input class="input" name="own_url" type="url" placeholder="https://shopee.vn/..." value="{{ old('own_url') }}" required>
+                        </div>
+
+                        @if($shops->isNotEmpty())
+                            <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+                                @foreach($shops as $shop)
+                                    <div class="field" style="margin-top:0">
+                                        <label class="label">Link {{ $shop->name }}</label>
+                                        <input class="input" name="competitor_urls[{{ $shop->id }}]" type="url" value="{{ old('competitor_urls.'.$shop->id) }}" placeholder="https://shopee.vn/...">
+                                    </div>
+                                @endforeach
+                            </div>
+                        @else
+                            <div class="hint" style="margin-top:10px">Chưa có shop đối thủ. Hãy vào Cài đặt để thêm shop đối thủ.</div>
+                        @endif
+
+                        <div class="actions">
+                            <button class="btn" type="submit">Thêm</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div style="height:14px"></div>
+
             <div class="table-wrap">
                 <table class="table">
                     <thead>
@@ -81,7 +116,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ 3 + $shops->count() }}" class="hint">Chưa có dữ liệu. Hãy vào Cài đặt để thêm shop và sản phẩm.</td>
+                                <td colspan="{{ 3 + $shops->count() }}" class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm ở phía trên và thêm shop đối thủ trong Cài đặt.</td>
                             </tr>
                         @endforelse
                     </tbody>
