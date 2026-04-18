@@ -16,6 +16,8 @@ use App\Http\Controllers\DemoController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductHistoryController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\Shopee\ShopeeAdminController;
+use App\Http\Controllers\Shopee\ShopeeDashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -41,6 +43,19 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard/competitors', [DashboardCompetitorSetupController::class, 'index'])->name('dashboard.competitors');
     Route::get('/dashboard/export/products', [DashboardExportController::class, 'products'])->name('dashboard.export.products');
     Route::post('/dashboard/scrape-now', [DashboardScrapeNowController::class, 'run'])->name('dashboard.scrape.now');
+
+    Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->name('shopee.dashboard');
+    Route::middleware('owner')->group(function () {
+        Route::post('/shopee/items', [ShopeeDashboardController::class, 'store'])->name('shopee.items.store');
+        Route::post('/shopee/items/{item}/toggle', [ShopeeDashboardController::class, 'toggle'])->name('shopee.items.toggle');
+        Route::delete('/shopee/items/{item}', [ShopeeDashboardController::class, 'destroy'])->name('shopee.items.destroy');
+    });
+
+    Route::middleware('admin')->group(function () {
+        Route::get('/shopee/settings', [ShopeeAdminController::class, 'edit'])->name('shopee.settings');
+        Route::put('/shopee/settings', [ShopeeAdminController::class, 'update'])->name('shopee.settings.update');
+        Route::post('/shopee/settings/agents/{agent}', [ShopeeAdminController::class, 'updateAgent'])->name('shopee.settings.agent.update');
+    });
 
     Route::get('/account', [AccountController::class, 'show'])->name('account');
     Route::put('/account/password', [AccountController::class, 'updatePassword'])->name('account.password');

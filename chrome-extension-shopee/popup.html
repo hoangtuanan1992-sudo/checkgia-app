@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CheckGia Shopee Scraper</title>
+    <style>
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:12px;min-width:260px}
+      .muted{color:#6b7280;font-size:12px;margin-top:6px}
+      .row{display:flex;justify-content:space-between;gap:10px;margin-top:10px}
+      button{padding:8px 10px;border-radius:10px;border:1px solid #e5e7eb;background:#111827;color:#fff;cursor:pointer}
+      button.secondary{background:#fff;color:#111827}
+      .pill{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #e5e7eb;background:#f9fafb}
+    </style>
+  </head>
+  <body>
+    <div style="font-weight:800">CheckGia Shopee Scraper</div>
+    <div id="agent" class="muted"></div>
+    <div id="next" class="muted"></div>
+    <div class="row">
+      <button id="options">Options</button>
+      <button id="admin" class="secondary">Admin</button>
+    </div>
+    <div id="status" class="pill" style="display:none;margin-top:10px"></div>
+    <script>
+      function setStatus(t){
+        const el=document.getElementById('status');
+        if(!t){el.style.display='none';el.textContent='';return;}
+        el.style.display='';el.textContent=t;
+      }
+      async function load(){
+        const cfg=await chrome.storage.sync.get(['serverUrl','agentKey']);
+        const local=await chrome.storage.local.get(['nextPollAt','nextPollIn']);
+        document.getElementById('agent').textContent='Agent: '+(cfg.agentKey||'(chưa có)');
+        if(local.nextPollAt){
+          const d=new Date(local.nextPollAt);
+          document.getElementById('next').textContent='Next poll: '+d.toLocaleString();
+        }else if(local.nextPollIn){
+          document.getElementById('next').textContent='Next poll in: '+local.nextPollIn+'s';
+        }
+      }
+      document.getElementById('options').addEventListener('click',()=>chrome.runtime.openOptionsPage());
+      document.getElementById('admin').addEventListener('click',async()=>{
+        const {serverUrl}=await chrome.storage.sync.get(['serverUrl']);
+        if(!serverUrl){setStatus('Chưa cấu hình server');return;}
+        const url=String(serverUrl).replace(/\/+$/,'')+'/shopee/settings';
+        await chrome.tabs.create({url});
+      });
+      load();
+    </script>
+  </body>
+</html>
+

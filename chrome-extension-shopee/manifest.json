@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "CheckGia Shopee Scraper",
+  "version": "0.1.0",
+  "description": "Scrape Shopee prices and report to CheckGia.",
+  "permissions": ["storage", "alarms", "tabs", "scripting"],
+  "host_permissions": ["https://*/", "http://*/"],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "options_page": "options.html",
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
+

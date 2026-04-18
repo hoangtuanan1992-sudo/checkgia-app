@@ -16,6 +16,11 @@ use Illuminate\Database\Eloquent\Model;
     'mail_from_address',
     'mail_from_name',
     'demo_user_id',
+    'shopee_enabled',
+    'shopee_extension_token',
+    'shopee_scrape_interval_seconds',
+    'shopee_rest_seconds_min',
+    'shopee_rest_seconds_max',
 ])]
 class AppSetting extends Model
 {
@@ -27,6 +32,11 @@ class AppSetting extends Model
             'demo_user_id' => 'integer',
             'mail_port' => 'integer',
             'mail_password' => 'encrypted',
+            'shopee_enabled' => 'boolean',
+            'shopee_extension_token' => 'encrypted',
+            'shopee_scrape_interval_seconds' => 'integer',
+            'shopee_rest_seconds_min' => 'integer',
+            'shopee_rest_seconds_max' => 'integer',
         ];
     }
 

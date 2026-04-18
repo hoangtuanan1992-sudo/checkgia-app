@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CheckGia Shopee Scraper - Options</title>
+    <style>
+      body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:18px;max-width:720px}
+      label{display:block;margin-top:12px;font-weight:700}
+      input{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px}
+      button{margin-top:12px;padding:10px 12px;border:1px solid #e5e7eb;border-radius:10px;background:#111827;color:#fff;cursor:pointer}
+      .muted{color:#6b7280;font-size:13px;margin-top:6px}
+      .row{display:flex;gap:10px;align-items:center}
+      .row button{margin-top:0;white-space:nowrap}
+      .pill{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #e5e7eb;background:#f9fafb;margin-top:12px}
+    </style>
+  </head>
+  <body>
+    <h1>CheckGia Shopee Scraper</h1>
+    <div class="muted">Nhập Server URL và Token lấy từ trang Admin của CheckGia</div>
+
+    <label for="serverUrl">Server URL</label>
+    <input id="serverUrl" placeholder="https://checkgia.id.vn" />
+
+    <label for="token">Token</label>
+    <input id="token" placeholder="..." />
+
+    <div class="row" style="margin-top:12px">
+      <button id="save">Lưu</button>
+      <button id="openAdmin" style="background:#fff;color:#111827">Mở trang cài đặt</button>
+    </div>
+
+    <div id="status" class="pill" style="display:none"></div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
+
