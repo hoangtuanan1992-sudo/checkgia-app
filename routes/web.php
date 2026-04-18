@@ -50,6 +50,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/shopee/settings', [ShopeeSettingsController::class, 'index'])->name('shopee.settings');
         Route::post('/shopee/shops', [ShopeeSettingsController::class, 'storeShop'])->name('shopee.shops.store');
         Route::delete('/shopee/shops/{shop}', [ShopeeSettingsController::class, 'destroyShop'])->name('shopee.shops.destroy');
+        Route::post('/shopee/shops/{shop}/move', [ShopeeSettingsController::class, 'moveShop'])->name('shopee.shops.move');
         Route::post('/shopee/products', [ShopeeSettingsController::class, 'storeProduct'])->name('shopee.products.store');
         Route::post('/shopee/products/{product}/toggle', [ShopeeSettingsController::class, 'toggleProduct'])->name('shopee.products.toggle');
         Route::delete('/shopee/products/{product}', [ShopeeSettingsController::class, 'destroyProduct'])->name('shopee.products.destroy');

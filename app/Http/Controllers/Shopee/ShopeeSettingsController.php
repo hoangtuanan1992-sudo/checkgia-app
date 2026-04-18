@@ -8,6 +8,7 @@ use App\Models\ShopeeProduct;
 use App\Models\ShopeeShop;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class ShopeeSettingsController extends Controller
@@ -18,7 +19,6 @@ class ShopeeSettingsController extends Controller
 
         $shops = ShopeeShop::query()
             ->where('user_id', $ownerId)
-            ->orderByDesc('is_own')
             ->orderBy('position')
             ->orderBy('name')
             ->get();
@@ -43,7 +43,6 @@ class ShopeeSettingsController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'is_own' => ['nullable', 'boolean'],
         ]);
 
         $maxPos = (int) ShopeeShop::query()->where('user_id', $ownerId)->max('position');
@@ -51,7 +50,7 @@ class ShopeeSettingsController extends Controller
         ShopeeShop::create([
             'user_id' => $ownerId,
             'name' => trim((string) $data['name']),
-            'is_own' => (bool) ($data['is_own'] ?? false),
+            'is_own' => false,
             'position' => $maxPos + 1,
         ]);
 
@@ -66,6 +65,63 @@ class ShopeeSettingsController extends Controller
         $shop->delete();
 
         return back()->with('status', 'Đã xoá shop');
+    }
+
+    public function moveShop(Request $request, ShopeeShop $shop): RedirectResponse
+    {
+        $ownerId = $request->user()->effectiveUserId();
+        abort_unless((int) $shop->user_id === (int) $ownerId, 404);
+
+        $data = $request->validate([
+            'direction' => ['required', 'in:up,down'],
+        ]);
+
+        DB::transaction(function () use ($ownerId, $shop, $data) {
+            $shops = ShopeeShop::query()
+                ->where('user_id', $ownerId)
+                ->orderBy('position')
+                ->orderBy('name')
+                ->lockForUpdate()
+                ->get();
+
+            $shops->values()->each(function ($s, $i) {
+                if ((int) $s->position !== (int) $i) {
+                    $s->position = $i;
+                    $s->save();
+                }
+            });
+
+            $shops = ShopeeShop::query()
+                ->where('user_id', $ownerId)
+                ->orderBy('position')
+                ->orderBy('name')
+                ->lockForUpdate()
+                ->get()
+                ->values();
+
+            $idx = $shops->search(fn ($s) => (int) $s->id === (int) $shop->id);
+            if ($idx === false) {
+                return;
+            }
+
+            $to = $data['direction'] === 'up' ? $idx - 1 : $idx + 1;
+            if ($to < 0 || $to >= $shops->count()) {
+                return;
+            }
+
+            $a = $shops[$idx];
+            $b = $shops[$to];
+
+            $aPos = (int) $a->position;
+            $bPos = (int) $b->position;
+
+            $a->position = $bPos;
+            $b->position = $aPos;
+            $a->save();
+            $b->save();
+        });
+
+        return back()->with('status', 'Đã cập nhật vị trí');
     }
 
     public function storeProduct(Request $request): RedirectResponse
@@ -94,7 +150,7 @@ class ShopeeSettingsController extends Controller
                 continue;
             }
             $shop = $shops->get($shopId);
-            if (! $shop || $shop->is_own) {
+            if (! $shop) {
                 continue;
             }
 
@@ -155,7 +211,6 @@ class ShopeeSettingsController extends Controller
     {
         $ownerId = $request->user()->effectiveUserId();
         abort_unless((int) $product->user_id === (int) $ownerId && (int) $shop->user_id === (int) $ownerId, 404);
-        abort_unless(! $shop->is_own, 404);
 
         $data = $request->validate([
             'clear' => ['nullable', 'boolean'],

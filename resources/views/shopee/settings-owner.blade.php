@@ -6,7 +6,7 @@
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
                 <div style="min-width:0">
                     <h1 class="card-title" style="margin:0">Cài đặt Shopee</h1>
-                    <p class="card-sub" style="margin:6px 0 0">Thêm shop của bạn và shop đối thủ, sau đó nhập link để so sánh</p>
+                    <p class="card-sub" style="margin:6px 0 0">Thêm shop đối thủ và nhập link để so sánh</p>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center">
                     <a class="btn btn-secondary" href="{{ route('shopee.dashboard') }}">Dashboard</a>
@@ -24,7 +24,7 @@
             <div class="card" style="max-width:none;box-shadow:none;margin-top:0">
                 <div class="card-header">
                     <h2 class="card-title" style="font-size:18px;margin:0">Shops</h2>
-                    <p class="card-sub" style="margin-top:6px">Shop của bạn (đánh dấu) và các shop đối thủ để tạo cột so sánh</p>
+                    <p class="card-sub" style="margin-top:6px">Danh sách shop đối thủ để tạo cột so sánh</p>
                 </div>
                 <div class="card-body">
                     <form method="POST" action="{{ route('shopee.shops.store') }}" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
@@ -33,10 +33,6 @@
                             <div class="hint" style="margin-top:0">Tên shop</div>
                             <input class="input" name="name" placeholder="VD: LaptopGame" required>
                         </div>
-                        <label style="display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff">
-                            <input type="checkbox" name="is_own" value="1">
-                            <span style="font-weight:700">Shop của bạn</span>
-                        </label>
                         <button class="btn" type="submit">Thêm</button>
                     </form>
 
@@ -48,8 +44,8 @@
                                 <tr>
                                     <th style="width:60px">#</th>
                                     <th>Shop</th>
-                                    <th style="width:130px">Loại</th>
-                                    <th style="width:160px">Hành động</th>
+                                    <th style="width:120px">Thứ tự</th>
+                                    <th style="width:190px">Hành động</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -58,18 +54,27 @@
                                         <td>{{ $i + 1 }}</td>
                                         <td style="font-weight:800">{{ $shop->name }}</td>
                                         <td>
-                                            @if($shop->is_own)
-                                                <span class="pill" style="background:rgba(13,110,253,.12);border-color:rgba(13,110,253,.25);color:#1d4ed8">Shop của bạn</span>
-                                            @else
-                                                <span class="pill">Đối thủ</span>
-                                            @endif
+                                            <div style="display:flex;gap:6px;align-items:center">
+                                                <form method="POST" action="{{ route('shopee.shops.move', $shop) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="direction" value="up">
+                                                    <button class="btn btn-secondary" type="submit" style="padding:6px 10px">↑</button>
+                                                </form>
+                                                <form method="POST" action="{{ route('shopee.shops.move', $shop) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="direction" value="down">
+                                                    <button class="btn btn-secondary" type="submit" style="padding:6px 10px">↓</button>
+                                                </form>
+                                            </div>
                                         </td>
                                         <td>
-                                            <form method="POST" action="{{ route('shopee.shops.destroy', $shop) }}" onsubmit="return confirm('Xoá shop này?')">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button class="btn btn-secondary" type="submit" style="padding:6px 10px;color:var(--danger)">Xoá</button>
-                                            </form>
+                                            <div style="display:flex;gap:8px;align-items:center">
+                                                <form method="POST" action="{{ route('shopee.shops.destroy', $shop) }}" onsubmit="return confirm('Xoá shop này?')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button class="btn btn-secondary" type="submit" style="padding:6px 10px;color:var(--danger)">Xoá</button>
+                                                </form>
+                                            </div>
                                         </td>
                                     </tr>
                                 @empty
@@ -104,10 +109,9 @@
                             </div>
                         </div>
 
-                        @php($competitorShops = $shops->where('is_own', false))
-                        @if($competitorShops->isNotEmpty())
+                        @if($shops->isNotEmpty())
                             <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
-                                @foreach($competitorShops as $shop)
+                                @foreach($shops as $shop)
                                     <div class="field" style="margin-top:0">
                                         <label class="label">Link {{ $shop->name }}</label>
                                         <input class="input" name="competitor_urls[{{ $shop->id }}]" type="url" value="{{ old('competitor_urls.'.$shop->id) }}" placeholder="https://shopee.vn/...">
@@ -115,7 +119,7 @@
                                 @endforeach
                             </div>
                         @else
-                            <div class="hint" style="margin-top:10px">Chưa có shop đối thủ. Hãy thêm shop đối thủ để tạo cột so sánh.</div>
+                            <div class="hint" style="margin-top:10px">Chưa có shop đối thủ. Hãy thêm shop để tạo cột so sánh.</div>
                         @endif
 
                         <div class="actions">
@@ -179,4 +183,3 @@
         </div>
     </div>
 @endsection
-

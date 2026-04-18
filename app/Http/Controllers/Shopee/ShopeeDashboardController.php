@@ -16,7 +16,6 @@ class ShopeeDashboardController extends Controller
 
         $shops = ShopeeShop::query()
             ->where('user_id', $ownerId)
-            ->where('is_own', false)
             ->orderBy('position')
             ->orderBy('name')
             ->get(['id', 'name', 'position']);
