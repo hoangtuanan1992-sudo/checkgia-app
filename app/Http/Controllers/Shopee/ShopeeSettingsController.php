@@ -129,14 +129,12 @@ class ShopeeSettingsController extends Controller
         $ownerId = $request->user()->effectiveUserId();
 
         $data = $request->validate([
-            'name' => ['nullable', 'string', 'max:255'],
             'own_url' => ['required', 'url', 'max:2048'],
             'competitor_urls' => ['nullable', 'array'],
         ]);
 
         $product = ShopeeProduct::create([
             'user_id' => $ownerId,
-            'name' => trim((string) ($data['name'] ?? '')) ?: null,
             'own_url' => trim((string) $data['own_url']),
             'is_enabled' => true,
         ]);

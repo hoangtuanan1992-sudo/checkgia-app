@@ -98,15 +98,9 @@
                 <div class="card-body">
                     <form method="POST" action="{{ route('shopee.products.store') }}">
                         @csrf
-                        <div style="display:grid;grid-template-columns:1fr 1.7fr;gap:12px">
-                            <div class="field" style="margin-top:0">
-                                <label class="label">Tên (tuỳ chọn)</label>
-                                <input class="input" name="name" placeholder="VD: ASUS ProArt PA278QV" value="{{ old('name') }}">
-                            </div>
-                            <div class="field" style="margin-top:0">
-                                <label class="label">Link shop bạn (Shopee)</label>
-                                <input class="input" name="own_url" type="url" placeholder="https://shopee.vn/..." value="{{ old('own_url') }}" required>
-                            </div>
+                        <div class="field" style="margin-top:0">
+                            <label class="label">Link shop bạn (Shopee)</label>
+                            <input class="input" name="own_url" type="url" placeholder="https://shopee.vn/..." value="{{ old('own_url') }}" required>
                         </div>
 
                         @if($shops->isNotEmpty())
