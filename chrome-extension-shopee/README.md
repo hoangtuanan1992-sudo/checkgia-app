@@ -19,5 +19,4 @@
   - `POST /api/shopee/agent/heartbeat`
   - `POST /api/shopee/agent/pull`
   - `POST /api/shopee/agent/report`
-- Admin dùng trang `Shopee` → `Cài đặt` để bật/tắt, đặt chu kỳ cào, thời gian nghỉ, và gán agent cào cho 1 user hoặc tất cả.
-
+- Admin dùng trang `Shopee` → `Admin` để bật/tắt, đặt chu kỳ cập nhật, thời gian nghỉ, và gán agent cập nhật cho 1 user hoặc tất cả.

@@ -127,7 +127,7 @@
             <div style="display:flex;gap:8px;align-items:center">
                 <a class="btn btn-secondary" href="{{ route('dashboard') }}">Dashboard</a>
                 <a class="btn btn-secondary" href="{{ route('dashboard.reports') }}">Báo cáo</a>
-                <a class="btn btn-secondary" href="{{ route('shopee.dashboard') }}">Shopee</a>
+                <a class="btn btn-secondary" href="{{ route('shopee.dashboard') }}">Check Giá Shopee</a>
                 <a class="btn btn-secondary" href="{{ route('dashboard.competitors') }}">Cài đặt</a>
                 <a class="btn btn-secondary" href="{{ route('account') }}">Tài khoản</a>
                 @if(auth()->user()->isAdmin())

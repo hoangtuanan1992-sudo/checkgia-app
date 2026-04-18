@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Shopee;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\ShopeeAgent;
-use App\Models\ShopeeItem;
-use App\Models\ShopeePrice;
+use App\Models\ShopeeCompetitor;
+use App\Models\ShopeeCompetitorPrice;
+use App\Models\ShopeeProduct;
+use App\Models\ShopeeProductPrice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -42,7 +44,7 @@ class ShopeeAgentApiController extends Controller
             'ok' => true,
             'server_time' => now()->toIso8601String(),
             'shopee_enabled' => (bool) ($setting?->shopee_enabled ?? false),
-            'scrape_interval_seconds' => (int) ($setting?->shopee_scrape_interval_seconds ?? 300),
+            'update_interval_seconds' => (int) ($setting?->shopee_scrape_interval_seconds ?? 300),
             'rest_seconds_min' => (int) ($setting?->shopee_rest_seconds_min ?? 5),
             'rest_seconds_max' => (int) ($setting?->shopee_rest_seconds_max ?? 15),
             'agent' => [
@@ -84,18 +86,71 @@ class ShopeeAgentApiController extends Controller
             }
         }
 
-        $q = ShopeeItem::query()->where('is_enabled', true);
+        $productQuery = ShopeeProduct::query()->where('is_enabled', true);
         if ($agent->mode === 'user' && $agent->assigned_user_id) {
-            $q->where('user_id', (int) $agent->assigned_user_id);
+            $productQuery->where('user_id', (int) $agent->assigned_user_id);
         }
 
-        $item = $q
+        $product = $productQuery
             ->orderByRaw('last_scraped_at is null desc')
             ->orderBy('last_scraped_at')
             ->orderBy('id')
             ->first();
 
-        if (! $item) {
+        $competitorQuery = ShopeeCompetitor::query()
+            ->where('is_enabled', true)
+            ->whereHas('product', function ($q) use ($agent) {
+                $q->where('is_enabled', true);
+                if ($agent->mode === 'user' && $agent->assigned_user_id) {
+                    $q->where('user_id', (int) $agent->assigned_user_id);
+                }
+            })
+            ->with(['product:id,user_id']);
+
+        $competitor = $competitorQuery
+            ->orderByRaw('last_scraped_at is null desc')
+            ->orderBy('last_scraped_at')
+            ->orderBy('id')
+            ->first();
+
+        $task = null;
+        if ($product && $competitor) {
+            $pTs = $product->last_scraped_at?->timestamp;
+            $cTs = $competitor->last_scraped_at?->timestamp;
+            if (is_null($pTs) || (! is_null($cTs) && $cTs < $pTs)) {
+                $task = [
+                    'type' => 'competitor',
+                    'competitor_id' => (int) $competitor->id,
+                    'product_id' => (int) $competitor->shopee_product_id,
+                    'user_id' => (int) ($competitor->product?->user_id ?? 0),
+                    'url' => (string) $competitor->url,
+                ];
+            } else {
+                $task = [
+                    'type' => 'product',
+                    'product_id' => (int) $product->id,
+                    'user_id' => (int) $product->user_id,
+                    'url' => (string) $product->own_url,
+                ];
+            }
+        } elseif ($competitor) {
+            $task = [
+                'type' => 'competitor',
+                'competitor_id' => (int) $competitor->id,
+                'product_id' => (int) $competitor->shopee_product_id,
+                'user_id' => (int) ($competitor->product?->user_id ?? 0),
+                'url' => (string) $competitor->url,
+            ];
+        } elseif ($product) {
+            $task = [
+                'type' => 'product',
+                'product_id' => (int) $product->id,
+                'user_id' => (int) $product->user_id,
+                'url' => (string) $product->own_url,
+            ];
+        }
+
+        if (! $task) {
             return response()->json(['sleep_seconds' => 60]);
         }
 
@@ -104,11 +159,7 @@ class ShopeeAgentApiController extends Controller
 
         return response()->json([
             'sleep_seconds' => random_int($minRest, $maxRest),
-            'task' => [
-                'item_id' => (int) $item->id,
-                'user_id' => (int) $item->user_id,
-                'url' => (string) $item->url,
-            ],
+            'task' => $task,
         ]);
     }
 
@@ -116,7 +167,9 @@ class ShopeeAgentApiController extends Controller
     {
         $data = $request->validate([
             'agent_key' => ['required', 'string', 'max:128'],
-            'item_id' => ['required', 'integer'],
+            'task_type' => ['nullable', 'string', 'in:product,competitor'],
+            'product_id' => ['nullable', 'integer'],
+            'competitor_id' => ['nullable', 'integer'],
             'price' => ['required', 'integer', 'min:0'],
             'scraped_at' => ['nullable', 'date'],
             'raw_text' => ['nullable', 'string', 'max:20000'],
@@ -128,11 +181,6 @@ class ShopeeAgentApiController extends Controller
             return response()->json(['message' => 'Unknown agent.'], 404);
         }
 
-        $item = ShopeeItem::query()->find((int) $data['item_id']);
-        if (! $item) {
-            return response()->json(['message' => 'Item not found.'], 404);
-        }
-
         $scrapedAt = isset($data['scraped_at']) ? now()->parse($data['scraped_at']) : now();
         $price = (int) $data['price'];
         $rawText = isset($data['raw_text']) ? trim((string) $data['raw_text']) : null;
@@ -141,19 +189,43 @@ class ShopeeAgentApiController extends Controller
             $name = null;
         }
 
-        ShopeePrice::create([
-            'shopee_item_id' => (int) $item->id,
-            'price' => $price,
-            'scraped_at' => $scrapedAt,
-            'raw_text' => $rawText ?: null,
-        ]);
+        $taskType = (string) ($data['task_type'] ?? '');
+        if ($taskType === 'competitor' || (isset($data['competitor_id']) && $data['competitor_id'])) {
+            $competitor = ShopeeCompetitor::query()->find((int) ($data['competitor_id'] ?? 0));
+            if (! $competitor) {
+                return response()->json(['message' => 'Competitor not found.'], 404);
+            }
 
-        $item->last_price = $price;
-        $item->last_scraped_at = $scrapedAt;
-        if ($name && ! $item->name) {
-            $item->name = $name;
+            ShopeeCompetitorPrice::create([
+                'shopee_competitor_id' => (int) $competitor->id,
+                'price' => $price,
+                'scraped_at' => $scrapedAt,
+                'raw_text' => $rawText ?: null,
+            ]);
+
+            $competitor->last_price = $price;
+            $competitor->last_scraped_at = $scrapedAt;
+            $competitor->save();
+        } else {
+            $product = ShopeeProduct::query()->find((int) ($data['product_id'] ?? 0));
+            if (! $product) {
+                return response()->json(['message' => 'Product not found.'], 404);
+            }
+
+            ShopeeProductPrice::create([
+                'shopee_product_id' => (int) $product->id,
+                'price' => $price,
+                'scraped_at' => $scrapedAt,
+                'raw_text' => $rawText ?: null,
+            ]);
+
+            $product->last_price = $price;
+            $product->last_scraped_at = $scrapedAt;
+            if ($name && ! $product->name) {
+                $product->name = $name;
+            }
+            $product->save();
         }
-        $item->save();
 
         $agent->last_seen_at = now();
         $agent->save();

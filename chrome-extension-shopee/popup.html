@@ -43,11 +43,10 @@
       document.getElementById('admin').addEventListener('click',async()=>{
         const {serverUrl}=await chrome.storage.sync.get(['serverUrl']);
         if(!serverUrl){setStatus('Chưa cấu hình server');return;}
-        const url=String(serverUrl).replace(/\/+$/,'')+'/shopee/settings';
+        const url=String(serverUrl).replace(/\/+$/,'')+'/shopee/admin-settings';
         await chrome.tabs.create({url});
       });
       load();
     </script>
   </body>
 </html>
-

@@ -196,7 +196,7 @@ async function pollOnce() {
   const sleepSeconds = Number(pullRes.data.sleep_seconds || 0);
   const task = pullRes.data.task;
 
-  if (!task || !task.url || !task.item_id) {
+  if (!task || !task.url || !task.type) {
     await scheduleNext(sleepSeconds || 60);
     return;
   }
@@ -207,13 +207,24 @@ async function pollOnce() {
   const rawText = scrape && scrape.raw_text ? String(scrape.raw_text).slice(0, 20000) : null;
 
   if (price != null && Number.isFinite(price)) {
-    await apiPost(serverUrl, token, "shopee/agent/report", {
+    const payload = {
       agent_key: agentKey,
-      item_id: Number(task.item_id),
+      task_type: String(task.type || ""),
       price: Math.max(0, Math.trunc(price)),
       scraped_at: new Date().toISOString(),
       raw_text: rawText,
       name
+    };
+
+    if (task.type === "product" && task.product_id) {
+      payload.product_id = Number(task.product_id);
+    }
+    if (task.type === "competitor" && task.competitor_id) {
+      payload.competitor_id = Number(task.competitor_id);
+    }
+
+    await apiPost(serverUrl, token, "shopee/agent/report", {
+      ...payload
     }).catch(() => null);
   }
 
@@ -233,4 +244,3 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     pollOnce().catch(() => scheduleNext(120));
   }
 });
-

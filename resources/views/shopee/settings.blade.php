@@ -21,7 +21,7 @@
                     <h2 class="card-title" style="font-size:18px;margin:0">Cấu hình chung</h2>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ route('shopee.settings.update') }}" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <form method="POST" action="{{ route('shopee.admin-settings.update') }}" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                         @csrf
                         @method('PUT')
 
@@ -39,7 +39,7 @@
                         </div>
 
                         <div>
-                            <div class="hint" style="margin-top:0">Chu kỳ cào (giây)</div>
+                            <div class="hint" style="margin-top:0">Chu kỳ cập nhật (giây)</div>
                             <input class="input" type="number" min="10" max="86400" name="shopee_scrape_interval_seconds" value="{{ old('shopee_scrape_interval_seconds', $setting->shopee_scrape_interval_seconds) }}" required>
                         </div>
 
@@ -95,7 +95,7 @@
                                             @endif
                                         </td>
                                         <td>
-                                            <form method="POST" action="{{ route('shopee.settings.agent.update', $agent) }}" style="display:flex;gap:10px;align-items:center">
+                                            <form method="POST" action="{{ route('shopee.admin-settings.agent.update', $agent) }}" style="display:flex;gap:10px;align-items:center">
                                                 @csrf
                                                 <input type="hidden" name="name" value="{{ $agent->name }}">
                                                 <input type="checkbox" name="is_enabled" value="1" @checked($agent->is_enabled)>
@@ -134,4 +134,3 @@
         </div>
     </div>
 @endsection
-

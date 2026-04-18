@@ -35,8 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
     const serverUrl = String($("serverUrl").value || "").trim();
     if (!serverUrl) return;
-    const url = serverUrl.replace(/\/+$/, "") + "/shopee/settings";
+    const url = serverUrl.replace(/\/+$/, "") + "/shopee/admin-settings";
     await chrome.tabs.create({ url });
   });
 });
-

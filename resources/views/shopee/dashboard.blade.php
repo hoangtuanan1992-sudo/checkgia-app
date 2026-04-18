@@ -6,11 +6,16 @@
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
                 <div style="min-width:0">
                     <h1 class="card-title" style="margin:0">Check Giá Shopee</h1>
-                    <p class="card-sub" style="margin:6px 0 0">Danh sách link Shopee của bạn để extension cào giá</p>
+                    <p class="card-sub" style="margin:6px 0 0">Giá được cập nhật bởi Chrome extension</p>
                 </div>
-                @if(auth()->user()?->isAdmin())
-                    <a class="btn btn-secondary" href="{{ route('shopee.settings') }}">Cài đặt</a>
-                @endif
+                <div style="display:flex;gap:8px;align-items:center">
+                    @if(auth()->user())
+                        <a class="btn btn-secondary" href="{{ route('shopee.settings') }}">Cài đặt</a>
+                    @endif
+                    @if(auth()->user()?->isAdmin())
+                        <a class="btn btn-secondary" href="{{ route('shopee.admin-settings') }}">Admin</a>
+                    @endif
+                </div>
             </div>
         </div>
         <div class="card-body">
@@ -18,88 +23,65 @@
                 <div class="pill" style="margin-bottom:14px">{{ session('status') }}</div>
             @endif
 
-            <div class="card" style="max-width:none;box-shadow:none;margin-top:0">
-                <div class="card-header">
-                    <h2 class="card-title" style="font-size:18px;margin:0">Thêm link Shopee</h2>
-                </div>
-                <div class="card-body">
-                    <form method="POST" action="{{ route('shopee.items.store') }}" style="display:grid;grid-template-columns:1fr 1.7fr auto;gap:10px;align-items:end">
-                        @csrf
-                        <div>
-                            <div class="hint" style="margin-top:0">Tên (tuỳ chọn)</div>
-                            <input class="input" name="name" placeholder="VD: LaptopGame - ProArt PA278QV" value="{{ old('name') }}">
-                        </div>
-                        <div>
-                            <div class="hint" style="margin-top:0">Link Shopee</div>
-                            <input class="input" name="url" placeholder="https://shopee.vn/..." value="{{ old('url') }}" required>
-                        </div>
-                        <button class="btn" type="submit">Thêm</button>
-                    </form>
-                </div>
-            </div>
-
-            <div style="height:14px"></div>
-
             <div class="table-wrap">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th style="width:60px">#</th>
-                            <th>Link</th>
-                            <th style="width:170px">Giá mới nhất</th>
-                            <th style="width:190px">Lần cào gần nhất</th>
-                            <th style="width:160px">Trạng thái</th>
-                            <th style="width:160px">Hành động</th>
+                            <th style="width:52px">#</th>
+                            <th style="min-width:340px">Tên sản phẩm</th>
+                            <th style="min-width:160px">Giá bạn</th>
+                            @foreach($shops as $shop)
+                                <th style="min-width:180px">{{ $shop->name }}</th>
+                            @endforeach
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse($items as $i => $item)
+                        @forelse($products as $i => $product)
+                            @php($own = is_null($product->last_price) ? null : (int) $product->last_price)
+                            @php($map = $product->competitors->keyBy('shopee_shop_id'))
                             <tr>
-                                <td>{{ $i + 1 }}</td>
+                                <td style="font-weight:800">{{ $i + 1 }}</td>
                                 <td>
-                                    <div style="font-weight:700">{{ $item->name ?: 'Shopee item #' . $item->id }}</div>
+                                    <div style="font-weight:800">{{ $product->name ?: 'Shopee product #' . $product->id }}</div>
+                                    <div class="hint" style="margin-top:3px">ID: {{ $product->id }}</div>
                                     <div class="hint" style="margin-top:3px;word-break:break-word">
-                                        <a href="{{ $item->url }}" target="_blank">{{ $item->url }}</a>
+                                        <a href="{{ $product->own_url }}" target="_blank">link shop bạn</a>
                                     </div>
                                 </td>
-                                <td style="font-weight:800">
-                                    @if(is_null($item->last_price))
+                                <td style="font-weight:900">
+                                    @if(is_null($own))
                                         <span class="hint" style="margin-top:0">---</span>
                                     @else
-                                        {{ number_format($item->last_price, 0, ',', '.') }}đ
+                                        {{ number_format($own, 0, ',', '.') }}đ
                                     @endif
                                 </td>
-                                <td>
-                                    @if($item->last_scraped_at)
-                                        {{ $item->last_scraped_at->format('d/m/Y H:i') }}
-                                    @else
-                                        <span class="hint" style="margin-top:0">---</span>
-                                    @endif
-                                </td>
-                                <td>
-                                    @if($item->is_enabled)
-                                        <span class="pill" style="background:rgba(22,163,74,.12);border-color:rgba(22,163,74,.25);color:#166534">Đang bật</span>
-                                    @else
-                                        <span class="pill" style="background:rgba(220,53,69,.10);border-color:rgba(220,53,69,.20);color:#991b1b">Đã tắt</span>
-                                    @endif
-                                </td>
-                                <td style="display:flex;gap:8px;align-items:center">
-                                    <form method="POST" action="{{ route('shopee.items.toggle', $item) }}">
-                                        @csrf
-                                        <button class="btn btn-secondary" type="submit" style="padding:6px 10px">
-                                            {{ $item->is_enabled ? 'Tắt' : 'Bật' }}
-                                        </button>
-                                    </form>
-                                    <form method="POST" action="{{ route('shopee.items.destroy', $item) }}" onsubmit="return confirm('Xoá link này?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button class="btn btn-secondary" type="submit" style="padding:6px 10px;color:var(--danger)">Xoá</button>
-                                    </form>
-                                </td>
+                                @foreach($shops as $shop)
+                                    @php($c = $map->get($shop->id))
+                                    @php($cPrice = $c?->last_price)
+                                    @php($adj = (int) ($c?->price_adjustment ?? 0))
+                                    @php($diff = (! is_null($own) && ! is_null($cPrice)) ? ((int) $cPrice + $adj - (int) $own) : null)
+                                    <td>
+                                        @if(! $c || is_null($cPrice) || is_null($own))
+                                            <span class="hint" style="margin-top:0">---</span>
+                                        @else
+                                            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                                                <div style="display:flex;flex-direction:column;gap:2px">
+                                                    <a href="{{ $c->url }}" target="_blank" style="color:#6b7280;font-weight:700">
+                                                        {{ number_format((int) $cPrice, 0, ',', '.') }}đ
+                                                    </a>
+                                                    <a href="{{ $c->url }}" target="_blank" style="font-weight:900;color:{{ $diff > 0 ? 'var(--success)' : ($diff < 0 ? 'var(--danger)' : '#6b7280') }}">
+                                                        {{ $diff > 0 ? '+' : '' }}{{ number_format((int) $diff, 0, ',', '.') }}đ
+                                                    </a>
+                                                </div>
+                                                <a class="btn btn-secondary" href="{{ route('shopee.settings') }}" style="padding:6px 10px">Sửa</a>
+                                            </div>
+                                        @endif
+                                    </td>
+                                @endforeach
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="hint">Chưa có link Shopee nào.</td>
+                                <td colspan="{{ 3 + $shops->count() }}" class="hint">Chưa có dữ liệu. Hãy vào Cài đặt để thêm shop và sản phẩm.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -108,4 +90,3 @@
         </div>
     </div>
 @endsection
-
