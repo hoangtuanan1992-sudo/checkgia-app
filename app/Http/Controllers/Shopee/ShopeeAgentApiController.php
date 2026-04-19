@@ -23,6 +23,8 @@ class ShopeeAgentApiController extends Controller
             'version' => ['nullable', 'string', 'max:255'],
             'platform' => ['nullable', 'string', 'max:255'],
             'user_agent' => ['nullable', 'string', 'max:2000'],
+            'last_error' => ['nullable', 'string', 'max:2000'],
+            'last_task_url' => ['nullable', 'string', 'max:5000'],
         ]);
 
         $agent = ShopeeAgent::query()->firstOrNew([
@@ -33,6 +35,12 @@ class ShopeeAgentApiController extends Controller
         $agent->platform = (string) ($data['platform'] ?? $agent->platform);
         $agent->user_agent = (string) ($data['user_agent'] ?? $agent->user_agent);
         $agent->last_seen_at = now();
+        if (array_key_exists('last_error', $data)) {
+            $agent->last_error = trim((string) ($data['last_error'] ?? '')) ?: null;
+        }
+        if (array_key_exists('last_task_url', $data)) {
+            $agent->last_task_url = trim((string) ($data['last_task_url'] ?? '')) ?: null;
+        }
         if (! $agent->exists) {
             $agent->is_enabled = true;
             $agent->is_approved = false;
@@ -236,6 +244,8 @@ class ShopeeAgentApiController extends Controller
         }
 
         $agent->last_seen_at = now();
+        $agent->last_report_at = now();
+        $agent->last_error = null;
         $agent->save();
 
         return response()->json(['ok' => true]);

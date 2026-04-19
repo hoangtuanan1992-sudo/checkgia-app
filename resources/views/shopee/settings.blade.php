@@ -67,6 +67,7 @@
                                     <th>Agent</th>
                                     <th style="min-width:220px">Note</th>
                                     <th style="min-width:180px">Kết nối</th>
+                                    <th style="min-width:260px">Trạng thái</th>
                                     <th style="width:160px">Last seen</th>
                                     <th style="width:120px">Bật</th>
                                     <th style="width:140px">Mode</th>
@@ -95,6 +96,22 @@
                                             @else
                                                 <span class="pill" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25);color:#92400e">Chờ duyệt</span>
                                                 <div class="hint" style="margin-top:6px">Mã: {{ $agent->pair_code ?: '---' }}</div>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if($agent->last_error)
+                                                <div style="color:var(--danger);font-weight:700">Lỗi</div>
+                                                <div class="hint" style="margin-top:6px;word-break:break-word">{{ $agent->last_error }}</div>
+                                            @elseif($agent->last_report_at)
+                                                <div style="color:var(--success);font-weight:700">OK</div>
+                                                <div class="hint" style="margin-top:6px">Report: {{ $agent->last_report_at->format('d/m/Y H:i') }}</div>
+                                            @else
+                                                <div class="hint" style="margin-top:0">---</div>
+                                            @endif
+                                            @if($agent->last_task_url)
+                                                <div class="hint" style="margin-top:6px;word-break:break-word">
+                                                    <a href="{{ $agent->last_task_url }}" target="_blank">Task URL</a>
+                                                </div>
                                             @endif
                                         </td>
                                         <td>
@@ -138,7 +155,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="9" class="hint">Chưa có agent nào. Cài extension và mở Chrome để agent tự đăng ký.</td>
+                                        <td colspan="10" class="hint">Chưa có agent nào. Cài extension và mở Chrome để agent tự đăng ký.</td>
                                     </tr>
                                 @endforelse
                             </tbody>

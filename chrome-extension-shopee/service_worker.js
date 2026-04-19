@@ -48,12 +48,15 @@ async function apiPost(serverUrl, token, path, body) {
 }
 
 async function heartbeat(serverUrl, token, agentKey) {
+  const local = await chrome.storage.local.get(["lastError", "lastTaskUrl"]);
   return apiPost(serverUrl, token, "shopee/agent/heartbeat", {
     agent_key: agentKey,
     name: "",
     version: chrome.runtime.getManifest().version,
     platform: navigator.platform || "",
-    user_agent: navigator.userAgent || ""
+    user_agent: navigator.userAgent || "",
+    last_error: local.lastError ? String(local.lastError).slice(0, 2000) : "",
+    last_task_url: local.lastTaskUrl ? String(local.lastTaskUrl).slice(0, 5000) : ""
   });
 }
 
@@ -349,6 +352,8 @@ async function pollOnce() {
     await apiPost(serverUrl, token, "shopee/agent/report", {
       ...payload
     }).catch(() => null);
+  } else {
+    await chrome.storage.local.set({ lastError: "Không lấy được giá từ trang Shopee", lastTaskUrl: task.url });
   }
 
   await scheduleNext(sleepSeconds || 60);

@@ -17,6 +17,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'is_approved',
     'pair_code',
     'api_token',
+    'last_error',
+    'last_task_url',
+    'last_report_at',
     'mode',
     'assigned_user_id',
     'last_seen_at',
@@ -30,6 +33,7 @@ class ShopeeAgent extends Model
             'is_enabled' => 'boolean',
             'is_approved' => 'boolean',
             'api_token' => 'encrypted',
+            'last_report_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'last_scrape_at' => 'datetime',
         ];
