@@ -131,22 +131,23 @@ class ShopeeAgentApiController extends Controller
 
         $task = null;
         if ($product && $competitor) {
-            $pTs = $product->last_scraped_at?->timestamp;
-            $cTs = $competitor->last_scraped_at?->timestamp;
-            if (is_null($pTs) || (! is_null($cTs) && $cTs < $pTs)) {
+            $pTs = $product->last_scraped_at?->timestamp ?? 0;
+            $cTs = $competitor->last_scraped_at?->timestamp ?? 0;
+
+            if ($pTs <= $cTs) {
+                $task = [
+                    'type' => 'product',
+                    'product_id' => (int) $product->id,
+                    'user_id' => (int) $product->user_id,
+                    'url' => (string) $product->own_url,
+                ];
+            } else {
                 $task = [
                     'type' => 'competitor',
                     'competitor_id' => (int) $competitor->id,
                     'product_id' => (int) $competitor->shopee_product_id,
                     'user_id' => (int) ($competitor->product?->user_id ?? 0),
                     'url' => (string) $competitor->url,
-                ];
-            } else {
-                $task = [
-                    'type' => 'product',
-                    'product_id' => (int) $product->id,
-                    'user_id' => (int) $product->user_id,
-                    'url' => (string) $product->own_url,
                 ];
             }
         } elseif ($competitor) {
@@ -222,6 +223,14 @@ class ShopeeAgentApiController extends Controller
             $competitor->last_price = $price;
             $competitor->last_scraped_at = $scrapedAt;
             $competitor->save();
+
+            if ($name) {
+                $product = ShopeeProduct::query()->find((int) $competitor->shopee_product_id);
+                if ($product && ! $product->name) {
+                    $product->name = $name;
+                    $product->save();
+                }
+            }
         } else {
             $product = ShopeeProduct::query()->find((int) ($data['product_id'] ?? 0));
             if (! $product) {
