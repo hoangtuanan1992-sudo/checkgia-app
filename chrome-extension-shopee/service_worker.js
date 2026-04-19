@@ -271,7 +271,17 @@ async function pollOnce() {
     setLastError(e);
     return null;
   });
-  if (hb && hb.ok && hb.data && hb.data.agent) {
+  if (!hb) {
+    await scheduleNext(120);
+    return;
+  }
+  if (!hb.ok) {
+    const msg = hb.data && hb.data.message ? String(hb.data.message) : "";
+    await chrome.storage.local.set({ lastError: msg || ("Heartbeat HTTP " + hb.status) });
+    await scheduleNext(hb.status === 403 ? 60 : 120);
+    return;
+  }
+  if (hb.data && hb.data.agent) {
     await clearLastError();
     const agent = hb.data.agent;
     if (agent.pair_code) {
@@ -287,9 +297,6 @@ async function pollOnce() {
         token = newToken;
       }
     }
-  } else if (hb && !hb.ok) {
-    const msg = hb.data && hb.data.message ? String(hb.data.message) : "";
-    await chrome.storage.local.set({ lastError: msg || ("Heartbeat HTTP " + hb.status) });
   }
 
   const pullRes = await apiPost(serverUrl, token, "shopee/agent/pull", { agent_key: agentKey }).catch(() => null);

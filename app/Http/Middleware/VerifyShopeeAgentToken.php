@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Models\ShopeeAgent;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class VerifyShopeeAgentToken
@@ -24,7 +25,16 @@ class VerifyShopeeAgentToken
 
         $agent = ShopeeAgent::query()->where('agent_key', $agentKey)->first();
         if (! $agent) {
-            return response()->json(['message' => 'Unknown agent.'], 404);
+            ShopeeAgent::query()->create([
+                'agent_key' => $agentKey,
+                'is_enabled' => true,
+                'is_approved' => false,
+                'mode' => 'all',
+                'pair_code' => strtoupper(Str::random(8)),
+                'last_seen_at' => now(),
+            ]);
+
+            return response()->json(['message' => 'Agent is not approved.'], 403);
         }
 
         if (! $agent->is_enabled) {
