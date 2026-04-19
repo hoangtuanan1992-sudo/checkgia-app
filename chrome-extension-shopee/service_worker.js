@@ -170,9 +170,38 @@ async function scrapeTab(tabId) {
 
       function getName() {
         const og = document.querySelector('meta[property="og:title"]');
-        if (og && og.getAttribute("content")) return og.getAttribute("content");
+        if (og && og.getAttribute("content")) {
+          const c = String(og.getAttribute("content") || "").trim();
+          if (c && !c.toLowerCase().includes("shopee việt nam")) return c;
+        }
+
+        const sel = [
+          'h1',
+          '[data-sqe="name"]',
+          '[data-sqe="product_name"]',
+          'div[class*="product"] h1',
+          'div[class*="Product"] h1'
+        ];
+        for (const s of sel) {
+          const el = document.querySelector(s);
+          const t = el && el.textContent ? el.textContent.trim() : "";
+          if (t && !t.toLowerCase().includes("shopee việt nam")) return t.slice(0, 255);
+        }
+
         const t = document.title || "";
-        return t.replace(/\s+-\s+Shopee.*$/i, "").trim() || null;
+        const cleaned = t.replace(/\s+-\s+Shopee.*$/i, "").trim();
+        if (!cleaned || cleaned.toLowerCase().includes("shopee việt nam")) return null;
+        return cleaned;
+      }
+
+      function getPriceFromShopeeRangeClass() {
+        const el = document.querySelector(".IZPeQz.B67UQ0");
+        if (!el) return null;
+        const txt = el.textContent ? el.textContent.trim() : "";
+        if (!txt) return null;
+        const cands = extractPriceCandidates(txt);
+        if (!cands.length) return null;
+        return cands[0].value;
       }
 
       function getPriceFromMeta() {
@@ -318,7 +347,7 @@ async function scrapeTab(tabId) {
           return { price: api.price, name: api.name ?? getName(), raw_text: api.raw_text || "", block_reason: blockReason };
         }
 
-        const price = await waitForPrice(20000);
+        const price = getPriceFromShopeeRangeClass() ?? await waitForPrice(20000);
         const name = api && api.name ? api.name : getName();
         return { price, name, raw_text: price != null ? String(price) : (api && api.raw_text ? api.raw_text : ""), block_reason: blockReason };
       })();
