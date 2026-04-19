@@ -367,12 +367,13 @@ chrome.runtime.onStartup.addListener(() => {
   scheduleNext(5).catch(() => {});
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm && alarm.name === "poll") {
-    pollOnce().catch((e) => {
-      setLastError(e);
-      scheduleNext(120);
-    });
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (!alarm || alarm.name !== "poll") return;
+  try {
+    await pollOnce();
+  } catch (e) {
+    await setLastError(e);
+    await scheduleNext(120);
   }
 });
 
