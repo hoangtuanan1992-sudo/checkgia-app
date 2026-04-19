@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CorsForShopeeApi;
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureOwner;
 use App\Http\Middleware\VerifyShopeeAgentToken;
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureAdmin::class,
             'shopee.token' => VerifyShopeeExtensionToken::class,
             'shopee.agent' => VerifyShopeeAgentToken::class,
+            'shopee.cors' => CorsForShopeeApi::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
