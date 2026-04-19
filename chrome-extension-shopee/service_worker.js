@@ -248,6 +248,15 @@ async function scheduleNext(seconds) {
   await chrome.storage.local.set({ nextPollIn: s, nextPollAt: Date.now() + s * 1000 });
 }
 
+async function setLastError(err) {
+  const msg = err instanceof Error ? (err.message || String(err)) : String(err || "");
+  await chrome.storage.local.set({ lastError: msg.slice(0, 500) });
+}
+
+async function clearLastError() {
+  await chrome.storage.local.set({ lastError: "" });
+}
+
 async function pollOnce() {
   const agentKey = await ensureAgentKey();
   const cfg = await getConfig();
@@ -258,8 +267,12 @@ async function pollOnce() {
     return;
   }
 
-  const hb = await heartbeat(serverUrl, token, agentKey).catch(() => null);
+  const hb = await heartbeat(serverUrl, token, agentKey).catch((e) => {
+    setLastError(e);
+    return null;
+  });
   if (hb && hb.ok && hb.data && hb.data.agent) {
+    await clearLastError();
     const agent = hb.data.agent;
     if (agent.pair_code) {
       await chrome.storage.local.set({ pairCode: String(agent.pair_code) });
@@ -274,6 +287,9 @@ async function pollOnce() {
         token = newToken;
       }
     }
+  } else if (hb && !hb.ok) {
+    const msg = hb.data && hb.data.message ? String(hb.data.message) : "";
+    await chrome.storage.local.set({ lastError: msg || ("Heartbeat HTTP " + hb.status) });
   }
 
   const pullRes = await apiPost(serverUrl, token, "shopee/agent/pull", { agent_key: agentKey }).catch(() => null);
@@ -287,6 +303,7 @@ async function pollOnce() {
     await scheduleNext(pullRes.status === 403 ? 60 : 120);
     return;
   }
+  await clearLastError();
   if (!pullRes.data) {
     await scheduleNext(120);
     return;
@@ -340,6 +357,22 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm && alarm.name === "poll") {
-    pollOnce().catch(() => scheduleNext(120));
+    pollOnce().catch((e) => {
+      setLastError(e);
+      scheduleNext(120);
+    });
   }
+});
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === "pollNow") {
+    pollOnce()
+      .then(() => sendResponse({ ok: true }))
+      .catch((e) => {
+        setLastError(e);
+        sendResponse({ ok: false, error: String(e && e.message ? e.message : e) });
+      });
+    return true;
+  }
+  return false;
 });

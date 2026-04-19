@@ -63,5 +63,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  chrome.runtime.sendMessage({ type: "pollNow" }, () => {
+    load();
+  });
+
   load();
 });
