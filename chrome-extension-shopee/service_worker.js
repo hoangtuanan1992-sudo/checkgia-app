@@ -127,17 +127,25 @@ async function scrapeTab(tabId) {
 
       function pickBestCandidate(cands) {
         if (!cands.length) return null;
+        const counts = new Map();
+        for (const c of cands) {
+          counts.set(c.value, (counts.get(c.value) || 0) + 1);
+        }
+
         const scored = cands
           .map((c) => {
             let score = 0;
+            const count = counts.get(c.value) || 0;
             if (c.hasCurrency) score += 3;
             if (c.value >= 100000) score += 2;
             if (c.value >= 1000000) score += 1;
-            return { ...c, score };
+            score += Math.min(5, count);
+            return { ...c, score, count };
           })
           .sort((a, b) => {
             if (b.score !== a.score) return b.score - a.score;
-            return a.value - b.value;
+            if (b.count !== a.count) return b.count - a.count;
+            return b.value - a.value;
           });
 
         return scored[0];
@@ -222,9 +230,14 @@ async function scrapeTab(tabId) {
       }
 
       function parseShopeeIdsFromPath(pathname) {
-        const m = String(pathname || "").match(/^\/product\/(\d+)\/(\d+)/);
-        if (!m) return null;
-        return { shopId: m[1], itemId: m[2] };
+        const p = String(pathname || "");
+        const m1 = p.match(/^\/product\/(\d+)\/(\d+)/);
+        if (m1) return { shopId: m1[1], itemId: m1[2] };
+
+        const m2 = p.match(/i\.(\d+)\.(\d+)/);
+        if (m2) return { shopId: m2[1], itemId: m2[2] };
+
+        return null;
       }
 
       async function fetchItemApi() {
@@ -244,10 +257,11 @@ async function scrapeTab(tabId) {
           const name = item.name ? String(item.name).slice(0, 255) : null;
 
           const rawPrice =
-            item.price != null ? item.price :
-              item.price_min != null ? item.price_min :
+            item.price_min != null ? item.price_min :
+              item.price != null ? item.price :
                 item.price_max != null ? item.price_max :
-                  null;
+                  item.price_min_before_discount != null ? item.price_min_before_discount :
+                    null;
 
           if (rawPrice == null) {
             return { name, price: null, raw_text: "" };
