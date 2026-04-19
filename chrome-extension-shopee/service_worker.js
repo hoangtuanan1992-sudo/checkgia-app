@@ -49,15 +49,22 @@ async function apiPost(serverUrl, token, path, body) {
 
 async function heartbeat(serverUrl, token, agentKey) {
   const local = await chrome.storage.local.get(["lastError", "lastTaskUrl"]);
-  return apiPost(serverUrl, token, "shopee/agent/heartbeat", {
+  const payload = {
     agent_key: agentKey,
     name: "",
     version: chrome.runtime.getManifest().version,
     platform: navigator.platform || "",
-    user_agent: navigator.userAgent || "",
-    last_error: local.lastError ? String(local.lastError).slice(0, 2000) : "",
-    last_task_url: local.lastTaskUrl ? String(local.lastTaskUrl).slice(0, 5000) : ""
-  });
+    user_agent: navigator.userAgent || ""
+  };
+
+  if (local.lastError) {
+    payload.last_error = String(local.lastError).slice(0, 2000);
+  }
+  if (local.lastTaskUrl) {
+    payload.last_task_url = String(local.lastTaskUrl).slice(0, 5000);
+  }
+
+  return apiPost(serverUrl, token, "shopee/agent/heartbeat", payload);
 }
 
 function normalizePriceNumber(text) {
@@ -95,6 +102,10 @@ async function scrapeTab(tabId) {
         const n = Number(s);
         if (!Number.isFinite(n)) return null;
         return Math.max(0, Math.trunc(n));
+      }
+
+      function sleep(ms) {
+        return new Promise((r) => setTimeout(r, ms));
       }
 
       function extractPriceCandidates(text) {
@@ -210,8 +221,38 @@ async function scrapeTab(tabId) {
         return best ? best.value : null;
       }
 
-      const price = getPriceFromMeta() ?? getPriceFromLd() ?? getPriceFromDom() ?? getPriceFromText();
-      return { price, name: getName(), raw_text: price != null ? String(price) : "" };
+      function detectBlock() {
+        const html = document.documentElement ? document.documentElement.innerText || "" : "";
+        const s = html.toLowerCase();
+        if (s.includes("captcha") || s.includes("xác minh") || s.includes("verify") || s.includes("unusual traffic")) {
+          return "Shopee chặn (captcha/verify).";
+        }
+        if (s.includes("enable cookies") || s.includes("cookies")) {
+          return "Shopee yêu cầu cookies.";
+        }
+        return null;
+      }
+
+      async function waitForPrice(maxMs) {
+        const deadline = Date.now() + maxMs;
+        let lastPrice = null;
+        while (Date.now() < deadline) {
+          const price = getPriceFromMeta() ?? getPriceFromLd() ?? getPriceFromDom() ?? getPriceFromText();
+          if (price != null) {
+            return price;
+          }
+          lastPrice = price;
+          await sleep(500);
+        }
+        return lastPrice;
+      }
+
+      return (async () => {
+        const blockReason = detectBlock();
+        const price = await waitForPrice(15000);
+        const name = getName();
+        return { price, name, raw_text: price != null ? String(price) : "", block_reason: blockReason };
+      })();
     }
   });
 
@@ -285,7 +326,6 @@ async function pollOnce() {
     return;
   }
   if (hb.data && hb.data.agent) {
-    await clearLastError();
     const agent = hb.data.agent;
     if (agent.pair_code) {
       await chrome.storage.local.set({ pairCode: String(agent.pair_code) });
@@ -313,7 +353,6 @@ async function pollOnce() {
     await scheduleNext(pullRes.status === 403 ? 60 : 120);
     return;
   }
-  await clearLastError();
   if (!pullRes.data) {
     await scheduleNext(120);
     return;
@@ -327,10 +366,15 @@ async function pollOnce() {
     return;
   }
 
-  const scrape = await openAndScrape(task.url).catch(() => null);
+  await chrome.storage.local.set({ lastTaskUrl: task.url });
+  const scrape = await openAndScrape(task.url).catch((e) => {
+    setLastError(e);
+    return null;
+  });
   const price = scrape && scrape.price != null ? Number(scrape.price) : null;
   const name = scrape && scrape.name ? String(scrape.name).slice(0, 255) : null;
   const rawText = scrape && scrape.raw_text ? String(scrape.raw_text).slice(0, 20000) : null;
+  const blockReason = scrape && scrape.block_reason ? String(scrape.block_reason) : "";
 
   if (price != null && Number.isFinite(price)) {
     const payload = {
@@ -349,11 +393,17 @@ async function pollOnce() {
       payload.competitor_id = Number(task.competitor_id);
     }
 
-    await apiPost(serverUrl, token, "shopee/agent/report", {
+    const rep = await apiPost(serverUrl, token, "shopee/agent/report", {
       ...payload
     }).catch(() => null);
+    if (rep && rep.ok) {
+      await chrome.storage.local.set({ lastError: "", lastTaskUrl: "" });
+    }
   } else {
-    await chrome.storage.local.set({ lastError: "Không lấy được giá từ trang Shopee", lastTaskUrl: task.url });
+    await chrome.storage.local.set({
+      lastError: blockReason || "Không lấy được giá từ trang Shopee",
+      lastTaskUrl: task.url
+    });
   }
 
   await scheduleNext(sleepSeconds || 60);
