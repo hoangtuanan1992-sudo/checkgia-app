@@ -221,6 +221,56 @@ async function scrapeTab(tabId) {
         return best ? best.value : null;
       }
 
+      function parseShopeeIdsFromPath(pathname) {
+        const m = String(pathname || "").match(/^\/product\/(\d+)\/(\d+)/);
+        if (!m) return null;
+        return { shopId: m[1], itemId: m[2] };
+      }
+
+      async function fetchItemApi() {
+        const ids = parseShopeeIdsFromPath(location.pathname);
+        if (!ids) return null;
+
+        const url = `/api/v4/item/get?shopid=${encodeURIComponent(ids.shopId)}&itemid=${encodeURIComponent(ids.itemId)}`;
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 10000);
+        try {
+          const res = await fetch(url, { credentials: "include", signal: ctrl.signal });
+          if (!res.ok) return null;
+          const json = await res.json().catch(() => null);
+          const item = json && json.data && json.data.item ? json.data.item : null;
+          if (!item) return null;
+
+          const name = item.name ? String(item.name).slice(0, 255) : null;
+
+          const rawPrice =
+            item.price != null ? item.price :
+              item.price_min != null ? item.price_min :
+                item.price_max != null ? item.price_max :
+                  null;
+
+          if (rawPrice == null) {
+            return { name, price: null, raw_text: "" };
+          }
+
+          const p = Number(rawPrice);
+          if (!Number.isFinite(p) || p <= 0) {
+            return { name, price: null, raw_text: String(rawPrice) };
+          }
+
+          const normalized = Math.max(0, Math.trunc(p / 100000));
+          if (!normalized) {
+            return { name, price: null, raw_text: String(rawPrice) };
+          }
+
+          return { name, price: normalized, raw_text: String(rawPrice) };
+        } catch (e) {
+          return null;
+        } finally {
+          clearTimeout(t);
+        }
+      }
+
       function detectBlock() {
         const html = document.documentElement ? document.documentElement.innerText || "" : "";
         const s = html.toLowerCase();
@@ -249,9 +299,14 @@ async function scrapeTab(tabId) {
 
       return (async () => {
         const blockReason = detectBlock();
-        const price = await waitForPrice(15000);
-        const name = getName();
-        return { price, name, raw_text: price != null ? String(price) : "", block_reason: blockReason };
+        const api = await fetchItemApi();
+        if (api && api.price != null) {
+          return { price: api.price, name: api.name ?? getName(), raw_text: api.raw_text || "", block_reason: blockReason };
+        }
+
+        const price = await waitForPrice(20000);
+        const name = api && api.name ? api.name : getName();
+        return { price, name, raw_text: price != null ? String(price) : (api && api.raw_text ? api.raw_text : ""), block_reason: blockReason };
       })();
     }
   });
