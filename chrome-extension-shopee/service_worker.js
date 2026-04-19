@@ -83,6 +83,41 @@ async function scrapeTab(tabId) {
         return Math.max(0, Math.trunc(n));
       }
 
+      function extractPriceCandidates(text) {
+        const t = String(text || "");
+        const re = /(?:₫\s*)?(\d{1,3}(?:[.,\s]\d{3})+|\d{6,})(?:\s*(?:₫|đ))?/g;
+        const out = [];
+        let m;
+        while ((m = re.exec(t)) !== null) {
+          const raw = m[0] || "";
+          const numPart = m[1] || "";
+          const value = normalizePriceNumber(numPart);
+          if (value == null) continue;
+          if (value < 1000 || value > 1e12) continue;
+          const hasCurrency = /₫|đ/.test(raw);
+          out.push({ value, raw, hasCurrency });
+        }
+        return out;
+      }
+
+      function pickBestCandidate(cands) {
+        if (!cands.length) return null;
+        const scored = cands
+          .map((c) => {
+            let score = 0;
+            if (c.hasCurrency) score += 3;
+            if (c.value >= 100000) score += 2;
+            if (c.value >= 1000000) score += 1;
+            return { ...c, score };
+          })
+          .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return a.value - b.value;
+          });
+
+        return scored[0];
+      }
+
       function pickFromLdJson(json) {
         if (!json) return null;
         const j = Array.isArray(json) ? json : [json];
@@ -108,6 +143,11 @@ async function scrapeTab(tabId) {
       }
 
       function getPriceFromMeta() {
+        const itemprop = document.querySelector('meta[itemprop="price"], meta[property="product:price:amount"]');
+        if (itemprop && itemprop.getAttribute("content")) {
+          const n = normalizePriceNumber(itemprop.getAttribute("content"));
+          if (n != null) return n;
+        }
         const m = document.querySelector('meta[property="product:price:amount"]');
         const c = m ? m.getAttribute("content") : null;
         return c ? normalizePriceNumber(c) : null;
@@ -129,12 +169,34 @@ async function scrapeTab(tabId) {
 
       function getPriceFromText() {
         const body = document.body ? document.body.innerText : "";
-        const m = body.match(/(\d{1,3}(?:[.,\s]\d{3})+)\s*₫/);
-        if (m && m[1]) return normalizePriceNumber(m[1]);
-        return null;
+        const candidates = extractPriceCandidates(body);
+        const best = pickBestCandidate(candidates);
+        return best ? best.value : null;
       }
 
-      const price = getPriceFromMeta() ?? getPriceFromLd() ?? getPriceFromText();
+      function getPriceFromDom() {
+        const texts = [];
+        const selectors = [
+          '[data-sqe*="price"]',
+          '[data-sqe*="item_price"]',
+          '[data-sqe*="main_price"]',
+          '[class*="price"]',
+          '[class*="Price"]',
+        ];
+        for (const sel of selectors) {
+          const els = Array.from(document.querySelectorAll(sel)).slice(0, 50);
+          for (const el of els) {
+            const t = (el && el.textContent) ? el.textContent.trim() : "";
+            if (t) texts.push(t);
+          }
+        }
+        const all = texts.join(" | ");
+        const candidates = extractPriceCandidates(all);
+        const best = pickBestCandidate(candidates);
+        return best ? best.value : null;
+      }
+
+      const price = getPriceFromMeta() ?? getPriceFromLd() ?? getPriceFromDom() ?? getPriceFromText();
       return { price, name: getName(), raw_text: price != null ? String(price) : "" };
     }
   });
