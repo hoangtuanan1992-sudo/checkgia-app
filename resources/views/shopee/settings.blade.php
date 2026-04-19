@@ -32,12 +32,6 @@
 
                         <div></div>
 
-                        <div style="grid-column:1 / -1">
-                            <div class="hint" style="margin-top:0">Token</div>
-                            <input class="input" name="shopee_extension_token" value="{{ old('shopee_extension_token', $setting->shopee_extension_token) }}" required>
-                            <div class="hint" style="margin-top:6px">Extension cần token này để gọi API. Không chia sẻ ra ngoài.</div>
-                        </div>
-
                         <div>
                             <div class="hint" style="margin-top:0">Chu kỳ cập nhật (giây)</div>
                             <input class="input" type="number" min="10" max="86400" name="shopee_scrape_interval_seconds" value="{{ old('shopee_scrape_interval_seconds', $setting->shopee_scrape_interval_seconds) }}" required>
@@ -71,11 +65,13 @@
                                 <tr>
                                     <th style="width:60px">#</th>
                                     <th>Agent</th>
+                                    <th style="min-width:220px">Note</th>
+                                    <th style="min-width:180px">Kết nối</th>
                                     <th style="width:160px">Last seen</th>
                                     <th style="width:120px">Bật</th>
                                     <th style="width:140px">Mode</th>
                                     <th>Chạy cho user</th>
-                                    <th style="width:160px">Lưu</th>
+                                    <th style="width:220px">Hành động</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -88,6 +84,20 @@
                                             <div class="hint" style="margin-top:3px">{{ $agent->platform }} {{ $agent->version }}</div>
                                         </td>
                                         <td>
+                                            <form method="POST" action="{{ route('shopee.admin-settings.agent.update', $agent) }}" style="display:flex;gap:10px;align-items:center">
+                                                @csrf
+                                                <input type="hidden" name="name" value="{{ $agent->name }}">
+                                                <input class="input" name="note" value="{{ $agent->note }}" placeholder="VD: Máy văn phòng HN">
+                                        </td>
+                                        <td>
+                                            @if($agent->is_approved)
+                                                <span class="pill" style="background:rgba(22,163,74,.12);border-color:rgba(22,163,74,.25);color:#166534">Đã duyệt</span>
+                                            @else
+                                                <span class="pill" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25);color:#92400e">Chờ duyệt</span>
+                                                <div class="hint" style="margin-top:6px">Mã: {{ $agent->pair_code ?: '---' }}</div>
+                                            @endif
+                                        </td>
+                                        <td>
                                             @if($agent->last_seen_at)
                                                 {{ $agent->last_seen_at->format('d/m/Y H:i') }}
                                             @else
@@ -95,9 +105,6 @@
                                             @endif
                                         </td>
                                         <td>
-                                            <form method="POST" action="{{ route('shopee.admin-settings.agent.update', $agent) }}" style="display:flex;gap:10px;align-items:center">
-                                                @csrf
-                                                <input type="hidden" name="name" value="{{ $agent->name }}">
                                                 <input type="checkbox" name="is_enabled" value="1" @checked($agent->is_enabled)>
                                         </td>
                                         <td>
@@ -117,13 +124,21 @@
                                                 </select>
                                         </td>
                                         <td>
+                                            <div style="display:flex;gap:8px;align-items:center">
                                                 <button class="btn btn-secondary" type="submit" style="padding:6px 10px">Lưu</button>
                                             </form>
+                                                @if(! $agent->is_approved)
+                                                    <form method="POST" action="{{ route('shopee.admin-settings.agent.approve', $agent) }}" onsubmit="return confirm('Duyệt agent này để bắt đầu cập nhật giá?')">
+                                                        @csrf
+                                                        <button class="btn" type="submit" style="padding:6px 10px">Duyệt</button>
+                                                    </form>
+                                                @endif
+                                            </div>
                                         </td>
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="hint">Chưa có agent nào. Cài extension và mở Chrome để agent tự đăng ký.</td>
+                                        <td colspan="9" class="hint">Chưa có agent nào. Cài extension và mở Chrome để agent tự đăng ký.</td>
                                     </tr>
                                 @endforelse
                             </tbody>

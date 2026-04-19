@@ -63,6 +63,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/shopee/admin-settings', [ShopeeAdminController::class, 'edit'])->name('shopee.admin-settings');
         Route::put('/shopee/admin-settings', [ShopeeAdminController::class, 'update'])->name('shopee.admin-settings.update');
         Route::post('/shopee/admin-settings/agents/{agent}', [ShopeeAdminController::class, 'updateAgent'])->name('shopee.admin-settings.agent.update');
+        Route::post('/shopee/admin-settings/agents/{agent}/approve', [ShopeeAdminController::class, 'approveAgent'])->name('shopee.admin-settings.agent.approve');
     });
 
     Route::get('/account', [AccountController::class, 'show'])->name('account');

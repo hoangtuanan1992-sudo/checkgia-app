@@ -1,9 +1,9 @@
 function $(id){return document.getElementById(id)}
+const DEFAULT_SERVER_URL = "https://checkgia.id.vn";
 
 async function load() {
-  const { serverUrl, token } = await chrome.storage.sync.get(["serverUrl", "token"]);
-  $("serverUrl").value = serverUrl || "";
-  $("token").value = token || "";
+  const { serverUrl } = await chrome.storage.sync.get(["serverUrl"]);
+  $("serverUrl").value = serverUrl || DEFAULT_SERVER_URL;
 }
 
 function setStatus(text) {
@@ -19,8 +19,7 @@ function setStatus(text) {
 
 async function save() {
   const serverUrl = String($("serverUrl").value || "").trim();
-  const token = String($("token").value || "").trim();
-  await chrome.storage.sync.set({ serverUrl, token });
+  await chrome.storage.sync.set({ serverUrl });
   setStatus("Đã lưu");
   setTimeout(() => setStatus(""), 1500);
 }

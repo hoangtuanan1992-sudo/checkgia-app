@@ -1,10 +1,17 @@
+const DEFAULT_SERVER_URL = "https://checkgia.id.vn";
+const DEFAULT_TOKEN = "";
+
 async function getConfig() {
   const { serverUrl, token, agentKey } = await chrome.storage.sync.get([
     "serverUrl",
     "token",
     "agentKey"
   ]);
-  return { serverUrl, token, agentKey };
+  return {
+    serverUrl: String(serverUrl || DEFAULT_SERVER_URL || "").trim(),
+    token: String(token || DEFAULT_TOKEN || "").trim(),
+    agentKey
+  };
 }
 
 async function ensureAgentKey() {
@@ -21,13 +28,17 @@ function apiUrl(serverUrl, path) {
 }
 
 async function apiPost(serverUrl, token, path, body) {
+  const headers = {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+  };
+  if (token) {
+    headers["Authorization"] = "Bearer " + token;
+  }
+
   const res = await fetch(apiUrl(serverUrl, path), {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + token,
-      "Accept": "application/json"
-    },
+    headers,
     body: JSON.stringify(body || {})
   });
 
@@ -241,16 +252,42 @@ async function pollOnce() {
   const agentKey = await ensureAgentKey();
   const cfg = await getConfig();
   const serverUrl = cfg.serverUrl;
-  const token = cfg.token;
-  if (!serverUrl || !token) {
+  let token = cfg.token;
+  if (!serverUrl) {
     await scheduleNext(120);
     return;
   }
 
-  await heartbeat(serverUrl, token, agentKey).catch(() => null);
+  const hb = await heartbeat(serverUrl, token, agentKey).catch(() => null);
+  if (hb && hb.ok && hb.data && hb.data.agent) {
+    const agent = hb.data.agent;
+    if (agent.pair_code) {
+      await chrome.storage.local.set({ pairCode: String(agent.pair_code) });
+    }
+    if (agent.is_approved != null) {
+      await chrome.storage.local.set({ isApproved: Boolean(agent.is_approved) });
+    }
+    if (agent.api_token) {
+      const newToken = String(agent.api_token).trim();
+      if (newToken) {
+        await chrome.storage.sync.set({ token: newToken });
+        token = newToken;
+      }
+    }
+  }
 
   const pullRes = await apiPost(serverUrl, token, "shopee/agent/pull", { agent_key: agentKey }).catch(() => null);
-  if (!pullRes || !pullRes.ok || !pullRes.data) {
+  if (!pullRes) {
+    await scheduleNext(120);
+    return;
+  }
+  if (!pullRes.ok) {
+    const msg = pullRes.data && pullRes.data.message ? String(pullRes.data.message) : "";
+    await chrome.storage.local.set({ lastError: msg || ("HTTP " + pullRes.status) });
+    await scheduleNext(pullRes.status === 403 ? 60 : 120);
+    return;
+  }
+  if (!pullRes.data) {
     await scheduleNext(120);
     return;
   }

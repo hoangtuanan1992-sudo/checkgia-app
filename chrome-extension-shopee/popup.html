@@ -22,31 +22,6 @@
       <button id="admin" class="secondary">Admin</button>
     </div>
     <div id="status" class="pill" style="display:none;margin-top:10px"></div>
-    <script>
-      function setStatus(t){
-        const el=document.getElementById('status');
-        if(!t){el.style.display='none';el.textContent='';return;}
-        el.style.display='';el.textContent=t;
-      }
-      async function load(){
-        const cfg=await chrome.storage.sync.get(['serverUrl','agentKey']);
-        const local=await chrome.storage.local.get(['nextPollAt','nextPollIn']);
-        document.getElementById('agent').textContent='Agent: '+(cfg.agentKey||'(chưa có)');
-        if(local.nextPollAt){
-          const d=new Date(local.nextPollAt);
-          document.getElementById('next').textContent='Next poll: '+d.toLocaleString();
-        }else if(local.nextPollIn){
-          document.getElementById('next').textContent='Next poll in: '+local.nextPollIn+'s';
-        }
-      }
-      document.getElementById('options').addEventListener('click',()=>chrome.runtime.openOptionsPage());
-      document.getElementById('admin').addEventListener('click',async()=>{
-        const {serverUrl}=await chrome.storage.sync.get(['serverUrl']);
-        if(!serverUrl){setStatus('Chưa cấu hình server');return;}
-        const url=String(serverUrl).replace(/\/+$/,'')+'/shopee/admin-settings';
-        await chrome.tabs.create({url});
-      });
-      load();
-    </script>
+    <script src="popup.js"></script>
   </body>
 </html>

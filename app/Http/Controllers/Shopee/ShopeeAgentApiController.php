@@ -11,6 +11,7 @@ use App\Models\ShopeeProduct;
 use App\Models\ShopeeProductPrice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class ShopeeAgentApiController extends Controller
 {
@@ -34,7 +35,11 @@ class ShopeeAgentApiController extends Controller
         $agent->last_seen_at = now();
         if (! $agent->exists) {
             $agent->is_enabled = true;
+            $agent->is_approved = false;
             $agent->mode = 'all';
+            $agent->pair_code = strtoupper(Str::random(8));
+        } elseif (! $agent->is_approved && ! $agent->pair_code) {
+            $agent->pair_code = strtoupper(Str::random(8));
         }
         $agent->save();
 
@@ -50,6 +55,9 @@ class ShopeeAgentApiController extends Controller
             'agent' => [
                 'id' => $agent->id,
                 'is_enabled' => (bool) $agent->is_enabled,
+                'is_approved' => (bool) $agent->is_approved,
+                'pair_code' => $agent->is_approved ? null : $agent->pair_code,
+                'api_token' => $agent->is_approved ? (string) ($agent->api_token ?? '') : null,
                 'mode' => (string) $agent->mode,
                 'assigned_user_id' => $agent->assigned_user_id ? (int) $agent->assigned_user_id : null,
             ],
