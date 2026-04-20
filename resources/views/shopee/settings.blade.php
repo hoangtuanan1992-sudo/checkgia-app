@@ -77,79 +77,91 @@
                             </thead>
                             <tbody>
                                 @forelse($agents as $idx => $agent)
+                                    @php
+                                        $isOffline = !$agent->last_seen_at || $agent->last_seen_at->diffInMinutes(now()) > 10;
+                                    @endphp
                                     <tr>
                                         <td>{{ $idx + 1 }}</td>
                                         <td>
                                             <div style="font-weight:800">{{ $agent->name ?: $agent->agent_key }}</div>
-                                            <div class="hint" style="margin-top:3px;word-break:break-word">{{ $agent->agent_key }}</div>
-                                            <div class="hint" style="margin-top:3px">{{ $agent->platform }} {{ $agent->version }}</div>
+                                            <div class="hint" style="margin-top:3px;word-break:break-word;font-size:11px">{{ $agent->agent_key }}</div>
+                                            <div class="hint" style="margin-top:3px;font-size:11px">{{ $agent->platform }} {{ $agent->version }}</div>
                                         </td>
-                                        <td>
-                                            <form method="POST" action="{{ route('shopee.admin-settings.agent.update', $agent) }}" style="display:flex;gap:10px;align-items:center">
-                                                @csrf
-                                                <input type="hidden" name="name" value="{{ $agent->name }}">
+                                        <form method="POST" action="{{ route('shopee.admin-settings.agent.update', $agent) }}" id="form-agent-{{ $agent->id }}">
+                                            @csrf
+                                            <input type="hidden" name="name" value="{{ $agent->name }}">
+                                            <td>
                                                 <input class="input" name="note" value="{{ $agent->note }}" placeholder="VD: Máy văn phòng HN">
-                                        </td>
-                                        <td>
-                                            @if($agent->is_approved)
-                                                <span class="pill" style="background:rgba(22,163,74,.12);border-color:rgba(22,163,74,.25);color:#166534">Đã duyệt</span>
-                                            @else
-                                                <span class="pill" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25);color:#92400e">Chờ duyệt</span>
-                                                <div class="hint" style="margin-top:6px">Mã: {{ $agent->pair_code ?: '---' }}</div>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if($agent->last_error)
-                                                <div style="color:var(--danger);font-weight:700">Lỗi</div>
-                                                <div class="hint" style="margin-top:6px;word-break:break-word">{{ $agent->last_error }}</div>
-                                            @elseif($agent->last_report_at)
-                                                <div style="color:var(--success);font-weight:700">OK</div>
-                                                <div class="hint" style="margin-top:6px">Report: {{ $agent->last_report_at->format('d/m/Y H:i') }}</div>
-                                            @else
-                                                <div class="hint" style="margin-top:0">---</div>
-                                            @endif
-                                            @if($agent->last_task_url)
-                                                <div class="hint" style="margin-top:6px;word-break:break-word">
-                                                    <a href="{{ $agent->last_task_url }}" target="_blank">Task URL</a>
-                                                </div>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if($agent->last_seen_at)
-                                                {{ $agent->last_seen_at->format('d/m/Y H:i') }}
-                                            @else
-                                                <span class="hint" style="margin-top:0">---</span>
-                                            @endif
-                                        </td>
-                                        <td>
+                                            </td>
+                                            <td>
+                                                @if($agent->is_approved)
+                                                    <span class="pill" style="background:rgba(22,163,74,.12);border-color:rgba(22,163,74,.25);color:#166534">Đã duyệt</span>
+                                                @else
+                                                    <span class="pill" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.25);color:#92400e">Chờ duyệt</span>
+                                                    <div class="hint" style="margin-top:6px">Mã: {{ $agent->pair_code ?: '---' }}</div>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($isOffline)
+                                                    <div style="color:var(--danger);font-weight:700">Offline</div>
+                                                    <div class="hint" style="margin-top:6px">Mất kết nối > 10 phút</div>
+                                                @elseif($agent->last_error)
+                                                    <div style="color:var(--danger);font-weight:700">Lỗi</div>
+                                                    <div class="hint" style="margin-top:6px;word-break:break-word">{{ $agent->last_error }}</div>
+                                                @elseif($agent->last_report_at)
+                                                    <div style="color:var(--success);font-weight:700">OK</div>
+                                                    <div class="hint" style="margin-top:6px">Lần cuối: {{ $agent->last_report_at->format('d/m/Y H:i') }}</div>
+                                                @else
+                                                    <div class="hint" style="margin-top:0">Đang chờ task...</div>
+                                                @endif
+                                                @if($agent->last_task_url)
+                                                    <div class="hint" style="margin-top:6px;word-break:break-word">
+                                                        <a href="{{ $agent->last_task_url }}" target="_blank">Task URL</a>
+                                                    </div>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($agent->last_seen_at)
+                                                    <div>{{ $agent->last_seen_at->format('d/m/Y H:i') }}</div>
+                                                    <div class="hint" style="font-size:11px">{{ $agent->last_seen_at->diffForHumans() }}</div>
+                                                @else
+                                                    <span class="hint" style="margin-top:0">---</span>
+                                                @endif
+                                            </td>
+                                            <td>
                                                 <input type="checkbox" name="is_enabled" value="1" @checked($agent->is_enabled)>
-                                        </td>
-                                        <td>
-                                                <select class="input" name="mode">
+                                            </td>
+                                            <td>
+                                                <select class="input" name="mode" style="padding:4px 8px">
                                                     <option value="all" @selected($agent->mode === 'all')>Tất cả</option>
                                                     <option value="user" @selected($agent->mode === 'user')>1 user</option>
                                                 </select>
-                                        </td>
-                                        <td>
-                                                <select class="input" name="assigned_user_id">
+                                            </td>
+                                            <td>
+                                                <select class="input" name="assigned_user_id" style="padding:4px 8px;max-width:120px">
                                                     <option value="">--</option>
                                                     @foreach($users as $u)
                                                         <option value="{{ $u->id }}" @selected((int) $agent->assigned_user_id === (int) $u->id)>
-                                                            {{ $u->email }} ({{ $u->role }})
+                                                            {{ $u->email }}
                                                         </option>
                                                     @endforeach
                                                 </select>
-                                        </td>
-                                        <td>
-                                            <div style="display:flex;gap:8px;align-items:center">
-                                                <button class="btn btn-secondary" type="submit" style="padding:6px 10px">Lưu</button>
-                                            </form>
+                                            </td>
+                                            <td>
+                                                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end">
+                                                    <button class="btn btn-secondary" type="submit" form="form-agent-{{ $agent->id }}" style="padding:6px 10px">Lưu</button>
+                                        </form>
                                                 @if(! $agent->is_approved)
                                                     <form method="POST" action="{{ route('shopee.admin-settings.agent.approve', $agent) }}" onsubmit="return confirm('Duyệt agent này để bắt đầu cập nhật giá?')">
                                                         @csrf
                                                         <button class="btn" type="submit" style="padding:6px 10px">Duyệt</button>
                                                     </form>
                                                 @endif
+                                                <form method="POST" action="{{ route('shopee.admin-settings.agent.destroy', $agent) }}" onsubmit="return confirm('Bạn có chắc chắn muốn xoá agent này?')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button class="btn btn-danger" type="submit" style="padding:6px 10px;background:var(--danger)">Xoá</button>
+                                                </form>
                                             </div>
                                         </td>
                                     </tr>

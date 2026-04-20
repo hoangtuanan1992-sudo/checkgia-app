@@ -57,16 +57,18 @@
             </div>
 
             <script>
+                function triggerExtensionPoll() {
+                    window.postMessage({ type: 'CHECKGIA_TRIGGER_POLL' }, '*');
+                }
+
                 document.getElementById('add-product-form').addEventListener('submit', function() {
                     // Trigger extension poll after a short delay (after form submission starts)
-                    setTimeout(function() {
-                        window.dispatchEvent(new CustomEvent('checkgia:trigger_poll'));
-                    }, 500);
+                    setTimeout(triggerExtensionPoll, 500);
                 });
                 
                 // Also trigger on page load to catch any pending tasks immediately
                 window.addEventListener('load', function() {
-                    window.dispatchEvent(new CustomEvent('checkgia:trigger_poll'));
+                    triggerExtensionPoll();
                 });
             </script>
 

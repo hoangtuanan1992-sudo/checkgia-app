@@ -135,7 +135,6 @@ async function scrapeTab(tabId) {
       function extractPriceCandidates(text) {
         const t = String(text || "");
         
-        // Improved regex:
         const re = /(?:₫\s*)?(\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:\s*(?:₫|đ|k))?/gi;
         const out = [];
         let m;
@@ -143,16 +142,16 @@ async function scrapeTab(tabId) {
           const raw = m[0] || "";
           const numPart = m[1] || "";
           
-          // Check for "+" immediately after the match (e.g., "1k+")
           const nextChar = t.charAt(re.lastIndex);
           if (nextChar === '+') continue;
 
           let value = normalizePriceNumber(numPart);
           if (value == null) continue;
 
+          const hasCurrency = /₫|đ|vnđ/i.test(raw);
+
           // Handle 'k' suffix (e.g., 150k)
           if (raw.toLowerCase().endsWith("k")) {
-             // If it's just "1k", "2k" and there's "đã bán" or "sold" nearby, ignore it.
              const context = t.toLowerCase();
              if (context.includes("đã bán") || context.includes("sold") || context.includes("đánh giá") || context.includes("rating")) {
                  continue; 
@@ -165,13 +164,14 @@ async function scrapeTab(tabId) {
           if (value < 500 || value > 1e12) continue;
           
           // Extra check: if the number is part of "Đã bán 1.200"
-          // Only check a very small window to avoid false positives
-          const beforeMatch = t.substring(Math.max(0, m.index - 12), m.index).toLowerCase();
-          if (beforeMatch.includes("đã bán") || beforeMatch.includes("sold") || beforeMatch.includes("đánh giá")) {
-              continue;
+          // ONLY filter if it DOES NOT have a currency symbol
+          if (!hasCurrency) {
+            const beforeMatch = t.substring(Math.max(0, m.index - 12), m.index).toLowerCase();
+            if (beforeMatch.includes("đã bán") || beforeMatch.includes("sold") || beforeMatch.includes("đánh giá")) {
+                continue;
+            }
           }
 
-          const hasCurrency = /₫|đ|vnđ/i.test(raw);
           out.push({ value, raw, hasCurrency });
         }
         return out;
@@ -533,22 +533,42 @@ async function scrapeTab(tabId) {
 
 async function openAndScrape(url) {
   try {
-    const originalTabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const originalTabId = originalTabs.length > 0 ? originalTabs[0].id : null;
-
-    // Create tab as active to trigger Shopee's rendering engine
+    // Create tab as active and keep it focused
     const tab = await chrome.tabs.create({ url, active: true });
     const tabId = tab.id;
     if (!tabId) return null;
 
-    // Immediately switch back to the user's original tab if possible
-    // This makes the Shopee tab "visible" for a split second to start loading
-    if (originalTabId) {
-      await chrome.tabs.update(originalTabId, { active: true }).catch(() => {});
-    }
+    // Persistently spoof visibility and focus in the page's MAIN execution world
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: () => {
+          try {
+            // Override visibility state
+            Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
+            Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+            document.hasFocus = () => true;
 
+            // Simulate human-like scrolling
+            const scrollInterval = setInterval(() => {
+              const scrollAmount = Math.floor(Math.random() * 300) + 100;
+              window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+              if (window.innerHeight + window.scrollY >= document.body.offsetHeight) {
+                clearInterval(scrollInterval);
+              }
+            }, Math.random() * 2000 + 1000);
+
+            // Clear interval after some time
+            setTimeout(() => clearInterval(scrollInterval), 15000);
+          } catch (e) {}
+        }
+      });
+    } catch (e) {}
+
+    // Wait for tab to complete loading
     await new Promise((resolve) => {
-      const timeout = setTimeout(resolve, 20000); // Wait up to 20s
+      const timeout = setTimeout(resolve, 25000); 
       function onUpdated(id, info) {
         if (id !== tabId) return;
         if (info.status === "complete") {
@@ -560,14 +580,22 @@ async function openAndScrape(url) {
       chrome.tabs.onUpdated.addListener(onUpdated);
     });
 
-    // Even if not "complete", try to scrape
+    // Random wait before scraping (1-3 seconds)
+    await new Promise(r => setTimeout(r, Math.random() * 2000 + 1000));
+
+    // Scrape the tab
     const res = await scrapeTab(tabId);
     
+    // Random "stay time" after scraping (3-7 seconds) to simulate reading
+    const stayTime = Math.random() * 4000 + 3000;
+    await new Promise(r => setTimeout(r, stayTime));
+
     // Close the tab
     await chrome.tabs.remove(tabId).catch(() => {});
     
     return res;
   } catch (e) {
+    console.error("openAndScrape error:", e);
     return null;
   }
 }
@@ -658,12 +686,13 @@ async function pollOnce() {
     setLastError(e);
     return null;
   });
+  
   const price = scrape && scrape.price != null ? Number(scrape.price) : null;
   const name = scrape && scrape.name ? String(scrape.name).slice(0, 255) : null;
   const rawText = scrape && scrape.raw_text ? String(scrape.raw_text).slice(0, 20000) : null;
   const blockReason = scrape && scrape.block_reason ? String(scrape.block_reason) : "";
 
-  if (price != null && Number.isFinite(price)) {
+  if (price != null && Number.isFinite(price) && price > 0) {
     const payload = {
       agent_key: agentKey,
       task_type: String(task.type || ""),
@@ -687,8 +716,15 @@ async function pollOnce() {
       await chrome.storage.local.set({ lastError: "", lastTaskUrl: "" });
     }
   } else {
+    let errorMsg = blockReason || "Không tìm thấy giá trên trang";
+    if (!scrape) {
+      errorMsg = "Lỗi trình duyệt khi mở trang";
+    } else if (scrape.price === null && !blockReason) {
+      errorMsg = "Trang đã tải nhưng không nhận diện được giá";
+    }
+
     await chrome.storage.local.set({
-      lastError: blockReason || "Không lấy được giá từ trang Shopee",
+      lastError: errorMsg,
       lastTaskUrl: task.url
     });
   }

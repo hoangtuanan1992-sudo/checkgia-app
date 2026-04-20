@@ -10,7 +10,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://checkgia.id.vn/*", "http://localhost/*"],
+      "matches": ["*://checkgia.id.vn/*", "*://localhost/*"],
       "js": ["content_script.js"],
       "run_at": "document_end"
     }

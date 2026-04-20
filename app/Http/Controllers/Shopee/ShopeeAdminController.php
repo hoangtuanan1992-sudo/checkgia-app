@@ -103,4 +103,11 @@ class ShopeeAdminController extends Controller
 
         return back()->with('status', 'Đã duyệt agent');
     }
+
+    public function destroyAgent(ShopeeAgent $agent): RedirectResponse
+    {
+        $agent->delete();
+
+        return redirect()->route('shopee.admin-settings')->with('success', 'Agent deleted.');
+    }
 }
