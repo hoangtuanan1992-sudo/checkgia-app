@@ -94,6 +94,7 @@ class ShopeeAgentApiController extends Controller
         $interval = max(10, (int) ($setting->shopee_scrape_interval_seconds ?? 300));
         $minRest = max(0, (int) ($setting->shopee_rest_seconds_min ?? 5));
         $maxRest = max($minRest, (int) ($setting->shopee_rest_seconds_max ?? 15));
+        $maxChecks = (int) ($setting->shopee_max_checks_per_day ?? 24);
 
         if ($agent->last_scrape_at) {
             $nextAt = $agent->last_scrape_at->copy()->addSeconds($interval);
@@ -102,7 +103,12 @@ class ShopeeAgentApiController extends Controller
             }
         }
 
-        $productQuery = ShopeeProduct::query()->where('is_enabled', true);
+        $today = now()->toDateString();
+
+        $productQuery = ShopeeProduct::query()
+            ->where('is_enabled', true)
+            ->whereRaw('(select count(*) from shopee_product_prices where shopee_product_prices.shopee_product_id = shopee_products.id and date(scraped_at) = ?) < ?', [$today, $maxChecks]);
+
         if ($agent->mode === 'user' && $agent->assigned_user_id) {
             $productQuery->where('user_id', (int) $agent->assigned_user_id);
         }
@@ -115,6 +121,7 @@ class ShopeeAgentApiController extends Controller
 
         $competitorQuery = ShopeeCompetitor::query()
             ->where('is_enabled', true)
+            ->whereRaw('(select count(*) from shopee_competitor_prices where shopee_competitor_prices.shopee_competitor_id = shopee_competitors.id and date(scraped_at) = ?) < ?', [$today, $maxChecks])
             ->whereHas('product', function ($q) use ($agent) {
                 $q->where('is_enabled', true);
                 if ($agent->mode === 'user' && $agent->assigned_user_id) {

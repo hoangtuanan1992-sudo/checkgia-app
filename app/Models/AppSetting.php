@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Model;
     'shopee_scrape_interval_seconds',
     'shopee_rest_seconds_min',
     'shopee_rest_seconds_max',
+    'shopee_max_checks_per_day',
 ])]
 class AppSetting extends Model
 {
@@ -37,6 +38,7 @@ class AppSetting extends Model
             'shopee_scrape_interval_seconds' => 'integer',
             'shopee_rest_seconds_min' => 'integer',
             'shopee_rest_seconds_max' => 'integer',
+            'shopee_max_checks_per_day' => 'integer',
         ];
     }
 

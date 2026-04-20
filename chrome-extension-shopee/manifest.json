@@ -3,8 +3,25 @@
   "name": "CheckGia Shopee Scraper",
   "version": "0.1.0",
   "description": "Scrape Shopee prices and report to CheckGia.",
-  "permissions": ["storage", "alarms", "tabs", "scripting"],
-  "host_permissions": ["https://*/", "http://*/"],
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs",
+    "scripting",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "*://*.shopee.vn/*",
+    "*://checkgia.id.vn/*",
+    "http://localhost/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [{
+      "id": "ruleset_1",
+      "enabled": true,
+      "path": "rules.json"
+    }]
+  },
   "background": {
     "service_worker": "service_worker.js"
   },

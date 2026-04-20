@@ -74,15 +74,51 @@
 
             <div style="height:14px"></div>
 
+            <style>
+                .table thead th.header-blue {
+                    background: #007bff !important;
+                    color: white !important;
+                    text-align: center;
+                    padding: 12px 8px;
+                    border: none;
+                }
+                .icon-box {
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    padding: 4px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: white;
+                    width: 28px;
+                    height: 28px;
+                    color: #007bff;
+                }
+                .price-val {
+                    font-size: 18px;
+                    font-weight: 800;
+                    color: #111827;
+                }
+                .diff-val {
+                    font-weight: 700;
+                    font-size: 14px;
+                }
+                .link-text {
+                    color: #007bff;
+                    text-decoration: none;
+                    font-weight: 500;
+                }
+            </style>
+
             <div class="table-wrap">
                 <table class="table">
                     <thead>
                         <tr>
                             <th style="width:52px">#</th>
                             <th style="min-width:340px">Tên sản phẩm</th>
-                            <th style="min-width:160px">Giá bạn</th>
+                            <th class="header-blue" style="min-width:160px">Giá của bạn</th>
                             @foreach($shops as $shop)
-                                <th style="min-width:180px">{{ $shop->name }}</th>
+                                <th class="header-blue" style="min-width:180px">{{ $shop->name }}</th>
                             @endforeach
                             <th style="width:80px"></th>
                         </tr>
@@ -96,15 +132,20 @@
                                 <td>
                                     <div style="font-weight:800">{{ $product->name ?: 'Shopee product #' . $product->id }}</div>
                                     <div class="hint" style="margin-top:3px">ID: {{ $product->id }}</div>
-                                    <div class="hint" style="margin-top:3px;word-break:break-word">
-                                        <a href="{{ $product->own_url }}" target="_blank">link shop bạn</a>
-                                    </div>
                                 </td>
-                                <td style="font-weight:900">
+                                <td>
                                     @if(is_null($own))
                                         <span class="hint" style="margin-top:0">---</span>
                                     @else
-                                        {{ number_format($own, 0, ',', '.') }}đ
+                                        <div style="display:flex;flex-direction:column;gap:8px">
+                                            <div style="display:flex;align-items:center;gap:8px">
+                                                <a href="{{ $product->own_url }}" target="_blank" class="icon-box">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                                </a>
+                                                <a href="{{ $product->own_url }}" target="_blank" class="link-text">link sản phẩm</a>
+                                            </div>
+                                            <div class="price-val">{{ number_format($own, 0, ',', '.') }}đ</div>
+                                        </div>
                                     @endif
                                 </td>
                                 @foreach($shops as $shop)
@@ -116,16 +157,23 @@
                                         @if(! $c || is_null($cPrice) || is_null($own))
                                             <span class="hint" style="margin-top:0">---</span>
                                         @else
-                                            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-                                                <div style="display:flex;flex-direction:column;gap:2px">
-                                                    <a href="{{ $c->url }}" target="_blank" style="color:#6b7280;font-weight:700">
-                                                        {{ number_format((int) $cPrice, 0, ',', '.') }}đ
-                                                    </a>
-                                                    <a href="{{ $c->url }}" target="_blank" style="font-weight:900;color:{{ $diff > 0 ? 'var(--success)' : ($diff < 0 ? 'var(--danger)' : '#6b7280') }}">
+                                            <div style="display:flex;flex-direction:column;gap:8px">
+                                                <div style="display:flex;align-items:center;gap:12px">
+                                                    <div class="diff-val" style="color:{{ $diff > 0 ? 'var(--success)' : ($diff < 0 ? 'var(--danger)' : '#6b7280') }}">
                                                         {{ $diff > 0 ? '+' : '' }}{{ number_format((int) $diff, 0, ',', '.') }}đ
+                                                    </div>
+                                                    <a href="{{ route('shopee.settings') }}" class="icon-box" style="color:#6b7280">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
                                                     </a>
                                                 </div>
-                                                <a class="btn btn-secondary" href="{{ route('shopee.settings') }}" style="padding:6px 10px">Sửa</a>
+                                                <div style="display:flex;align-items:center;gap:8px">
+                                                    <a href="{{ $c->url }}" target="_blank" class="icon-box">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                                    </a>
+                                                    <a href="{{ $c->url }}" target="_blank" class="link-text" style="font-size:18px;font-weight:600">
+                                                        {{ number_format((int) $cPrice, 0, ',', '.') }}đ
+                                                    </a>
+                                                </div>
                                             </div>
                                         @endif
                                     </td>

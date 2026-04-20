@@ -45,6 +45,11 @@
                             </div>
                         </div>
 
+                        <div>
+                            <div class="hint" style="margin-top:0">Số lần check tối đa/ngày/sản phẩm</div>
+                            <input class="input" type="number" min="1" max="1000" name="shopee_max_checks_per_day" value="{{ old('shopee_max_checks_per_day', $setting->shopee_max_checks_per_day ?? 24) }}" required>
+                        </div>
+
                         <div style="grid-column:1 / -1;display:flex;justify-content:flex-end">
                             <button class="btn" type="submit">Lưu</button>
                         </div>

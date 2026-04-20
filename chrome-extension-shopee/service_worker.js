@@ -545,10 +545,23 @@ async function openAndScrape(url) {
         world: 'MAIN',
         func: () => {
           try {
-            // Override visibility state
+            // Force visibility state
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
             Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
             document.hasFocus = () => true;
+
+            // Hide existing image/video elements without removing them (to avoid breaking React)
+            const hideMedia = () => {
+              document.querySelectorAll('img, video, iframe, canvas, picture').forEach(el => {
+                  el.style.opacity = '0';
+                  el.style.pointerEvents = 'none';
+                  el.style.height = '0';
+              });
+              document.querySelectorAll('[style*="background-image"]').forEach(el => el.style.backgroundImage = 'none');
+            };
+            hideMedia();
+            const observer = new MutationObserver(hideMedia);
+            observer.observe(document.body, { childList: true, subtree: true });
 
             // Simulate human-like scrolling
             const scrollInterval = setInterval(() => {

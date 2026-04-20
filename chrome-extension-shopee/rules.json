@@ -1,0 +1,31 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "*",
+      "resourceTypes": ["image", "media"],
+      "requestDomains": ["shopee.vn", "shopeemobile.com", "shopeesz.com"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "resourceTypes": ["image", "media"],
+      "urlFilter": ".*\\.(png|jpg|jpeg|gif|webp|mp4|webm|ogg).*",
+      "isUrlFilterCaseSensitive": false
+    }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "*/file/*",
+      "requestDomains": ["down-vn.img.susercontent.com", "down-tx.img.susercontent.com"]
+    }
+  }
+]
