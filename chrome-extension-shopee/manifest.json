@@ -8,6 +8,13 @@
   "background": {
     "service_worker": "service_worker.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://checkgia.id.vn/*", "http://localhost/*"],
+      "js": ["content_script.js"],
+      "run_at": "document_end"
+    }
+  ],
   "options_page": "options.html",
   "action": {
     "default_popup": "popup.html"

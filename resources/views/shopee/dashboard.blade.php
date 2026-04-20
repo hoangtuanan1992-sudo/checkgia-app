@@ -29,7 +29,7 @@
                     <p class="card-sub" style="margin-top:6px">Nhập link shop bạn, và nhập thêm link của đối thủ (nếu có) để so sánh</p>
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ route('shopee.products.store') }}">
+                    <form method="POST" action="{{ route('shopee.products.store') }}" id="add-product-form">
                         @csrf
                         <div class="field" style="margin-top:0">
                             <label class="label">Link shop bạn (Shopee)</label>
@@ -55,6 +55,20 @@
                     </form>
                 </div>
             </div>
+
+            <script>
+                document.getElementById('add-product-form').addEventListener('submit', function() {
+                    // Trigger extension poll after a short delay (after form submission starts)
+                    setTimeout(function() {
+                        window.dispatchEvent(new CustomEvent('checkgia:trigger_poll'));
+                    }, 500);
+                });
+                
+                // Also trigger on page load to catch any pending tasks immediately
+                window.addEventListener('load', function() {
+                    window.dispatchEvent(new CustomEvent('checkgia:trigger_poll'));
+                });
+            </script>
 
             <div style="height:14px"></div>
 

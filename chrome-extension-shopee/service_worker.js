@@ -283,11 +283,15 @@ async function scrapeTab(tabId) {
         const itemprop = document.querySelector('meta[itemprop="price"], meta[property="product:price:amount"]');
         if (itemprop && itemprop.getAttribute("content")) {
           const n = normalizePriceNumber(itemprop.getAttribute("content"));
-          if (n != null) return n;
+          if (n != null && n > 500) return n;
         }
         const m = document.querySelector('meta[property="product:price:amount"]');
         const c = m ? m.getAttribute("content") : null;
-        return c ? normalizePriceNumber(c) : null;
+        if (c) {
+           const n = normalizePriceNumber(c);
+           if (n != null && n > 500) return n;
+        }
+        return null;
       }
 
       function getPriceFromLd() {
@@ -469,26 +473,57 @@ async function scrapeTab(tabId) {
         const deadline = Date.now() + maxMs;
         let lastPrice = null;
         while (Date.now() < deadline) {
-          const price = getPriceFromMeta() ?? getPriceFromLd() ?? getPriceFromDom() ?? getPriceFromText();
-          if (price != null) {
-            return price;
-          }
-          lastPrice = price;
-          await sleep(500);
+          // Priority 1: Official meta tags (usually most reliable)
+          const metaPrice = getPriceFromMeta();
+          if (metaPrice != null) return metaPrice;
+
+          // Priority 2: LD+JSON
+          const ldPrice = getPriceFromLd();
+          if (ldPrice != null) return ldPrice;
+
+          // Priority 3: Specific Shopee Classes
+          const rangePrice = getPriceFromShopeeRangeClass();
+          if (rangePrice != null) return rangePrice;
+
+          // Priority 4: DOM Selectors
+          const domPrice = getPriceFromDom();
+          if (domPrice != null) return domPrice;
+
+          // Priority 5: Text scraping (last resort)
+          const textPrice = getPriceFromText();
+          if (textPrice != null) return textPrice;
+
+          await sleep(1000);
         }
-        return lastPrice;
+        return null;
       }
 
       return (async () => {
+        // Force visibility state to trick lazy loading
+        try {
+          Object.defineProperty(document, 'visibilityState', { get: function() { return 'visible'; } });
+          Object.defineProperty(document, 'hidden', { get: function() { return false; } });
+          document.dispatchEvent(new Event('visibilitychange'));
+        } catch (e) {}
+
         const blockReason = detectBlock();
+        
+        // Try API first
         const api = await fetchItemApi();
         if (api && api.price != null) {
           return { price: api.price, name: api.name ?? getName(), raw_text: api.raw_text || "", block_reason: blockReason };
         }
 
-        const price = getPriceFromShopeeRangeClass() ?? await waitForPrice(20000);
-        const name = api && api.name ? api.name : getName();
-        return { price, name, raw_text: price != null ? String(price) : (api && api.raw_text ? api.raw_text : ""), block_reason: blockReason };
+        // If API fails, wait for DOM to render (up to 15 seconds)
+        const price = await waitForPrice(15000);
+        const name = (api && api.name) ? api.name : getName();
+        
+        return { 
+          price, 
+          name, 
+          raw_text: price != null ? String(price) : (api && api.raw_text ? api.raw_text : ""), 
+          block_reason: blockReason 
+        };
       })();
     }
   });
@@ -497,13 +532,23 @@ async function scrapeTab(tabId) {
 }
 
 async function openAndScrape(url) {
-  const tab = await chrome.tabs.create({ url, active: false });
-  const tabId = tab.id;
-  if (!tabId) return null;
-
   try {
+    const originalTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const originalTabId = originalTabs.length > 0 ? originalTabs[0].id : null;
+
+    // Create tab as active to trigger Shopee's rendering engine
+    const tab = await chrome.tabs.create({ url, active: true });
+    const tabId = tab.id;
+    if (!tabId) return null;
+
+    // Immediately switch back to the user's original tab if possible
+    // This makes the Shopee tab "visible" for a split second to start loading
+    if (originalTabId) {
+      await chrome.tabs.update(originalTabId, { active: true }).catch(() => {});
+    }
+
     await new Promise((resolve) => {
-      const timeout = setTimeout(resolve, 30000);
+      const timeout = setTimeout(resolve, 20000); // Wait up to 20s
       function onUpdated(id, info) {
         if (id !== tabId) return;
         if (info.status === "complete") {
@@ -515,10 +560,15 @@ async function openAndScrape(url) {
       chrome.tabs.onUpdated.addListener(onUpdated);
     });
 
+    // Even if not "complete", try to scrape
     const res = await scrapeTab(tabId);
+    
+    // Close the tab
+    await chrome.tabs.remove(tabId).catch(() => {});
+    
     return res;
-  } finally {
-    chrome.tabs.remove(tabId).catch(() => {});
+  } catch (e) {
+    return null;
   }
 }
 
