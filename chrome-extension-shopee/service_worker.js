@@ -134,22 +134,43 @@ async function scrapeTab(tabId) {
 
       function extractPriceCandidates(text) {
         const t = String(text || "");
-        // Improved regex to handle cases with and without currency symbols
+        
+        // Improved regex:
         const re = /(?:₫\s*)?(\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:\s*(?:₫|đ|k))?/gi;
         const out = [];
         let m;
         while ((m = re.exec(t)) !== null) {
           const raw = m[0] || "";
           const numPart = m[1] || "";
+          
+          // Check for "+" immediately after the match (e.g., "1k+")
+          const nextChar = t.charAt(re.lastIndex);
+          if (nextChar === '+') continue;
+
           let value = normalizePriceNumber(numPart);
           if (value == null) continue;
 
           // Handle 'k' suffix (e.g., 150k)
-          if (raw.toLowerCase().endsWith("k") && value < 10000) {
-            value *= 1000;
+          if (raw.toLowerCase().endsWith("k")) {
+             // If it's just "1k", "2k" and there's "đã bán" or "sold" nearby, ignore it.
+             const context = t.toLowerCase();
+             if (context.includes("đã bán") || context.includes("sold") || context.includes("đánh giá") || context.includes("rating")) {
+                 continue; 
+             }
+             if (value < 10000) {
+                value *= 1000;
+             }
           }
 
           if (value < 500 || value > 1e12) continue;
+          
+          // Extra check: if the number is part of "Đã bán 1.200"
+          // Only check a very small window to avoid false positives
+          const beforeMatch = t.substring(Math.max(0, m.index - 12), m.index).toLowerCase();
+          if (beforeMatch.includes("đã bán") || beforeMatch.includes("sold") || beforeMatch.includes("đánh giá")) {
+              continue;
+          }
+
           const hasCurrency = /₫|đ|vnđ/i.test(raw);
           out.push({ value, raw, hasCurrency });
         }
@@ -167,17 +188,21 @@ async function scrapeTab(tabId) {
           .map((c) => {
             let score = 0;
             const count = counts.get(c.value) || 0;
-            if (c.hasCurrency) score += 4; // Prefer candidates with currency symbol
+            if (c.hasCurrency) score += 6; // High priority for currency symbol
             if (c.value >= 1000) score += 1;
-            if (c.value >= 10000) score += 1;
+            if (c.value >= 10000) score += 2; // Real prices are usually > 10k
             if (c.value >= 100000) score += 1;
+            
+            // Penalize small numbers without currency symbol
+            if (c.value < 10000 && !c.hasCurrency) score -= 5;
+            
             score += Math.min(5, count);
             return { ...c, score, count };
           })
           .sort((a, b) => {
             if (b.score !== a.score) return b.score - a.score;
             if (b.count !== a.count) return b.count - a.count;
-            // Prefer the LOWER price (usually the discounted one)
+            // Prefer the LOWER price (usually the discounted one) if scores are tied
             return a.value - b.value;
           });
 
@@ -204,7 +229,8 @@ async function scrapeTab(tabId) {
       function getName() {
         const og = document.querySelector('meta[property="og:title"]');
         if (og && og.getAttribute("content")) {
-          const c = String(og.getAttribute("content") || "").trim();
+          let c = String(og.getAttribute("content") || "").trim();
+          c = c.replace(/\s+-\s+Shopee.*$/i, "").replace(/\s*\|\s*Shopee.*$/i, "").trim();
           if (c && !c.toLowerCase().includes("shopee việt nam")) return c;
         }
 
@@ -213,7 +239,8 @@ async function scrapeTab(tabId) {
           '[data-sqe="name"]',
           '[data-sqe="product_name"]',
           'div[class*="product"] h1',
-          'div[class*="Product"] h1'
+          'div[class*="Product"] h1',
+          '.vR6K3w' // User's HTML class
         ];
         for (const s of sel) {
           const el = document.querySelector(s);
@@ -222,7 +249,7 @@ async function scrapeTab(tabId) {
         }
 
         const t = document.title || "";
-        const cleaned = t.replace(/\s+-\s+Shopee.*$/i, "").trim();
+        const cleaned = t.replace(/\s+-\s+Shopee.*$/i, "").replace(/\s*\|\s*Shopee.*$/i, "").trim();
         if (!cleaned || cleaned.toLowerCase().includes("shopee việt nam")) return null;
         return cleaned;
       }
@@ -233,14 +260,14 @@ async function scrapeTab(tabId) {
           "._44qnta",      // Current price container
           ".pqm66d",      // Another current price container
           ".G27LRz",      // Yet another
-          "div[class*='product-briefing'] span[class*='price']"
+          "div[class*='product-briefing'] span[class*='price']",
+          "div[class*='product_details'] span[class*='price']"
         ];
         for (const s of selectors) {
           const el = document.querySelector(s);
           if (el) {
             const txt = el.textContent ? el.textContent.trim() : "";
             if (txt) {
-              // For ranges like "68.400₫ - 206.000₫", we want the first (minimum) price.
               const cands = extractPriceCandidates(txt);
               if (cands.length) {
                   // Sort by value to get the minimum if it's a range
@@ -279,14 +306,26 @@ async function scrapeTab(tabId) {
 
       function isNoisePrice(el) {
         if (!el) return false;
-        // Check parent text for "Voucher", "Phí ship", "Shipping", etc.
+        
+        const text = el.innerText ? el.innerText.toLowerCase() : "";
+        const hasCurrency = /₫|đ|vnđ/i.test(text);
+        
+        // If it has currency symbol, it's likely a price, but check for very specific noise
+        if (hasCurrency) {
+            const verySpecificNoise = ["tặng voucher", "phí ship", "phí vận chuyển"];
+            if (verySpecificNoise.some(kw => text.includes(kw))) return true;
+            return false;
+        }
+
+        const noiseKeywords = ["đã bán", "sold", "đánh giá", "rating", "voucher", "phí ship", "vận chuyển"];
+        if (noiseKeywords.some(kw => text.includes(kw))) return true;
+
         let parent = el.parentElement;
         let depth = 0;
-        const noiseKeywords = ["voucher", "phí ship", "vận chuyển", "tặng", "ưu đãi", "giảm tối đa", "đơn tối thiểu"];
-        while (parent && depth < 5) {
-          const text = parent.innerText ? parent.innerText.toLowerCase() : "";
-          if (noiseKeywords.some(kw => text.includes(kw))) {
-            // But make sure it's not the main price container which might have "giảm"
+        const parentNoiseKeywords = ["voucher", "phí ship", "vận chuyển"];
+        while (parent && depth < 2) {
+          const pText = parent.innerText ? parent.innerText.toLowerCase() : "";
+          if (parentNoiseKeywords.some(kw => pText.includes(kw))) {
             if (!parent.classList.contains("IZPeQz") && !parent.classList.contains("B67UQ0")) {
                 return true;
             }
@@ -333,7 +372,7 @@ async function scrapeTab(tabId) {
         const bodyText = main ? main.innerText : "";
         const lines = bodyText.split("\n");
         const candidates = [];
-        const noiseKeywords = ["voucher", "phí ship", "vận chuyển", "tặng", "ưu đãi", "giảm tối đa", "đơn tối thiểu"];
+        const noiseKeywords = ["voucher", "phí ship", "vận chuyển", "tặng", "ưu đãi", "giảm tối đa", "đơn tối thiểu", "đã bán", "sold", "đánh giá", "rating", "kho hàng", "stock"];
         
         for (const line of lines) {
             const l = line.trim().toLowerCase();
@@ -363,52 +402,54 @@ async function scrapeTab(tabId) {
       }
 
       async function fetchItemApi() {
-        const ids = parseShopeeIdsFromPath(location.pathname + location.search);
-        if (!ids) return null;
-
-        const url = `/api/v4/item/get?shopid=${encodeURIComponent(ids.shopId)}&itemid=${encodeURIComponent(ids.itemId)}`;
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 10000);
         try {
-          const res = await fetch(url, { credentials: "include", signal: ctrl.signal });
-          if (!res.ok) return null;
-          const json = await res.json().catch(() => null);
-          const item = json && json.data && json.data.item ? json.data.item : null;
-          if (!item) return null;
+          const ids = parseShopeeIdsFromPath(location.pathname + location.search);
+          if (!ids) return null;
 
-          const name = item.name ? String(item.name).slice(0, 255) : null;
+          const url = `/api/v4/item/get?shopid=${encodeURIComponent(ids.shopId)}&itemid=${encodeURIComponent(ids.itemId)}`;
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 10000);
+          try {
+            const res = await fetch(url, { credentials: "include", signal: ctrl.signal });
+            if (!res.ok) return null;
+            const json = await res.json().catch(() => null);
+            const item = json && json.data && json.data.item ? json.data.item : null;
+            if (!item) return null;
 
-          // Shopee API returns price as an integer. 
-          // Usually it's multiplied by 100,000 (e.g., 150,000 VND is 15,000,000,000)
-          // But it depends on the currency and API version.
-          const rawPrice =
-            item.price_min != null ? item.price_min :
-              item.price != null ? item.price :
-                item.price_max != null ? item.price_max :
-                  item.price_min_before_discount != null ? item.price_min_before_discount :
-                    null;
+            const name = item.name ? String(item.name).slice(0, 255) : null;
 
-          if (rawPrice == null) {
-            return { name, price: null, raw_text: "" };
+            // Shopee API returns price as an integer. 
+            // Usually it's multiplied by 100,000 (e.g., 150,000 VND is 15,000,000,000)
+            const rawPrice =
+              item.price_min != null ? item.price_min :
+                item.price != null ? item.price :
+                  item.price_max != null ? item.price_max :
+                    item.price_min_before_discount != null ? item.price_min_before_discount :
+                      null;
+
+            if (rawPrice == null) {
+              return { name, price: null, raw_text: "" };
+            }
+
+            let p = Number(rawPrice);
+            if (!Number.isFinite(p) || p <= 0) {
+              return { name, price: null, raw_text: String(rawPrice) };
+            }
+
+            // Smart normalization: Shopee prices are usually price * 100,000.
+            // In VN, prices are rarely below 1,000 VND.
+            if (p >= 1000000) {
+                p = p / 100000;
+            }
+
+            return { name, price: Math.trunc(p), raw_text: String(rawPrice) };
+          } catch (e) {
+            return null;
+          } finally {
+            clearTimeout(t);
           }
-
-          let p = Number(rawPrice);
-          if (!Number.isFinite(p) || p <= 0) {
-            return { name, price: null, raw_text: String(rawPrice) };
-          }
-
-          // Smart normalization: Shopee prices are usually price * 100,000.
-          // If the price is > 10,000,000, it's almost certainly multiplied.
-          // In VN, prices are rarely below 1,000 VND.
-          if (p >= 1000000) {
-              p = p / 100000;
-          }
-
-          return { name, price: Math.trunc(p), raw_text: String(rawPrice) };
-        } catch (e) {
+        } catch (e) { 
           return null;
-        } finally {
-          clearTimeout(t);
         }
       }
 

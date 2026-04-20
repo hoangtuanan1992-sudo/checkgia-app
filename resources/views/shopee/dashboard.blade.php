@@ -68,6 +68,7 @@
                             @foreach($shops as $shop)
                                 <th style="min-width:180px">{{ $shop->name }}</th>
                             @endforeach
+                            <th style="width:80px"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -113,10 +114,17 @@
                                         @endif
                                     </td>
                                 @endforeach
+                                <td style="text-align:right">
+                                    <form method="POST" action="{{ route('shopee.products.destroy', $product) }}" onsubmit="return confirm('Bạn có chắc chắn muốn xoá sản phẩm này?')">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button class="btn" type="submit" style="padding:6px 10px;background:var(--danger);border-color:rgba(220,53,69,.2)">Xoá</button>
+                                    </form>
+                                </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ 3 + $shops->count() }}" class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm ở phía trên và thêm shop đối thủ trong Cài đặt.</td>
+                                <td colspan="{{ 4 + $shops->count() }}" class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm ở phía trên và thêm shop đối thủ trong Cài đặt.</td>
                             </tr>
                         @endforelse
                     </tbody>
