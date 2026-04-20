@@ -229,10 +229,10 @@ async function scrapeTab(tabId) {
 
       function getPriceFromShopeeRangeClass() {
         const selectors = [
-          ".IZPeQz.B67UQ0",
-          "._44qnta",
-          ".pqm66d",
-          ".G27LRz",
+          ".IZPeQz.B67UQ0", // Main current price (single or range)
+          "._44qnta",      // Current price container
+          ".pqm66d",      // Another current price container
+          ".G27LRz",      // Yet another
           "div[class*='product-briefing'] span[class*='price']"
         ];
         for (const s of selectors) {
@@ -240,8 +240,12 @@ async function scrapeTab(tabId) {
           if (el) {
             const txt = el.textContent ? el.textContent.trim() : "";
             if (txt) {
+              // For ranges like "68.400₫ - 206.000₫", we want the first (minimum) price.
               const cands = extractPriceCandidates(txt);
-              if (cands.length) return cands[0].value;
+              if (cands.length) {
+                  // Sort by value to get the minimum if it's a range
+                  return cands.sort((a, b) => a.value - b.value)[0].value;
+              }
             }
           }
         }
@@ -273,31 +277,73 @@ async function scrapeTab(tabId) {
         return null;
       }
 
-      function getPriceFromText() {
-        const body = document.body ? document.body.innerText : "";
-        const candidates = extractPriceCandidates(body);
-        const best = pickBestCandidate(candidates);
-        return best ? best.value : null;
+      function isNoisePrice(el) {
+        if (!el) return false;
+        // Check parent text for "Voucher", "Phí ship", "Shipping", etc.
+        let parent = el.parentElement;
+        let depth = 0;
+        const noiseKeywords = ["voucher", "phí ship", "vận chuyển", "tặng", "ưu đãi", "giảm tối đa", "đơn tối thiểu"];
+        while (parent && depth < 5) {
+          const text = parent.innerText ? parent.innerText.toLowerCase() : "";
+          if (noiseKeywords.some(kw => text.includes(kw))) {
+            // But make sure it's not the main price container which might have "giảm"
+            if (!parent.classList.contains("IZPeQz") && !parent.classList.contains("B67UQ0")) {
+                return true;
+            }
+          }
+          parent = parent.parentElement;
+          depth++;
+        }
+        return false;
       }
 
       function getPriceFromDom() {
-        const texts = [];
+        const candidates = [];
         const selectors = [
           '[data-sqe*="price"]',
           '[data-sqe*="item_price"]',
           '[data-sqe*="main_price"]',
-          '[class*="price"]',
-          '[class*="Price"]',
+          '.IZPeQz.B67UQ0',
+          '._44qnta',
+          '.pqm66d',
+          '.G27LRz',
         ];
         for (const sel of selectors) {
-          const els = Array.from(document.querySelectorAll(sel)).slice(0, 50);
+          const els = Array.from(document.querySelectorAll(sel)).slice(0, 20);
           for (const el of els) {
-            const t = (el && el.textContent) ? el.textContent.trim() : "";
-            if (t) texts.push(t);
+            if (isNoisePrice(el)) continue;
+            const t = el.textContent ? el.textContent.trim() : "";
+            if (t) {
+              const cands = extractPriceCandidates(t);
+              candidates.push(...cands);
+            }
           }
         }
-        const all = texts.join(" | ");
-        const candidates = extractPriceCandidates(all);
+        const best = pickBestCandidate(candidates);
+        return best ? best.value : null;
+      }
+
+      function getPriceFromText() {
+        // Try to focus on the product info section instead of whole body
+        const main = document.querySelector('div[class*="product-briefing"]') || 
+                     document.querySelector('div[class*="product_details"]') ||
+                     document.querySelector('section[class*="YTDXQ0"]') || // Based on user's HTML
+                     document.body;
+        
+        const bodyText = main ? main.innerText : "";
+        const lines = bodyText.split("\n");
+        const candidates = [];
+        const noiseKeywords = ["voucher", "phí ship", "vận chuyển", "tặng", "ưu đãi", "giảm tối đa", "đơn tối thiểu"];
+        
+        for (const line of lines) {
+            const l = line.trim().toLowerCase();
+            if (!l) continue;
+            if (noiseKeywords.some(kw => l.includes(kw))) continue;
+            
+            const cands = extractPriceCandidates(line);
+            candidates.push(...cands);
+        }
+        
         const best = pickBestCandidate(candidates);
         return best ? best.value : null;
       }
