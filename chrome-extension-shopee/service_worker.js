@@ -68,7 +68,19 @@ async function heartbeat(serverUrl, token, agentKey) {
 }
 
 function normalizePriceNumber(text) {
-  const s = String(text || "").replace(/[^\d]/g, "");
+  if (text == null || text === "") return null;
+  let s = String(text).trim();
+
+  // Handle ISO format (e.g. 150000.00000 from meta tags)
+  if (s.includes(".") && !s.includes(",")) {
+    const parts = s.split(".");
+    if (parts.length === 2 && parts[1].length !== 3) {
+      return Math.trunc(parseFloat(s));
+    }
+  }
+
+  // Fallback to removing all non-digits for display formats like "150.000"
+  s = s.replace(/[^\d]/g, "");
   if (!s) return null;
   const n = Number(s);
   if (!Number.isFinite(n)) return null;
@@ -97,7 +109,19 @@ async function scrapeTab(tabId) {
     target: { tabId },
     func: () => {
       function normalizePriceNumber(text) {
-        const s = String(text || "").replace(/[^\d]/g, "");
+        if (text == null || text === "") return null;
+        let s = String(text).trim();
+
+        // Handle ISO format (e.g. 150000.00000 from meta tags)
+        if (s.includes(".") && !s.includes(",")) {
+          const parts = s.split(".");
+          if (parts.length === 2 && parts[1].length !== 3) {
+            return Math.trunc(parseFloat(s));
+          }
+        }
+
+        // Fallback to removing all non-digits for display formats like "150.000"
+        s = s.replace(/[^\d]/g, "");
         if (!s) return null;
         const n = Number(s);
         if (!Number.isFinite(n)) return null;
@@ -110,16 +134,23 @@ async function scrapeTab(tabId) {
 
       function extractPriceCandidates(text) {
         const t = String(text || "");
-        const re = /(?:₫\s*)?(\d{1,3}(?:[.,\s]\d{3})+|\d{6,})(?:\s*(?:₫|đ))?/g;
+        // Improved regex to handle cases with and without currency symbols
+        const re = /(?:₫\s*)?(\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:\s*(?:₫|đ|k))?/gi;
         const out = [];
         let m;
         while ((m = re.exec(t)) !== null) {
           const raw = m[0] || "";
           const numPart = m[1] || "";
-          const value = normalizePriceNumber(numPart);
+          let value = normalizePriceNumber(numPart);
           if (value == null) continue;
-          if (value < 1000 || value > 1e12) continue;
-          const hasCurrency = /₫|đ/.test(raw);
+
+          // Handle 'k' suffix (e.g., 150k)
+          if (raw.toLowerCase().endsWith("k") && value < 10000) {
+            value *= 1000;
+          }
+
+          if (value < 500 || value > 1e12) continue;
+          const hasCurrency = /₫|đ|vnđ/i.test(raw);
           out.push({ value, raw, hasCurrency });
         }
         return out;
@@ -136,16 +167,18 @@ async function scrapeTab(tabId) {
           .map((c) => {
             let score = 0;
             const count = counts.get(c.value) || 0;
-            if (c.hasCurrency) score += 3;
-            if (c.value >= 100000) score += 2;
-            if (c.value >= 1000000) score += 1;
+            if (c.hasCurrency) score += 4; // Prefer candidates with currency symbol
+            if (c.value >= 1000) score += 1;
+            if (c.value >= 10000) score += 1;
+            if (c.value >= 100000) score += 1;
             score += Math.min(5, count);
             return { ...c, score, count };
           })
           .sort((a, b) => {
             if (b.score !== a.score) return b.score - a.score;
             if (b.count !== a.count) return b.count - a.count;
-            return b.value - a.value;
+            // Prefer the LOWER price (usually the discounted one)
+            return a.value - b.value;
           });
 
         return scored[0];
@@ -195,13 +228,24 @@ async function scrapeTab(tabId) {
       }
 
       function getPriceFromShopeeRangeClass() {
-        const el = document.querySelector(".IZPeQz.B67UQ0");
-        if (!el) return null;
-        const txt = el.textContent ? el.textContent.trim() : "";
-        if (!txt) return null;
-        const cands = extractPriceCandidates(txt);
-        if (!cands.length) return null;
-        return cands[0].value;
+        const selectors = [
+          ".IZPeQz.B67UQ0",
+          "._44qnta",
+          ".pqm66d",
+          ".G27LRz",
+          "div[class*='product-briefing'] span[class*='price']"
+        ];
+        for (const s of selectors) {
+          const el = document.querySelector(s);
+          if (el) {
+            const txt = el.textContent ? el.textContent.trim() : "";
+            if (txt) {
+              const cands = extractPriceCandidates(txt);
+              if (cands.length) return cands[0].value;
+            }
+          }
+        }
+        return null;
       }
 
       function getPriceFromMeta() {
@@ -260,9 +304,12 @@ async function scrapeTab(tabId) {
 
       function parseShopeeIdsFromPath(pathname) {
         const p = String(pathname || "");
-        const m1 = p.match(/^\/product\/(\d+)\/(\d+)/);
+        
+        // Handle /product/shopId/itemId
+        const m1 = p.match(/\/product\/(\d+)\/(\d+)/);
         if (m1) return { shopId: m1[1], itemId: m1[2] };
 
+        // Handle i.shopId.itemId
         const m2 = p.match(/i\.(\d+)\.(\d+)/);
         if (m2) return { shopId: m2[1], itemId: m2[2] };
 
@@ -270,7 +317,7 @@ async function scrapeTab(tabId) {
       }
 
       async function fetchItemApi() {
-        const ids = parseShopeeIdsFromPath(location.pathname);
+        const ids = parseShopeeIdsFromPath(location.pathname + location.search);
         if (!ids) return null;
 
         const url = `/api/v4/item/get?shopid=${encodeURIComponent(ids.shopId)}&itemid=${encodeURIComponent(ids.itemId)}`;
@@ -285,6 +332,9 @@ async function scrapeTab(tabId) {
 
           const name = item.name ? String(item.name).slice(0, 255) : null;
 
+          // Shopee API returns price as an integer. 
+          // Usually it's multiplied by 100,000 (e.g., 150,000 VND is 15,000,000,000)
+          // But it depends on the currency and API version.
           const rawPrice =
             item.price_min != null ? item.price_min :
               item.price != null ? item.price :
@@ -296,17 +346,19 @@ async function scrapeTab(tabId) {
             return { name, price: null, raw_text: "" };
           }
 
-          const p = Number(rawPrice);
+          let p = Number(rawPrice);
           if (!Number.isFinite(p) || p <= 0) {
             return { name, price: null, raw_text: String(rawPrice) };
           }
 
-          const normalized = Math.max(0, Math.trunc(p / 100000));
-          if (!normalized) {
-            return { name, price: null, raw_text: String(rawPrice) };
+          // Smart normalization: Shopee prices are usually price * 100,000.
+          // If the price is > 10,000,000, it's almost certainly multiplied.
+          // In VN, prices are rarely below 1,000 VND.
+          if (p >= 1000000) {
+              p = p / 100000;
           }
 
-          return { name, price: normalized, raw_text: String(rawPrice) };
+          return { name, price: Math.trunc(p), raw_text: String(rawPrice) };
         } catch (e) {
           return null;
         } finally {
