@@ -450,7 +450,7 @@
                     </div>
 
                     <div id="cmp-cards" style="display:none">
-                        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">
+                        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
                             @foreach($products as $i => $product)
                                 @php($own = is_null($product->last_price) ? null : (int) $product->last_price)
                                 @php($map = $product->competitors->keyBy('shopee_shop_id'))
