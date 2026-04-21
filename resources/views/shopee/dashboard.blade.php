@@ -190,6 +190,15 @@
                     max-width: 450px;
                     box-shadow: 0 10px 25px rgba(0,0,0,0.1);
                 }
+                .input {
+                    padding: 12px 14px;
+                    border-radius: 12px;
+                    border: 1px solid var(--border);
+                    background: #fff;
+                    color: var(--text);
+                    outline: none;
+                    width: 100%;
+                }
                 .table thead th.header-blue {
                     background: #007bff !important;
                     color: white !important;

@@ -1,6 +1,17 @@
 @extends('layouts.app')
 
 @section('content')
+    <style>
+        .input {
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #fff;
+            color: var(--text);
+            outline: none;
+            width: 100%;
+        }
+    </style>
     <div class="card" style="max-width:1100px">
         <div class="card-header">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
