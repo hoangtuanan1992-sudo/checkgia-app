@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <div class="card" style="max-width:1100px">
+    <div class="card" style="max-width:1500px">
         <div class="card-header">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
                 <div style="min-width:0">
@@ -79,34 +79,40 @@
                     background: #007bff !important;
                     color: white !important;
                     text-align: center;
-                    padding: 12px 8px;
+                    padding: 10px 8px;
                     border: none;
+                    font-size: 13px;
                 }
                 .icon-box {
                     border: 1px solid #e5e7eb;
-                    border-radius: 8px;
-                    padding: 4px;
+                    border-radius: 6px;
+                    padding: 3px;
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
                     background: white;
-                    width: 28px;
-                    height: 28px;
+                    width: 24px;
+                    height: 24px;
                     color: #007bff;
                 }
                 .price-val {
-                    font-size: 18px;
+                    font-size: 16px;
                     font-weight: 800;
                     color: #111827;
                 }
                 .diff-val {
                     font-weight: 700;
-                    font-size: 14px;
+                    font-size: 13px;
                 }
                 .link-text {
                     color: #007bff;
                     text-decoration: none;
                     font-weight: 500;
+                    font-size: 13px;
+                }
+                .table td {
+                    font-size: 13px;
+                    padding: 10px 8px;
                 }
             </style>
 
@@ -130,17 +136,17 @@
                             <tr>
                                 <td style="font-weight:800">{{ $i + 1 }}</td>
                                 <td>
-                                    <div style="font-weight:800">{{ $product->name ?: 'Shopee product #' . $product->id }}</div>
-                                    <div class="hint" style="margin-top:3px">ID: {{ $product->id }}</div>
+                                    <div style="font-weight:800;font-size:13px">{{ $product->name ?: 'Shopee product #' . $product->id }}</div>
+                                    <div class="hint" style="margin-top:3px;font-size:11px">ID: {{ $product->id }}</div>
                                 </td>
                                 <td>
                                     @if(is_null($own))
                                         <span class="hint" style="margin-top:0">---</span>
                                     @else
-                                        <div style="display:flex;flex-direction:column;gap:8px">
-                                            <div style="display:flex;align-items:center;gap:8px">
+                                        <div style="display:flex;flex-direction:column;gap:6px">
+                                            <div style="display:flex;align-items:center;gap:6px">
                                                 <a href="{{ $product->own_url }}" target="_blank" class="icon-box">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                                 </a>
                                                 <a href="{{ $product->own_url }}" target="_blank" class="link-text">link sản phẩm</a>
                                             </div>
@@ -157,20 +163,20 @@
                                         @if(! $c || is_null($cPrice) || is_null($own))
                                             <span class="hint" style="margin-top:0">---</span>
                                         @else
-                                            <div style="display:flex;flex-direction:column;gap:8px">
-                                                <div style="display:flex;align-items:center;gap:12px">
+                                            <div style="display:flex;flex-direction:column;gap:6px">
+                                                <div style="display:flex;align-items:center;gap:10px">
                                                     <div class="diff-val" style="color:{{ $diff > 0 ? 'var(--success)' : ($diff < 0 ? 'var(--danger)' : '#6b7280') }}">
                                                         {{ $diff > 0 ? '+' : '' }}{{ number_format((int) $diff, 0, ',', '.') }}đ
                                                     </div>
-                                                    <a href="{{ route('shopee.settings') }}" class="icon-box" style="color:#6b7280">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
+                                                    <a href="{{ route('shopee.settings') }}" class="icon-box" style="color:#6b7280;width:20px;height:20px">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
                                                     </a>
                                                 </div>
-                                                <div style="display:flex;align-items:center;gap:8px">
+                                                <div style="display:flex;align-items:center;gap:6px">
                                                     <a href="{{ $c->url }}" target="_blank" class="icon-box">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                                     </a>
-                                                    <a href="{{ $c->url }}" target="_blank" class="link-text" style="font-size:18px;font-weight:600">
+                                                    <a href="{{ $c->url }}" target="_blank" class="link-text" style="font-size:16px;font-weight:600">
                                                         {{ number_format((int) $cPrice, 0, ',', '.') }}đ
                                                     </a>
                                                 </div>
