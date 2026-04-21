@@ -423,47 +423,73 @@ async function scrapeTab(tabId, variantPath) {
 
             const name = item.name ? String(item.name).slice(0, 255) : null;
 
-            const pickModelRawPrice = () => {
-              const path = String(variantPath || "").trim();
-              if (!path) return null;
+            const path = String(variantPath || "").trim();
+            const parts = path ? path.split("-").map((x) => x.trim()).filter(Boolean) : [];
+            const idx = parts
+              .map((x) => {
+                const n = parseInt(x, 10);
+                if (!Number.isFinite(n) || n <= 0) return null;
+                return n - 1;
+              })
+              .filter((x) => x != null);
 
-              const parts = path.split("-").map((x) => x.trim()).filter(Boolean);
-              if (!parts.length) return null;
+            const tierVars = Array.isArray(item.tier_variations) ? item.tier_variations : [];
+            const variantClickNames = [];
+            for (let i = 0; i < idx.length; i++) {
+              const tv = tierVars[i];
+              const opts = tv && Array.isArray(tv.options) ? tv.options : [];
+              const opt = opts[idx[i]];
+              if (typeof opt === "string" && opt.trim()) {
+                variantClickNames.push(opt.trim());
+              }
+            }
 
-              const idx = parts
-                .map((x) => {
-                  const n = parseInt(x, 10);
-                  if (!Number.isFinite(n) || n <= 0) return null;
-                  return n - 1;
-                })
-                .filter((x) => x != null);
-
-              if (!idx.length) return null;
+            let usedVariantModel = false;
+            let modelRawPrice = null;
+            if (idx.length) {
               const models = Array.isArray(item.models) ? item.models : [];
-              if (!models.length) return null;
+              if (models.length) {
+                const candidates = models
+                  .map((mm) => {
+                    const ti = Array.isArray(mm.tier_index) ? mm.tier_index : [];
+                    if (ti.length < idx.length) return null;
+                    for (let i = 0; i < idx.length; i++) {
+                      if (ti[i] !== idx[i]) return null;
+                    }
+                    return { mm, ti };
+                  })
+                  .filter(Boolean);
 
-              const m = models.find((mm) => {
-                const ti = Array.isArray(mm.tier_index) ? mm.tier_index : [];
-                if (ti.length < idx.length) return false;
-                for (let i = 0; i < idx.length; i++) {
-                  if (ti[i] !== idx[i]) return false;
+                const lex = (a, b) => {
+                  const al = a.ti.length;
+                  const bl = b.ti.length;
+                  const n = Math.min(al, bl);
+                  for (let i = 0; i < n; i++) {
+                    if (a.ti[i] !== b.ti[i]) return a.ti[i] - b.ti[i];
+                  }
+                  return al - bl;
+                };
+
+                candidates.sort(lex);
+
+                const picked = candidates[0] ? candidates[0].mm : null;
+                if (picked) {
+                  const raw =
+                    picked.price != null ? picked.price :
+                      picked.price_before_discount != null ? picked.price_before_discount :
+                        null;
+                  if (raw != null) {
+                    usedVariantModel = true;
+                    modelRawPrice = raw;
+                  }
                 }
-                return true;
-              });
-              if (!m) return null;
-
-              const raw =
-                m.price != null ? m.price :
-                  m.price_before_discount != null ? m.price_before_discount :
-                    null;
-
-              return raw != null ? raw : null;
-            };
+              }
+            }
 
             // Shopee API returns price as an integer.
             // Usually it's multiplied by 100,000 (e.g., 150,000 VND is 15,000,000,000)
             const rawPrice =
-              pickModelRawPrice() ??
+              (modelRawPrice != null ? modelRawPrice : null) ??
               (item.price_min != null ? item.price_min :
                 item.price != null ? item.price :
                   item.price_max != null ? item.price_max :
@@ -471,12 +497,12 @@ async function scrapeTab(tabId, variantPath) {
                       null);
 
             if (rawPrice == null) {
-              return { name, price: null, raw_text: "" };
+              return { name, price: null, raw_text: "", used_variant_model: false, variant_click_names: variantClickNames };
             }
 
             let p = Number(rawPrice);
             if (!Number.isFinite(p) || p <= 0) {
-              return { name, price: null, raw_text: String(rawPrice) };
+              return { name, price: null, raw_text: String(rawPrice), used_variant_model: usedVariantModel, variant_click_names: variantClickNames };
             }
 
             // Smart normalization: Shopee prices are usually price * 100,000.
@@ -485,7 +511,7 @@ async function scrapeTab(tabId, variantPath) {
                 p = p / 100000;
             }
 
-            return { name, price: Math.trunc(p), raw_text: String(rawPrice) };
+            return { name, price: Math.trunc(p), raw_text: String(rawPrice), used_variant_model: usedVariantModel, variant_click_names: variantClickNames };
           } catch (e) {
             return null;
           } finally {
@@ -508,27 +534,24 @@ async function scrapeTab(tabId, variantPath) {
         return null;
       }
 
-      async function waitForPrice(maxMs) {
+      async function waitForPrice(maxMs, opts) {
         const deadline = Date.now() + maxMs;
-        let lastPrice = null;
+        const variantMode = !!(opts && opts.variantMode);
         while (Date.now() < deadline) {
-          // Priority 1: Official meta tags (usually most reliable)
-          const metaPrice = getPriceFromMeta();
-          if (metaPrice != null) return metaPrice;
+          if (!variantMode) {
+            const metaPrice = getPriceFromMeta();
+            if (metaPrice != null) return metaPrice;
 
-          // Priority 2: LD+JSON
-          const ldPrice = getPriceFromLd();
-          if (ldPrice != null) return ldPrice;
+            const ldPrice = getPriceFromLd();
+            if (ldPrice != null) return ldPrice;
+          }
 
-          // Priority 3: Specific Shopee Classes
           const rangePrice = getPriceFromShopeeRangeClass();
           if (rangePrice != null) return rangePrice;
 
-          // Priority 4: DOM Selectors
           const domPrice = getPriceFromDom();
           if (domPrice != null) return domPrice;
 
-          // Priority 5: Text scraping (last resort)
           const textPrice = getPriceFromText();
           if (textPrice != null) return textPrice;
 
@@ -549,12 +572,73 @@ async function scrapeTab(tabId, variantPath) {
         
         // Try API first
         const api = await fetchItemApi(variantPath);
-        if (api && api.price != null) {
+        if (api && api.price != null && (!variantPath || api.used_variant_model)) {
           return { price: api.price, name: api.name ?? getName(), raw_text: api.raw_text || "", block_reason: blockReason };
         }
 
+        function normalizeText(s) {
+          return String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+        }
+
+        function findClickableByText(text) {
+          const target = normalizeText(text);
+          if (!target) return null;
+          const isNumber = /^\d+$/.test(target);
+          const roots = [
+            document.querySelector('div[class*="product-briefing"]'),
+            document.querySelector('div[class*="product"]'),
+            document.body
+          ].filter(Boolean);
+          for (const root of roots) {
+            const els = Array.from(root.querySelectorAll('button,[role="button"],[role="radio"],a'));
+            const hit = els.find((el) => {
+              if (!el) return false;
+              if (el.disabled) return false;
+              if (!el.getClientRects || el.getClientRects().length === 0) return false;
+              const aria = normalizeText(el.getAttribute && el.getAttribute("aria-label") ? el.getAttribute("aria-label") : "");
+              if (aria) {
+                if (aria === target) return true;
+                if (!isNumber && aria.includes(target)) return true;
+              }
+              const t = normalizeText(el.textContent || "");
+              if (t === target) return true;
+              if (!isNumber && t.includes(target)) return true;
+              return false;
+            });
+            if (hit) return hit;
+          }
+          return null;
+        }
+
+        async function applyVariantClicks(names) {
+          const list = Array.isArray(names) ? names : [];
+          for (const nm of list) {
+            const el = findClickableByText(nm);
+            if (!el) continue;
+            try { el.scrollIntoView({ block: "center", inline: "center" }); } catch (e) {}
+            try { el.click(); } catch (e) {
+              try { el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); } catch (e2) {}
+            }
+            await sleep(Math.floor(Math.random() * 400) + 450);
+          }
+        }
+
+        if (variantPath && api && Array.isArray(api.variant_click_names) && api.variant_click_names.length) {
+          await applyVariantClicks(api.variant_click_names);
+          await sleep(Math.floor(Math.random() * 500) + 600);
+          const priceAfter = await waitForPrice(15000, { variantMode: true });
+          if (priceAfter != null) {
+            return {
+              price: priceAfter,
+              name: (api && api.name) ? api.name : getName(),
+              raw_text: api && api.raw_text ? String(api.raw_text) : "",
+              block_reason: blockReason
+            };
+          }
+        }
+
         // If API fails, wait for DOM to render (up to 15 seconds)
-        const price = await waitForPrice(15000);
+        const price = await waitForPrice(15000, { variantMode: !!variantPath });
         const name = (api && api.name) ? api.name : getName();
         
         return { 
