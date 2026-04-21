@@ -8,9 +8,11 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use App\Models\ShopeeShop;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class ShopeeDashboardController extends Controller
 {
+    use AuthorizesRequests;
     public function index(Request $request): View
     {
         $user = $request->user();
