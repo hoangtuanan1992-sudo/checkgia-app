@@ -14,13 +14,15 @@ class ShopeeDashboardController extends Controller
     public function index(Request $request): View
     {
         $user = $request->user();
+        $ownerId = $request->user()->effectiveUserId();
         $products = $user->shopeeProducts()
+            ->where('user_id', $ownerId)
             ->with(['competitors.shop'])
             ->orderBy('id', 'desc')
             ->get();
 
         $shops = ShopeeShop::query()
-            ->where('user_id', $user->id)
+            ->where('user_id', $ownerId)
             ->where('is_own', false)
             ->orderBy('position')
             ->orderBy('id')
