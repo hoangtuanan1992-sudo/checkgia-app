@@ -8,11 +8,9 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use App\Models\ShopeeShop;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class ShopeeDashboardController extends Controller
 {
-    use AuthorizesRequests;
     public function index(Request $request): View
     {
         $user = $request->user();
@@ -35,7 +33,8 @@ class ShopeeDashboardController extends Controller
 
     public function history(Request $request, ShopeeProduct $product): View
     {
-        $this->authorize('view', $product);
+        $ownerId = $request->user()->effectiveUserId();
+        abort_unless((int) $product->user_id === (int) $ownerId, 403, 'This action is unauthorized.');
 
         $days = (int) $request->get('days', 7);
         $since = now()->subDays($days);
