@@ -144,13 +144,13 @@
                                         <span class="hint" style="margin-top:0">---</span>
                                     @else
                                         <div style="display:flex;flex-direction:column;gap:6px">
-                                            <div style="display:flex;align-items:center;gap:6px">
+                                            <div style="display:flex;align-items:center;gap:8px">
                                                 <a href="{{ $product->own_url }}" target="_blank" class="icon-box">
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                                 </a>
                                                 <a href="{{ $product->own_url }}" target="_blank" class="link-text">link sản phẩm</a>
                                             </div>
-                                            <div class="price-val">{{ number_format($own, 0, ',', '.') }}đ</div>
+                                            <a href="{{ route('shopee.history', $product) }}" class="price-val" style="text-decoration:none;display:block">{{ number_format($own, 0, ',', '.') }}đ</a>
                                         </div>
                                     @endif
                                 </td>
@@ -165,9 +165,9 @@
                                         @else
                                             <div style="display:flex;flex-direction:column;gap:6px">
                                                 <div style="display:flex;align-items:center;gap:10px">
-                                                    <div class="diff-val" style="color:{{ $diff > 0 ? 'var(--success)' : ($diff < 0 ? 'var(--danger)' : '#6b7280') }}">
+                                                    <a href="{{ $c->url }}" target="_blank" class="diff-val" style="color:{{ $diff > 0 ? 'var(--success)' : ($diff < 0 ? 'var(--danger)' : '#6b7280') }};text-decoration:none">
                                                         {{ $diff > 0 ? '+' : '' }}{{ number_format((int) $diff, 0, ',', '.') }}đ
-                                                    </div>
+                                                    </a>
                                                     <a href="{{ route('shopee.settings') }}" class="icon-box" style="color:#6b7280;width:20px;height:20px">
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
                                                     </a>
@@ -176,7 +176,7 @@
                                                     <a href="{{ $c->url }}" target="_blank" class="icon-box">
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                                     </a>
-                                                    <a href="{{ $c->url }}" target="_blank" class="link-text" style="font-size:16px;font-weight:600">
+                                                    <a href="{{ route('shopee.history', $product) }}" class="link-text" style="font-size:16px;font-weight:600">
                                                         {{ number_format((int) $cPrice, 0, ',', '.') }}đ
                                                     </a>
                                                 </div>
