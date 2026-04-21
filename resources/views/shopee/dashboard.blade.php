@@ -90,39 +90,106 @@
                 <input type="hidden" name="adjustment" id="update-adjustment-input">
             </form>
 
+            <div id="custom-modal" class="modal-overlay" style="display:none">
+                <div class="modal-content">
+                    <h3 id="modal-title" style="margin-top:0;font-size:16px">Cập nhật</h3>
+                    <input type="text" id="modal-input" class="input" style="margin:12px 0">
+                    <div style="display:flex;justify-content:flex-end;gap:10px">
+                        <button class="btn btn-secondary" onclick="closeModal()">Hủy</button>
+                        <button class="btn" id="modal-ok-btn">OK</button>
+                    </div>
+                </div>
+            </div>
+
             <script>
-                function updateOwnUrl(productId, currentUrl) {
-                    const newUrl = prompt('Nhập link Shopee mới cho sản phẩm của bạn:', currentUrl);
-                    if (newUrl !== null && newUrl !== currentUrl) {
-                        const form = document.getElementById('update-url-form');
-                        form.action = `/shopee/products/${productId}/url`;
-                        document.getElementById('update-url-input').value = newUrl;
-                        form.submit();
+                let currentModalCallback = null;
+
+                function showModal(title, defaultValue, callback) {
+                    document.getElementById('modal-title').innerText = title;
+                    document.getElementById('modal-input').value = defaultValue;
+                    document.getElementById('custom-modal').style.display = 'flex';
+                    document.getElementById('modal-input').focus();
+                    currentModalCallback = callback;
+                }
+
+                function closeModal() {
+                    document.getElementById('custom-modal').style.display = 'none';
+                    currentModalCallback = null;
+                }
+
+                document.getElementById('modal-ok-btn').onclick = function() {
+                    if (currentModalCallback) {
+                        currentModalCallback(document.getElementById('modal-input').value);
                     }
+                    closeModal();
+                };
+
+                // Close modal on Enter key
+                document.getElementById('modal-input').onkeydown = function(e) {
+                    if (e.key === 'Enter') {
+                        document.getElementById('modal-ok-btn').click();
+                    }
+                    if (e.key === 'Escape') {
+                        closeModal();
+                    }
+                };
+
+                function updateOwnUrl(productId, currentUrl) {
+                    showModal('Nhập link Shopee mới cho sản phẩm của bạn:', currentUrl, function(newUrl) {
+                        if (newUrl !== null && newUrl !== currentUrl) {
+                            const form = document.getElementById('update-url-form');
+                            form.action = `/shopee/products/${productId}/url`;
+                            document.getElementById('update-url-input').value = newUrl;
+                            form.submit();
+                        }
+                    });
                 }
 
                 function upsertCompetitorUrl(productId, shopId, currentUrl) {
-                    const newUrl = prompt('Nhập link Shopee của đối thủ:', currentUrl || '');
-                    if (newUrl !== null && newUrl !== currentUrl) {
-                        const form = document.getElementById('upsert-competitor-form');
-                        form.action = `/shopee/products/${productId}/shops/${shopId}`;
-                        document.getElementById('upsert-competitor-url').value = newUrl;
-                        form.submit();
-                    }
+                    showModal('Nhập link Shopee của đối thủ:', currentUrl || '', function(newUrl) {
+                        if (newUrl !== null && newUrl !== currentUrl) {
+                            const form = document.getElementById('upsert-competitor-form');
+                            form.action = `/shopee/products/${productId}/shops/${shopId}`;
+                            document.getElementById('upsert-competitor-url').value = newUrl;
+                            form.submit();
+                        }
+                    });
                 }
 
                 function updateAdjustment(competitorId, currentAdj) {
-                    const newAdj = prompt('Nhập số tiền điều chỉnh (VD: -200000 hoặc 200000):', currentAdj || 0);
-                    if (newAdj !== null && newAdj !== currentAdj.toString()) {
-                        const form = document.getElementById('update-adjustment-form');
-                        form.action = `/shopee/competitors/${competitorId}/adjustment`;
-                        document.getElementById('update-adjustment-input').value = newAdj;
-                        form.submit();
-                    }
+                    showModal('Nhập số tiền điều chỉnh (VD: -200000 hoặc 200000):', currentAdj || 0, function(newAdj) {
+                        if (newAdj !== null && newAdj !== currentAdj.toString()) {
+                            const form = document.getElementById('update-adjustment-form');
+                            form.action = `/shopee/competitors/${competitorId}/adjustment`;
+                            document.getElementById('update-adjustment-input').value = newAdj;
+                            form.submit();
+                        }
+                    });
                 }
             </script>
 
             <style>
+                .modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: rgba(0,0,0,0.5);
+                    display: flex;
+                    justify-content: center;
+                    align-items: flex-start; /* Aligns modal towards the top but with margin */
+                    padding-top: 40vh; /* This positions the modal around 2/3 down from the top */
+                    z-index: 9999;
+                }
+                .modal-content {
+                    background: white;
+                    padding: 20px;
+                    border-radius: 12px;
+                    width: 100%;
+                    max-width: 450px;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+                }
                 .table thead th.header-blue {
                     background: #007bff !important;
                     color: white !important;
