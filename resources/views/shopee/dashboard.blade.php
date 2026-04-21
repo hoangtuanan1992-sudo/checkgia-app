@@ -74,6 +74,54 @@
 
             <div style="height:14px"></div>
 
+            <form id="update-url-form" method="POST" style="display:none">
+                @csrf
+                @method('PUT')
+                <input type="hidden" name="own_url" id="update-url-input">
+            </form>
+
+            <form id="upsert-competitor-form" method="POST" style="display:none">
+                @csrf
+                <input type="hidden" name="url" id="upsert-competitor-url">
+            </form>
+
+            <form id="update-adjustment-form" method="POST" style="display:none">
+                @csrf
+                <input type="hidden" name="adjustment" id="update-adjustment-input">
+            </form>
+
+            <script>
+                function updateOwnUrl(productId, currentUrl) {
+                    const newUrl = prompt('Nhập link Shopee mới cho sản phẩm của bạn:', currentUrl);
+                    if (newUrl !== null && newUrl !== currentUrl) {
+                        const form = document.getElementById('update-url-form');
+                        form.action = `/shopee/products/${productId}/url`;
+                        document.getElementById('update-url-input').value = newUrl;
+                        form.submit();
+                    }
+                }
+
+                function upsertCompetitorUrl(productId, shopId, currentUrl) {
+                    const newUrl = prompt('Nhập link Shopee của đối thủ:', currentUrl || '');
+                    if (newUrl !== null && newUrl !== currentUrl) {
+                        const form = document.getElementById('upsert-competitor-form');
+                        form.action = `/shopee/products/${productId}/shops/${shopId}`;
+                        document.getElementById('upsert-competitor-url').value = newUrl;
+                        form.submit();
+                    }
+                }
+
+                function updateAdjustment(competitorId, currentAdj) {
+                    const newAdj = prompt('Nhập số tiền điều chỉnh (VD: -200000 hoặc 200000):', currentAdj || 0);
+                    if (newAdj !== null && newAdj !== currentAdj.toString()) {
+                        const form = document.getElementById('update-adjustment-form');
+                        form.action = `/shopee/competitors/${competitorId}/adjustment`;
+                        document.getElementById('update-adjustment-input').value = newAdj;
+                        form.submit();
+                    }
+                }
+            </script>
+
             <style>
                 .table thead th.header-blue {
                     background: #007bff !important;
@@ -141,11 +189,16 @@
                                 </td>
                                 <td>
                                     @if(is_null($own))
-                                        <span class="hint" style="margin-top:0">---</span>
+                                        <div style="display:flex;align-items:center;gap:8px">
+                                            <a href="javascript:void(0)" onclick="updateOwnUrl({{ $product->id }}, '')" class="icon-box" title="Thêm link Shopee">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                            </a>
+                                            <span class="hint" style="margin-top:0">---</span>
+                                        </div>
                                     @else
                                         <div style="display:flex;flex-direction:column;gap:6px">
                                             <div style="display:flex;align-items:center;gap:8px">
-                                                <a href="{{ $product->own_url }}" target="_blank" class="icon-box">
+                                                <a href="javascript:void(0)" onclick="updateOwnUrl({{ $product->id }}, '{{ $product->own_url }}')" class="icon-box" title="Sửa link Shopee">
                                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                                 </a>
                                                 <a href="{{ $product->own_url }}" target="_blank" class="link-text">link sản phẩm</a>
@@ -161,19 +214,24 @@
                                     @php($diff = (! is_null($own) && ! is_null($cPrice)) ? ((int) $cPrice + $adj - (int) $own) : null)
                                     <td>
                                         @if(! $c || is_null($cPrice) || is_null($own))
-                                            <span class="hint" style="margin-top:0">---</span>
+                                            <div style="display:flex;align-items:center;gap:8px">
+                                                <a href="javascript:void(0)" onclick="upsertCompetitorUrl({{ $product->id }}, {{ $shop->id }}, '{{ $c?->url ?? '' }}')" class="icon-box" title="Thêm link đối thủ">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                                </a>
+                                                <span class="hint" style="margin-top:0">---</span>
+                                            </div>
                                         @else
                                             <div style="display:flex;flex-direction:column;gap:6px">
                                                 <div style="display:flex;align-items:center;gap:10px">
                                                     <a href="{{ $c->url }}" target="_blank" class="diff-val" style="color:{{ $diff > 0 ? 'var(--success)' : ($diff < 0 ? 'var(--danger)' : '#6b7280') }};text-decoration:none">
                                                         {{ $diff > 0 ? '+' : '' }}{{ number_format((int) $diff, 0, ',', '.') }}đ
                                                     </a>
-                                                    <a href="{{ route('shopee.settings') }}" class="icon-box" style="color:#6b7280;width:20px;height:20px">
+                                                    <a href="javascript:void(0)" onclick="updateAdjustment({{ $c->id }}, {{ $adj }})" class="icon-box" style="color:#6b7280;width:20px;height:20px" title="Điều chỉnh giá chênh">
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path><path d="m15 5 4 4"></path></svg>
                                                     </a>
                                                 </div>
                                                 <div style="display:flex;align-items:center;gap:6px">
-                                                    <a href="{{ $c->url }}" target="_blank" class="icon-box">
+                                                    <a href="javascript:void(0)" onclick="upsertCompetitorUrl({{ $product->id }}, {{ $shop->id }}, '{{ $c->url }}')" class="icon-box" title="Sửa link đối thủ">
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                                     </a>
                                                     <a href="{{ route('shopee.history', $product) }}" class="link-text" style="font-size:16px;font-weight:600">
