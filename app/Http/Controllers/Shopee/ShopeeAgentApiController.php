@@ -148,6 +148,7 @@ class ShopeeAgentApiController extends Controller
                     'product_id' => (int) $product->id,
                     'user_id' => (int) $product->user_id,
                     'url' => (string) $product->own_url,
+                    'variant_path' => $product->own_variant_path ? (string) $product->own_variant_path : null,
                 ];
             } else {
                 $task = [
@@ -172,6 +173,7 @@ class ShopeeAgentApiController extends Controller
                 'product_id' => (int) $product->id,
                 'user_id' => (int) $product->user_id,
                 'url' => (string) $product->own_url,
+                'variant_path' => $product->own_variant_path ? (string) $product->own_variant_path : null,
             ];
         }
 

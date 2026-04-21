@@ -104,10 +104,11 @@ function pickFromLdJson(json) {
   return null;
 }
 
-async function scrapeTab(tabId) {
+async function scrapeTab(tabId, variantPath) {
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => {
+    args: [variantPath || null],
+    func: (variantPath) => {
       function normalizePriceNumber(text) {
         if (text == null || text === "") return null;
         let s = String(text).trim();
@@ -405,7 +406,7 @@ async function scrapeTab(tabId) {
         return null;
       }
 
-      async function fetchItemApi() {
+      async function fetchItemApi(variantPath) {
         try {
           const ids = parseShopeeIdsFromPath(location.pathname + location.search);
           if (!ids) return null;
@@ -422,14 +423,52 @@ async function scrapeTab(tabId) {
 
             const name = item.name ? String(item.name).slice(0, 255) : null;
 
-            // Shopee API returns price as an integer. 
+            const pickModelRawPrice = () => {
+              const path = String(variantPath || "").trim();
+              if (!path) return null;
+
+              const parts = path.split("-").map((x) => x.trim()).filter(Boolean);
+              if (!parts.length) return null;
+
+              const idx = parts
+                .map((x) => {
+                  const n = parseInt(x, 10);
+                  if (!Number.isFinite(n) || n <= 0) return null;
+                  return n - 1;
+                })
+                .filter((x) => x != null);
+
+              if (!idx.length) return null;
+              const models = Array.isArray(item.models) ? item.models : [];
+              if (!models.length) return null;
+
+              const m = models.find((mm) => {
+                const ti = Array.isArray(mm.tier_index) ? mm.tier_index : [];
+                if (ti.length < idx.length) return false;
+                for (let i = 0; i < idx.length; i++) {
+                  if (ti[i] !== idx[i]) return false;
+                }
+                return true;
+              });
+              if (!m) return null;
+
+              const raw =
+                m.price != null ? m.price :
+                  m.price_before_discount != null ? m.price_before_discount :
+                    null;
+
+              return raw != null ? raw : null;
+            };
+
+            // Shopee API returns price as an integer.
             // Usually it's multiplied by 100,000 (e.g., 150,000 VND is 15,000,000,000)
             const rawPrice =
-              item.price_min != null ? item.price_min :
+              pickModelRawPrice() ??
+              (item.price_min != null ? item.price_min :
                 item.price != null ? item.price :
                   item.price_max != null ? item.price_max :
                     item.price_min_before_discount != null ? item.price_min_before_discount :
-                      null;
+                      null);
 
             if (rawPrice == null) {
               return { name, price: null, raw_text: "" };
@@ -509,7 +548,7 @@ async function scrapeTab(tabId) {
         const blockReason = detectBlock();
         
         // Try API first
-        const api = await fetchItemApi();
+        const api = await fetchItemApi(variantPath);
         if (api && api.price != null) {
           return { price: api.price, name: api.name ?? getName(), raw_text: api.raw_text || "", block_reason: blockReason };
         }
@@ -531,7 +570,7 @@ async function scrapeTab(tabId) {
   return result || null;
 }
 
-async function openAndScrape(url) {
+async function openAndScrape(url, variantPath) {
   try {
     // Create tab as active and keep it focused
     const tab = await chrome.tabs.create({ url, active: true });
@@ -597,7 +636,7 @@ async function openAndScrape(url) {
     await new Promise(r => setTimeout(r, Math.random() * 2000 + 1000));
 
     // Scrape the tab
-    const res = await scrapeTab(tabId);
+    const res = await scrapeTab(tabId, variantPath);
     
     // Random "stay time" after scraping (3-7 seconds) to simulate reading
     const stayTime = Math.random() * 4000 + 3000;
@@ -695,7 +734,7 @@ async function pollOnce() {
   }
 
   await chrome.storage.local.set({ lastTaskUrl: task.url });
-  const scrape = await openAndScrape(task.url).catch((e) => {
+  const scrape = await openAndScrape(task.url, task.variant_path || null).catch((e) => {
     setLastError(e);
     return null;
   });

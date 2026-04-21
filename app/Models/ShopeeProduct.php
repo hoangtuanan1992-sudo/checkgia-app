@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'user_id',
     'name',
     'own_url',
+    'own_variant_path',
     'is_enabled',
     'last_price',
     'last_scraped_at',
