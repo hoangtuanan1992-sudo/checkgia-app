@@ -103,23 +103,59 @@
 
             <script>
                 let currentModalCallback = null;
+                let currentModalFormat = null;
 
-                function showModal(title, defaultValue, callback) {
+                function formatMoneyInput(value) {
+                    let v = String(value ?? '');
+                    v = v.replace(/\s+/g, '');
+
+                    let sign = '';
+                    if (v.startsWith('-')) {
+                        sign = '-';
+                        v = v.slice(1);
+                    }
+
+                    const digits = v.replace(/[^\d]/g, '');
+                    const raw = sign + digits;
+                    const display = (sign ? '-' : '') + (digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '');
+
+                    return { raw, display };
+                }
+
+                function showModal(title, defaultValue, callback, options = {}) {
                     document.getElementById('modal-title').innerText = title;
-                    document.getElementById('modal-input').value = defaultValue;
-                    document.getElementById('custom-modal').style.display = 'flex';
-                    document.getElementById('modal-input').focus();
+                    const input = document.getElementById('modal-input');
+                    currentModalFormat = options.format || null;
                     currentModalCallback = callback;
+
+                    if (currentModalFormat === 'money') {
+                        const fmt = formatMoneyInput(defaultValue);
+                        input.value = fmt.display;
+                        input.dataset.raw = fmt.raw;
+                        input.inputMode = 'numeric';
+                        input.autocomplete = 'off';
+                    } else {
+                        input.value = defaultValue ?? '';
+                        input.dataset.raw = '';
+                        input.inputMode = '';
+                        input.autocomplete = '';
+                    }
+
+                    document.getElementById('custom-modal').style.display = 'flex';
+                    input.focus();
                 }
 
                 function closeModal() {
                     document.getElementById('custom-modal').style.display = 'none';
                     currentModalCallback = null;
+                    currentModalFormat = null;
                 }
 
                 document.getElementById('modal-ok-btn').onclick = function() {
                     if (currentModalCallback) {
-                        currentModalCallback(document.getElementById('modal-input').value);
+                        const input = document.getElementById('modal-input');
+                        const value = currentModalFormat === 'money' ? (input.dataset.raw ?? '') : input.value;
+                        currentModalCallback(value);
                     }
                     closeModal();
                 };
@@ -132,6 +168,17 @@
                     if (e.key === 'Escape') {
                         closeModal();
                     }
+                };
+
+                document.getElementById('modal-input').oninput = function() {
+                    if (currentModalFormat !== 'money') {
+                        return;
+                    }
+
+                    const input = document.getElementById('modal-input');
+                    const fmt = formatMoneyInput(input.value);
+                    input.value = fmt.display;
+                    input.dataset.raw = fmt.raw;
                 };
 
                 function updateOwnUrl(productId, currentUrl) {
@@ -164,7 +211,7 @@
                             document.getElementById('update-adjustment-input').value = newAdj;
                             form.submit();
                         }
-                    });
+                    }, { format: 'money' });
                 }
             </script>
 
@@ -193,9 +240,9 @@
                 .input {
                     padding: 12px 14px;
                     border-radius: 12px;
-                    border: 1px solid var(--border);
+                    border: 1px solid var(--border, #e5e7eb);
                     background: #fff;
-                    color: var(--text);
+                    color: var(--text, #111827);
                     outline: none;
                     width: 100%;
                 }
