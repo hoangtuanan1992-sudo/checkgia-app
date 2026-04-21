@@ -87,7 +87,7 @@
 
             <form id="update-adjustment-form" method="POST" style="display:none">
                 @csrf
-                <input type="hidden" name="adjustment" id="update-adjustment-input">
+                <input type="hidden" name="price_adjustment" id="update-adjustment-input">
             </form>
 
             <div id="custom-modal" class="modal-overlay" style="display:none">
