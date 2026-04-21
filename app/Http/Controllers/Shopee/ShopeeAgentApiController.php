@@ -9,6 +9,7 @@ use App\Models\ShopeeCompetitor;
 use App\Models\ShopeeCompetitorPrice;
 use App\Models\ShopeeProduct;
 use App\Models\ShopeeProductPrice;
+use App\Services\AlertNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -187,7 +188,7 @@ class ShopeeAgentApiController extends Controller
         ]);
     }
 
-    public function report(Request $request): JsonResponse
+    public function report(Request $request, AlertNotifier $notifier): JsonResponse
     {
         $data = $request->validate([
             'agent_key' => ['required', 'string', 'max:128'],
@@ -220,6 +221,8 @@ class ShopeeAgentApiController extends Controller
                 return response()->json(['message' => 'Competitor not found.'], 404);
             }
 
+            $previousPrice = is_null($competitor->last_price) ? null : (int) $competitor->last_price;
+
             ShopeeCompetitorPrice::create([
                 'shopee_competitor_id' => (int) $competitor->id,
                 'price' => $price,
@@ -231,8 +234,12 @@ class ShopeeAgentApiController extends Controller
             $competitor->last_scraped_at = $scrapedAt;
             $competitor->save();
 
+            $product = ShopeeProduct::query()->find((int) $competitor->shopee_product_id);
+            if ($product && $product->is_enabled && $competitor->is_enabled) {
+                $notifier->notifyOnShopeeCompetitorPriceChange($product, $competitor->loadMissing('shop'), $price, $previousPrice);
+            }
+
             if ($name) {
-                $product = ShopeeProduct::query()->find((int) $competitor->shopee_product_id);
                 if ($product && ! $product->name) {
                     $product->name = $name;
                     $product->save();

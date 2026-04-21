@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ShopeeCompetitor;
 use App\Models\ShopeeProduct;
 use App\Models\ShopeeShop;
+use App\Models\UserNotificationSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,10 @@ class ShopeeSettingsController extends Controller
     {
         $ownerId = $request->user()->effectiveUserId();
 
+        $notification = UserNotificationSetting::query()->firstOrCreate([
+            'user_id' => $ownerId,
+        ]);
+
         $shops = ShopeeShop::query()
             ->where('user_id', $ownerId)
             ->orderBy('position')
@@ -25,6 +30,7 @@ class ShopeeSettingsController extends Controller
 
         return view('shopee.settings-owner', [
             'shops' => $shops,
+            'notification' => $notification,
         ]);
     }
 
