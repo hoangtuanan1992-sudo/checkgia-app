@@ -45,7 +45,7 @@ class ShopeeDashboardController extends Controller
             ->orderBy('scraped_at')
             ->get()
             ->map(fn($p) => [
-                't' => $p->scraped_at->toIso8601String(),
+                't' => $p->scraped_at->setTimezone('Asia/Ho_Chi_Minh')->toIso8601String(),
                 'y' => (int) $p->price,
                 'label' => 'Shop bạn'
             ]);
@@ -60,7 +60,7 @@ class ShopeeDashboardController extends Controller
                 ->orderBy('scraped_at')
                 ->get()
                 ->map(fn($p) => [
-                    't' => $p->scraped_at->toIso8601String(),
+                    't' => $p->scraped_at->setTimezone('Asia/Ho_Chi_Minh')->toIso8601String(),
                     'y' => (int) $p->price + (int) ($competitor->price_adjustment ?? 0),
                     'label' => $competitor->shop->name
                 ]);

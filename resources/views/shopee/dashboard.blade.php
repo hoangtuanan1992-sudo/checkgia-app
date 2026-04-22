@@ -455,7 +455,7 @@
                                         @endforeach
                                         <td>
                                             @if($product->last_scraped_at)
-                                                <div style="font-weight:700">{{ $product->last_scraped_at->format('d/m H:i') }}</div>
+                                                <div style="font-weight:700">{{ $product->last_scraped_at->setTimezone('Asia/Ho_Chi_Minh')->format('d/m H:i') }}</div>
                                             @else
                                                 <span class="hint" style="margin-top:0">---</span>
                                             @endif
@@ -506,7 +506,7 @@
                                         </div>
                                         <div style="text-align:right">
                                             @if($product->last_scraped_at)
-                                                <div class="hint" style="margin-top:0;font-size:11px">{{ $product->last_scraped_at->format('d/m H:i') }}</div>
+                                                <div class="hint" style="margin-top:0;font-size:11px">{{ $product->last_scraped_at->setTimezone('Asia/Ho_Chi_Minh')->format('d/m H:i') }}</div>
                                             @endif
                                         </div>
                                     </div>
