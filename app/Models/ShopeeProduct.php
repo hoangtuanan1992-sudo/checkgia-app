@@ -24,6 +24,8 @@ class ShopeeProduct extends Model
             'is_enabled' => 'boolean',
             'last_price' => 'integer',
             'last_scraped_at' => 'datetime',
+            'lease_expires_at' => 'datetime',
+            'last_assigned_at' => 'datetime',
         ];
     }
 

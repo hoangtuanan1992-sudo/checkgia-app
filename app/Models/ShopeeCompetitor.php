@@ -26,6 +26,8 @@ class ShopeeCompetitor extends Model
             'price_adjustment' => 'integer',
             'last_price' => 'integer',
             'last_scraped_at' => 'datetime',
+            'lease_expires_at' => 'datetime',
+            'last_assigned_at' => 'datetime',
         ];
     }
 

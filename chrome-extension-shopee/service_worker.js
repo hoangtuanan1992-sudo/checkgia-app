@@ -1918,6 +1918,7 @@ async function pollOnce() {
     const payload = {
       agent_key: agentKey,
       task_type: String(task.type || ""),
+      lease_token: task.lease_token ? String(task.lease_token) : undefined,
       price: Math.max(0, Math.trunc(price)),
       scraped_at: new Date().toISOString(),
       raw_text: rawText,
