@@ -157,7 +157,7 @@ class ShopeeAgentApiController extends Controller
                     'product_id' => (int) $competitor->shopee_product_id,
                     'user_id' => (int) ($competitor->product?->user_id ?? 0),
                     'url' => (string) $competitor->url,
-                    'price_pick' => (string) (($competitor->product?->price_pick ?: 'low')),
+                    'price_pick' => in_array($competitor->price_pick, ['low', 'high'], true) ? (string) $competitor->price_pick : (string) (($competitor->product?->price_pick ?: 'low')),
                 ];
             }
         } elseif ($competitor) {
@@ -167,7 +167,7 @@ class ShopeeAgentApiController extends Controller
                 'product_id' => (int) $competitor->shopee_product_id,
                 'user_id' => (int) ($competitor->product?->user_id ?? 0),
                 'url' => (string) $competitor->url,
-                'price_pick' => (string) (($competitor->product?->price_pick ?: 'low')),
+                'price_pick' => in_array($competitor->price_pick, ['low', 'high'], true) ? (string) $competitor->price_pick : (string) (($competitor->product?->price_pick ?: 'low')),
             ];
         } elseif ($product) {
             $task = [

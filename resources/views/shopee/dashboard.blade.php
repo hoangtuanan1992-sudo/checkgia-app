@@ -32,21 +32,22 @@
                     <form method="POST" action="{{ route('shopee.products.store') }}" id="add-product-form">
                         @csrf
                         <div class="field" style="margin-top:0">
-                            <label class="label">Link shop bạn (Shopee)</label>
+                            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                                <label class="label" style="margin:0">Link shop bạn (Shopee)</label>
+                                @php($pp = old('price_pick', 'low'))
+                                <div style="display:flex;align-items:center;gap:10px;white-space:nowrap">
+                                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                                        <span class="hint" style="margin:0">Giá thấp</span>
+                                        <input type="radio" name="price_pick" value="low" @checked($pp === 'low')>
+                                    </label>
+                                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                                        <span class="hint" style="margin:0">Giá cao</span>
+                                        <input type="radio" name="price_pick" value="high" @checked($pp === 'high')>
+                                    </label>
+                                </div>
+                            </div>
                             <div style="display:grid;grid-template-columns:1fr;gap:10px">
                                 <input class="input" name="own_url" type="url" placeholder="https://shopee.vn/..." value="{{ old('own_url') }}" required>
-                            </div>
-                            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
-                                <div class="hint" style="margin:0">Lấy theo:</div>
-                                @php($pp = old('price_pick', 'low'))
-                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                                    <input type="radio" name="price_pick" value="low" @checked($pp === 'low')>
-                                    <span>Giá thấp</span>
-                                </label>
-                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                                    <input type="radio" name="price_pick" value="high" @checked($pp === 'high')>
-                                    <span>Giá cao</span>
-                                </label>
                             </div>
                         </div>
 
@@ -54,7 +55,20 @@
                             <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
                                 @foreach($shops as $shop)
                                     <div class="field" style="margin-top:0">
-                                        <label class="label">Link {{ $shop->name }}</label>
+                                        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                                            <label class="label" style="margin:0">Link {{ $shop->name }}</label>
+                                            @php($cpp = old('competitor_price_picks.'.$shop->id, 'low'))
+                                            <div style="display:flex;align-items:center;gap:10px;white-space:nowrap">
+                                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                                                    <span class="hint" style="margin:0">Giá thấp</span>
+                                                    <input type="radio" name="competitor_price_picks[{{ $shop->id }}]" value="low" @checked($cpp === 'low')>
+                                                </label>
+                                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                                                    <span class="hint" style="margin:0">Giá cao</span>
+                                                    <input type="radio" name="competitor_price_picks[{{ $shop->id }}]" value="high" @checked($cpp === 'high')>
+                                                </label>
+                                            </div>
+                                        </div>
                                         <input class="input" name="competitor_urls[{{ $shop->id }}]" type="url" value="{{ old('competitor_urls.'.$shop->id) }}" placeholder="https://shopee.vn/...">
                                     </div>
                                 @endforeach

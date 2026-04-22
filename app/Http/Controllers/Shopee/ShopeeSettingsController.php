@@ -129,6 +129,8 @@ class ShopeeSettingsController extends Controller
             'own_url' => ['required', 'url', 'max:2048'],
             'price_pick' => ['nullable', 'string', 'in:low,high'],
             'competitor_urls' => ['nullable', 'array'],
+            'competitor_price_picks' => ['nullable', 'array'],
+            'competitor_price_picks.*' => ['nullable', 'string', 'in:low,high'],
         ]);
 
         $product = ShopeeProduct::create([
@@ -140,6 +142,7 @@ class ShopeeSettingsController extends Controller
 
         $shops = ShopeeShop::query()->where('user_id', $ownerId)->get()->keyBy('id');
         $urls = (array) ($data['competitor_urls'] ?? []);
+        $picks = (array) ($data['competitor_price_picks'] ?? []);
         foreach ($urls as $shopId => $url) {
             $shopId = (int) $shopId;
             $url = is_string($url) ? trim($url) : '';
@@ -155,6 +158,7 @@ class ShopeeSettingsController extends Controller
                 'shopee_product_id' => (int) $product->id,
                 'shopee_shop_id' => (int) $shopId,
                 'url' => $url,
+                'price_pick' => in_array(($picks[$shopId] ?? null), ['low', 'high'], true) ? (string) $picks[$shopId] : 'low',
                 'is_enabled' => true,
             ]);
         }

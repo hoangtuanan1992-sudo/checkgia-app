@@ -1,0 +1,22 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('shopee_competitors', function (Blueprint $table) {
+            $table->string('price_pick', 10)->default('low')->after('url');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('shopee_competitors', function (Blueprint $table) {
+            $table->dropColumn('price_pick');
+        });
+    }
+};

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'shopee_product_id',
     'shopee_shop_id',
     'url',
+    'price_pick',
     'is_enabled',
     'price_adjustment',
     'last_price',
