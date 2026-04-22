@@ -251,11 +251,13 @@ async function scrapeTab(tabId, variantPath) {
 
         const t = document.title || "";
         const cleaned = t.replace(/\s+-\s+Shopee.*$/i, "").replace(/\s*\|\s*Shopee.*$/i, "").trim();
-        if (!cleaned || cleaned.toLowerCase().includes("shopee việt nam")) return null;
-        return cleaned;
+        if (cleaned && !cleaned.toLowerCase().includes("shopee việt nam")) return cleaned;
+        const rawTitle = String(t || "").trim();
+        if (rawTitle) return rawTitle.slice(0, 255);
+        return null;
       }
 
-      function getPriceFromShopeeRangeClass() {
+      function getPriceFromShopeeRangeClass(preferMax) {
         const selectors = [
           ".IZPeQz.B67UQ0", // Main current price (single or range)
           "._44qnta",      // Current price container
@@ -271,12 +273,41 @@ async function scrapeTab(tabId, variantPath) {
             if (txt) {
               const cands = extractPriceCandidates(txt);
               if (cands.length) {
-                  // Sort by value to get the minimum if it's a range
-                  return cands.sort((a, b) => a.value - b.value)[0].value;
+                  cands.sort((a, b) => a.value - b.value);
+                  return (preferMax ? cands[cands.length - 1] : cands[0]).value;
               }
             }
           }
         }
+        return null;
+      }
+
+      function getPriceTextFromShopeeRangeClass() {
+        const selectors = [
+          ".IZPeQz.B67UQ0",
+          "._44qnta",
+          ".pqm66d",
+          ".G27LRz",
+          "div[class*='product-briefing'] span[class*='price']",
+          "div[class*='product_details'] span[class*='price']"
+        ];
+        for (const s of selectors) {
+          const el = document.querySelector(s);
+          if (el) {
+            const txt = el.textContent ? el.textContent.trim() : "";
+            if (txt) return txt;
+          }
+        }
+        return "";
+      }
+
+      function getSinglePriceFromText(text) {
+        const t = String(text || "").trim();
+        if (!t) return null;
+        const cands = extractPriceCandidates(t).map((x) => x.value);
+        if (!cands.length) return null;
+        const uniq = Array.from(new Set(cands));
+        if (uniq.length === 1) return uniq[0];
         return null;
       }
 
@@ -406,26 +437,151 @@ async function scrapeTab(tabId, variantPath) {
         return null;
       }
 
-      async function fetchItemApi(variantPath) {
+      async function fetchItemApi(variantPath, uiVariantNames, uiVariantGroups) {
         try {
           const ids = parseShopeeIdsFromPath(location.pathname + location.search);
           if (!ids) return null;
 
-          const url = `/api/v4/item/get?shopid=${encodeURIComponent(ids.shopId)}&itemid=${encodeURIComponent(ids.itemId)}`;
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 10000);
+          const modelIdFromUrl = (() => {
+            try {
+              const sp = new URLSearchParams(location.search || "");
+              const extra = sp.get("extraParams");
+              if (!extra) return null;
+              const parsed = JSON.parse(extra);
+              const mid = parsed && parsed.display_model_id ? Number(parsed.display_model_id) : null;
+              return Number.isFinite(mid) ? mid : null;
+            } catch (e) {
+              return null;
+            }
+          })();
+
+          const baseV4 = `/api/v4/item/get?shopid=${encodeURIComponent(ids.shopId)}&itemid=${encodeURIComponent(ids.itemId)}`;
+          const baseV2 = `/api/v2/item/get?shopid=${encodeURIComponent(ids.shopId)}&itemid=${encodeURIComponent(ids.itemId)}`;
+          const urlSet = new Set();
+          const pushUrl = (u) => { if (u) urlSet.add(u); };
+          pushUrl(baseV4);
+          pushUrl(baseV2);
+          if (modelIdFromUrl) {
+            pushUrl(`${baseV4}&selected_model_id=${encodeURIComponent(String(modelIdFromUrl))}`);
+            pushUrl(`${baseV4}&modelid=${encodeURIComponent(String(modelIdFromUrl))}`);
+            pushUrl(`${baseV4}&display_model_id=${encodeURIComponent(String(modelIdFromUrl))}`);
+            pushUrl(`${baseV2}&selected_model_id=${encodeURIComponent(String(modelIdFromUrl))}`);
+            pushUrl(`${baseV2}&modelid=${encodeURIComponent(String(modelIdFromUrl))}`);
+            pushUrl(`${baseV2}&display_model_id=${encodeURIComponent(String(modelIdFromUrl))}`);
+          }
+          const urls = Array.from(urlSet);
+
+          const fetchJson = async (url) => {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 10000);
+            try {
+              const res = await fetch(url, {
+                credentials: "include",
+                signal: ctrl.signal,
+                headers: {
+                  "accept": "application/json",
+                  "x-api-source": "pc",
+                  "x-requested-with": "XMLHttpRequest"
+                },
+                referrer: location.href,
+                referrerPolicy: "strict-origin-when-cross-origin",
+              });
+              if (!res.ok) return null;
+              return await res.json().catch(() => null);
+            } catch (e) {
+              return null;
+            } finally {
+              clearTimeout(t);
+            }
+          };
+
+          let json = null;
           try {
-            const res = await fetch(url, { credentials: "include", signal: ctrl.signal });
-            if (!res.ok) return null;
-            const json = await res.json().catch(() => null);
-            const item = json && json.data && json.data.item ? json.data.item : null;
+            for (const u of urls) {
+              json = await fetchJson(u);
+              if (json) break;
+            }
+            const item =
+              (json && json.data && json.data.item ? json.data.item : null) ??
+              (json && json.item ? json.item : null) ??
+              (json && json.data && json.data.data && json.data.data.item ? json.data.data.item : null) ??
+              null;
             if (!item) return null;
 
             const name = item.name ? String(item.name).slice(0, 255) : null;
 
+            const normalizeTextLite = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+            const normalizeKey = (s) => {
+              let x = normalizeTextLite(s);
+              try {
+                x = x.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              } catch (e) {}
+              x = x.replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+              return x;
+            };
+
+            const pickModelId = (m) => {
+              if (!m || typeof m !== "object") return null;
+              const id =
+                (m.modelid != null ? m.modelid : null) ??
+                (m.model_id != null ? m.model_id : null) ??
+                (m.modelId != null ? m.modelId : null) ??
+                (m.id != null ? m.id : null) ??
+                null;
+              const n = Number(id);
+              return Number.isFinite(n) ? n : null;
+            };
+
+            const pickPriceValue = (v) => {
+              if (v == null) return null;
+              if (Array.isArray(v)) {
+                const nums = [];
+                for (const x of v) {
+                  const n = pickPriceValue(x);
+                  if (n != null) nums.push(n);
+                }
+                if (!nums.length) return null;
+                return nums.reduce((a, b) => (a > b ? a : b), nums[0]);
+              }
+              if (typeof v === "object") {
+                const candidates = [
+                  v.price_after_discount,
+                  v.price,
+                  v.price_min,
+                  v.price_max,
+                  v.price_before_discount,
+                  v.price_min_before_discount,
+                ];
+                for (const c of candidates) {
+                  const n = pickPriceValue(c);
+                  if (n != null) return n;
+                }
+                return null;
+              }
+              const n = Number(v);
+              return Number.isFinite(n) ? n : null;
+            };
+
+            const pickRawPriceFromModel = (m) => {
+              if (!m || typeof m !== "object") return null;
+              const candidates = [
+                m.price,
+                m.price_after_discount,
+                m.price_min,
+                m.price_max,
+                m.price_before_discount,
+                m.price_min_before_discount,
+              ];
+              for (const c of candidates) {
+                const n = pickPriceValue(c);
+                if (n != null) return n;
+              }
+              return null;
+            };
+
             const path = String(variantPath || "").trim();
             const parts = path ? path.split("-").map((x) => x.trim()).filter(Boolean) : [];
-            const idx = parts
+            const idxFromPath = parts
               .map((x) => {
                 const n = parseInt(x, 10);
                 if (!Number.isFinite(n) || n <= 0) return null;
@@ -434,31 +590,179 @@ async function scrapeTab(tabId, variantPath) {
               .filter((x) => x != null);
 
             const tierVars = Array.isArray(item.tier_variations) ? item.tier_variations : [];
-            const variantClickNames = [];
-            for (let i = 0; i < idx.length; i++) {
+
+            const idxFromGroups = (() => {
+              const groups = Array.isArray(uiVariantGroups) ? uiVariantGroups : [];
+              if (!path || !groups.length || !tierVars.length) return null;
+
+              const uiIdx = parts
+                .map((x) => {
+                  const n = parseInt(x, 10);
+                  if (!Number.isFinite(n) || n <= 0) return null;
+                  return n - 1;
+                })
+                .filter((x) => x != null);
+              if (!uiIdx.length) return null;
+
+              const groupOptions = groups.map((g) => {
+                const title = g && typeof g.title === "string" ? g.title : "";
+                const titleKey = normalizeKey(title);
+                const opts = Array.isArray(g && g.options) ? g.options : [];
+                const set = new Set(opts.map(normalizeKey).filter(Boolean));
+                return { titleKey, opts, set };
+              });
+
+              const tierOptions = tierVars.map((tv) => {
+                const name = tv && typeof tv.name === "string" ? tv.name : "";
+                const nameKey = normalizeKey(name);
+                const opts = tv && Array.isArray(tv.options) ? tv.options : [];
+                const set = new Set(opts.map(normalizeKey).filter(Boolean));
+                return { nameKey, opts, set };
+              });
+
+              const titleScore = (a, b) => {
+                if (!a || !b) return 0;
+                if (a === b) return 2000;
+                if (a.includes(b) || b.includes(a)) return 800;
+                return 0;
+              };
+
+              const pairs = [];
+              for (let gi = 0; gi < groupOptions.length; gi++) {
+                for (let ti = 0; ti < tierOptions.length; ti++) {
+                  let score = titleScore(groupOptions[gi].titleKey, tierOptions[ti].nameKey);
+                  for (const k of groupOptions[gi].set) {
+                    if (tierOptions[ti].set.has(k)) score++;
+                  }
+                  if (score > 0) pairs.push({ gi, ti, score });
+                }
+              }
+              pairs.sort((a, b) => b.score - a.score);
+
+              const groupToTier = new Array(groupOptions.length).fill(null);
+              const usedTier = new Set();
+              const usedGroup = new Set();
+              for (const p of pairs) {
+                if (usedTier.has(p.ti) || usedGroup.has(p.gi)) continue;
+                groupToTier[p.gi] = p.ti;
+                usedTier.add(p.ti);
+                usedGroup.add(p.gi);
+              }
+
+              const selectionByTier = new Array(tierVars.length).fill(null);
+              for (let gi = 0; gi < uiIdx.length && gi < groupOptions.length; gi++) {
+                const ti = groupToTier[gi];
+                if (ti == null) continue;
+                const k = uiIdx[gi];
+                const gOpts = groupOptions[gi].opts;
+                if (!Array.isArray(gOpts) || k < 0 || k >= gOpts.length) continue;
+                const wanted = normalizeKey(gOpts[k]);
+                if (!wanted) continue;
+                const tOpts = tierOptions[ti].opts;
+                let found = -1;
+                for (let j = 0; j < tOpts.length; j++) {
+                  const cur = normalizeKey(tOpts[j]);
+                  if (!cur) continue;
+                  if (cur === wanted || cur.includes(wanted) || wanted.includes(cur)) {
+                    found = j;
+                    break;
+                  }
+                }
+                if (found >= 0) selectionByTier[ti] = found;
+              }
+
+              return selectionByTier;
+            })();
+            const idxFromNames = [];
+            const uiNames = Array.isArray(uiVariantNames) ? uiVariantNames : [];
+            for (let i = 0; i < uiNames.length && i < tierVars.length; i++) {
+              const wanted = normalizeTextLite(uiNames[i]);
+              if (!wanted) continue;
               const tv = tierVars[i];
               const opts = tv && Array.isArray(tv.options) ? tv.options : [];
-              const opt = opts[idx[i]];
-              if (typeof opt === "string" && opt.trim()) {
-                variantClickNames.push(opt.trim());
+              const isNumber = /^\d+$/.test(wanted);
+              let found = -1;
+              for (let j = 0; j < opts.length; j++) {
+                const o = normalizeTextLite(opts[j]);
+                if (!o) continue;
+                if (isNumber) {
+                  if (o === wanted) { found = j; break; }
+                } else {
+                  if (o === wanted || o.includes(wanted) || wanted.includes(o)) { found = j; break; }
+                }
+              }
+              if (found >= 0) {
+                idxFromNames.push(found);
+              } else {
+                break;
+              }
+            }
+
+            const idx = Array.isArray(idxFromGroups) && idxFromGroups.some((x) => x != null)
+              ? idxFromGroups
+              : (idxFromNames.length ? idxFromNames : idxFromPath);
+
+            const variantClickNames = uiNames.length ? uiNames.map((x) => String(x || "").trim()).filter(Boolean) : [];
+            if (!variantClickNames.length) {
+              for (let i = 0; i < idx.length; i++) {
+                const tv = tierVars[i];
+                const opts = tv && Array.isArray(tv.options) ? tv.options : [];
+                const opt = opts[idx[i]];
+                if (typeof opt === "string" && opt.trim()) {
+                  variantClickNames.push(opt.trim());
+                }
               }
             }
 
             let usedVariantModel = false;
             let modelRawPrice = null;
-            if (idx.length) {
+            let modelTierIndex = null;
+            let usedModelId = null;
+            let variantIncomplete = false;
+            if (Array.isArray(idxFromGroups) && idxFromGroups.some((x) => x != null)) {
+              const required = tierVars
+                .map((tv, i) => ({ i, n: (tv && Array.isArray(tv.options) ? tv.options.length : 0) }))
+                .filter((x) => x.n > 1)
+                .map((x) => x.i);
+              variantIncomplete = required.some((ti) => idxFromGroups[ti] == null);
+            } else if (idx.length && tierVars.length && idx.length < tierVars.length) {
+              const remain = tierVars.slice(idx.length);
+              variantIncomplete = remain.some((tv) => Array.isArray(tv && tv.options ? tv.options : null) && (tv.options || []).length > 1);
+            }
+
+            if (modelIdFromUrl) {
+              const models = Array.isArray(item.models) ? item.models : [];
+              const picked = models.find((m) => pickModelId(m) === Number(modelIdFromUrl));
+              if (picked) {
+                const raw = pickRawPriceFromModel(picked);
+                if (raw != null) {
+                  usedVariantModel = true;
+                  modelRawPrice = raw;
+                  usedModelId = pickModelId(picked);
+                  modelTierIndex = Array.isArray(picked.tier_index) ? picked.tier_index.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x >= 0) : null;
+                }
+              }
+            } else if (idx.length && !variantIncomplete) {
               const models = Array.isArray(item.models) ? item.models : [];
               if (models.length) {
                 const candidates = models
                   .map((mm) => {
                     const ti = Array.isArray(mm.tier_index) ? mm.tier_index : [];
                     if (ti.length < idx.length) return null;
-                    for (let i = 0; i < idx.length; i++) {
-                      if (ti[i] !== idx[i]) return null;
+                    if (Array.isArray(idxFromGroups) && idxFromGroups.some((x) => x != null)) {
+                      for (let j = 0; j < idxFromGroups.length; j++) {
+                        if (idxFromGroups[j] == null) continue;
+                        if (Number(ti[j]) !== Number(idxFromGroups[j])) return null;
+                      }
+                    } else {
+                      for (let i = 0; i < idx.length; i++) {
+                        if (Number(ti[i]) !== Number(idx[i])) return null;
+                      }
                     }
                     return { mm, ti };
                   })
                   .filter(Boolean);
+
 
                 const lex = (a, b) => {
                   const al = a.ti.length;
@@ -474,13 +778,12 @@ async function scrapeTab(tabId, variantPath) {
 
                 const picked = candidates[0] ? candidates[0].mm : null;
                 if (picked) {
-                  const raw =
-                    picked.price != null ? picked.price :
-                      picked.price_before_discount != null ? picked.price_before_discount :
-                        null;
+                  const raw = pickRawPriceFromModel(picked);
                   if (raw != null) {
                     usedVariantModel = true;
                     modelRawPrice = raw;
+                    usedModelId = pickModelId(picked);
+                    modelTierIndex = Array.isArray(picked.tier_index) ? picked.tier_index.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x >= 0) : null;
                   }
                 }
               }
@@ -497,25 +800,28 @@ async function scrapeTab(tabId, variantPath) {
                       null);
 
             if (rawPrice == null) {
-              return { name, price: null, raw_text: "", used_variant_model: false, variant_click_names: variantClickNames };
+              return { name, price: null, raw_text: "", used_variant_model: false, used_model_id: usedModelId, model_tier_index: modelTierIndex, variant_click_names: variantClickNames, variant_incomplete: variantIncomplete, tier_count: tierVars.length };
             }
 
             let p = Number(rawPrice);
             if (!Number.isFinite(p) || p <= 0) {
-              return { name, price: null, raw_text: String(rawPrice), used_variant_model: usedVariantModel, variant_click_names: variantClickNames };
+              return { name, price: null, raw_text: String(rawPrice), used_variant_model: usedVariantModel, used_model_id: usedModelId, model_tier_index: modelTierIndex, variant_click_names: variantClickNames, variant_incomplete: variantIncomplete, tier_count: tierVars.length };
             }
 
-            // Smart normalization: Shopee prices are usually price * 100,000.
-            // In VN, prices are rarely below 1,000 VND.
-            if (p >= 1000000) {
-                p = p / 100000;
+            // Smart normalization:
+            // Shopee often returns raw prices multiplied (commonly *100000, sometimes *100).
+            // Keep it heuristic-based to avoid returning 11000000000 as 11,000,000,000đ.
+            if (p >= 1000000000) {
+              p = Math.round(p / 100000);
+            } else if (p >= 10000000) {
+              p = Math.round(p / 100);
+            } else if (p >= 1000000 && p % 100000 === 0) {
+              p = p / 100000;
             }
 
-            return { name, price: Math.trunc(p), raw_text: String(rawPrice), used_variant_model: usedVariantModel, variant_click_names: variantClickNames };
+            return { name, price: Math.trunc(p), raw_text: String(rawPrice), used_variant_model: usedVariantModel, used_model_id: usedModelId, model_tier_index: modelTierIndex, variant_click_names: variantClickNames, variant_incomplete: variantIncomplete, tier_count: tierVars.length };
           } catch (e) {
             return null;
-          } finally {
-            clearTimeout(t);
           }
         } catch (e) { 
           return null;
@@ -534,9 +840,20 @@ async function scrapeTab(tabId, variantPath) {
         return null;
       }
 
+      async function waitForName(maxMs) {
+        const deadline = Date.now() + maxMs;
+        while (Date.now() < deadline) {
+          const n = getName();
+          if (n) return n;
+          await sleep(500);
+        }
+        return getName();
+      }
+
       async function waitForPrice(maxMs, opts) {
         const deadline = Date.now() + maxMs;
         const variantMode = !!(opts && opts.variantMode);
+        const requireSingle = !!(opts && opts.requireSingle);
         while (Date.now() < deadline) {
           if (!variantMode) {
             const metaPrice = getPriceFromMeta();
@@ -546,8 +863,17 @@ async function scrapeTab(tabId, variantPath) {
             if (ldPrice != null) return ldPrice;
           }
 
-          const rangePrice = getPriceFromShopeeRangeClass();
-          if (rangePrice != null) return rangePrice;
+          const rangeText = getPriceTextFromShopeeRangeClass();
+          const isRangeText = /(\s-\s|–|—|đến|to)/i.test(rangeText);
+          const singleFromRangeText = getSinglePriceFromText(rangeText);
+          const isRange = variantMode && isRangeText && singleFromRangeText == null;
+          const rangePrice = getPriceFromShopeeRangeClass(false);
+          if (rangePrice != null && !isRange && (!requireSingle || singleFromRangeText != null)) return (singleFromRangeText != null ? singleFromRangeText : rangePrice);
+
+          if (variantMode && isRange) {
+            await sleep(450);
+            continue;
+          }
 
           const domPrice = getPriceFromDom();
           if (domPrice != null) return domPrice;
@@ -569,83 +895,443 @@ async function scrapeTab(tabId, variantPath) {
         } catch (e) {}
 
         const blockReason = detectBlock();
+
+        const modelIdFromUrl = (() => {
+          try {
+            const sp = new URLSearchParams(location.search || "");
+            const extra = sp.get("extraParams");
+            if (!extra) return null;
+            const parsed = JSON.parse(extra);
+            const mid = parsed && parsed.display_model_id ? Number(parsed.display_model_id) : null;
+            return Number.isFinite(mid) ? mid : null;
+          } catch (e) {
+            return null;
+          }
+        })();
+        const hasDisplayModelId = modelIdFromUrl != null;
+
+        const pickCapturedPrice = (() => {
+          const pickModelId = (m) => {
+            if (!m || typeof m !== "object") return null;
+            const id =
+              (m.modelid != null ? m.modelid : null) ??
+              (m.model_id != null ? m.model_id : null) ??
+              (m.modelId != null ? m.modelId : null) ??
+              (m.id != null ? m.id : null) ??
+              null;
+            const n = Number(id);
+            return Number.isFinite(n) ? n : null;
+          };
+          const pickPriceValue = (v) => {
+            if (v == null) return null;
+            if (Array.isArray(v)) {
+              const nums = [];
+              for (const x of v) {
+                const n = pickPriceValue(x);
+                if (n != null) nums.push(n);
+              }
+              if (!nums.length) return null;
+              return nums.reduce((a, b) => (a > b ? a : b), nums[0]);
+            }
+            if (typeof v === "object") {
+              const candidates = [
+                v.price_after_discount,
+                v.price,
+                v.price_min,
+                v.price_max,
+                v.price_before_discount,
+                v.price_min_before_discount,
+              ];
+              for (const c of candidates) {
+                const n = pickPriceValue(c);
+                if (n != null) return n;
+              }
+              return null;
+            }
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+          };
+          const pickRawPriceFromModel = (m) => {
+            if (!m || typeof m !== "object") return null;
+            const candidates = [
+              m.price_after_discount,
+              m.price,
+              m.price_min,
+              m.price_max,
+              m.price_before_discount,
+              m.price_min_before_discount,
+            ];
+            for (const c of candidates) {
+              const n = pickPriceValue(c);
+              if (n != null) return n;
+            }
+            return null;
+          };
+          const normalizeRaw = (raw) => {
+            let p = Number(raw);
+            if (!Number.isFinite(p) || p <= 0) return null;
+            if (p >= 1000000000) {
+              p = Math.round(p / 100000);
+            } else if (p >= 10000000) {
+              p = Math.round(p / 100);
+            } else if (p >= 1000000 && p % 100000 === 0) {
+              p = p / 100000;
+            }
+            return Math.trunc(p);
+          };
+          const extractItem = (json) => {
+            return (
+              (json && json.data && json.data.item ? json.data.item : null) ??
+              (json && json.item ? json.item : null) ??
+              (json && json.data && json.data.data && json.data.data.item ? json.data.data.item : null) ??
+              null
+            );
+          };
+          const getEntries = () => {
+            try {
+              const net = window.__checkgia && window.__checkgia.net ? window.__checkgia.net : null;
+              const arr = net && Array.isArray(net.entries) ? net.entries : [];
+              return arr.slice(-25);
+            } catch (e) {
+              return [];
+            }
+          };
+          return () => {
+            if (!hasDisplayModelId) return null;
+            const entries = getEntries();
+            for (let i = entries.length - 1; i >= 0; i--) {
+              const e = entries[i];
+              const item = extractItem(e && e.json ? e.json : null);
+              if (!item) continue;
+              const models = Array.isArray(item.models) ? item.models : [];
+              const picked = models.find((m) => pickModelId(m) === Number(modelIdFromUrl));
+              if (!picked) continue;
+              const raw = pickRawPriceFromModel(picked);
+              const price = normalizeRaw(raw);
+              if (price != null) {
+                return { price, name: item.name ? String(item.name).slice(0, 255) : null, raw_text: String(raw) };
+              }
+            }
+            return null;
+          };
+        })();
         
+        const captured = pickCapturedPrice();
+        if (captured && captured.price != null) {
+          return {
+            price: captured.price,
+            name: captured.name || await waitForName(8000),
+            raw_text: captured.raw_text || "",
+            block_reason: blockReason
+          };
+        }
+
+        function getButtonLabel(btn) {
+          if (!btn) return "";
+          const aria = btn.getAttribute ? (btn.getAttribute("aria-label") || "") : "";
+          const a = String(aria || "").trim();
+          if (a) return a;
+          const t = btn.textContent ? String(btn.textContent).trim() : "";
+          return t;
+        }
+
+        function parseVariantPathIndices(path) {
+          const s = String(path || "").trim();
+          if (!s) return [];
+          return s
+            .split("-")
+            .map((x) => x.trim())
+            .filter(Boolean)
+            .map((x) => {
+              const n = parseInt(x, 10);
+              if (!Number.isFinite(n) || n <= 0) return null;
+              return n - 1;
+            })
+            .filter((x) => x != null);
+        }
+
+        function getVariantSections() {
+          const sections = Array.from(document.querySelectorAll("section"));
+
+          const clean = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+          const isQtyLabel = (t) => {
+            const x = clean(t);
+            return x.includes("số lượng") || x.includes("quantity");
+          };
+
+          const candidates = [];
+          for (const sec of sections) {
+            const h2 = sec.querySelector("h2");
+            if (h2 && isQtyLabel(h2.textContent || "")) continue;
+
+            const btns = Array.from(sec.querySelectorAll("button.sApkZm, button[class*='selection-box']"))
+              .filter((b) => {
+                if (!b) return false;
+                const aria = clean(b.getAttribute("aria-label") || "");
+                if (aria === "increase" || aria === "decrease") return false;
+                if (b.closest(".shopee-input-quantity")) return false;
+                if (b.disabled) return false;
+                const ariaDisabled = b.getAttribute("aria-disabled");
+                if (ariaDisabled && ariaDisabled !== "false") return false;
+                return true;
+              });
+
+            if (btns.length >= 1) {
+              candidates.push({ sec, btns });
+            }
+          }
+
+          if (candidates.length) return candidates;
+
+          const wraps = Array.from(document.querySelectorAll("div"))
+            .filter((d) => d.querySelector("button.sApkZm, button[class*='selection-box']"));
+          for (const w of wraps) {
+            const btns = Array.from(w.querySelectorAll("button.sApkZm, button[class*='selection-box']"))
+              .filter((b) => {
+                if (!b) return false;
+                const aria = clean(b.getAttribute("aria-label") || "");
+                if (aria === "increase" || aria === "decrease") return false;
+                if (b.closest(".shopee-input-quantity")) return false;
+                if (b.disabled) return false;
+                const ariaDisabled = b.getAttribute("aria-disabled");
+                if (ariaDisabled && ariaDisabled !== "false") return false;
+                return true;
+              });
+            if (btns.length >= 1) {
+              candidates.push({ sec: w, btns });
+            }
+          }
+
+          return candidates;
+        }
+
+        async function waitForVariantGroupsForPath(path) {
+          const idx = parseVariantPathIndices(path);
+          const deadline = Date.now() + 12000;
+          let last = [];
+          while (Date.now() < deadline) {
+            const groups = getVariantSections();
+            last = groups;
+            if (!idx.length) return groups;
+            if (groups.length >= idx.length) {
+              let ok = true;
+              for (let i = 0; i < idx.length; i++) {
+                const k = idx[i];
+                const list = groups[i] && Array.isArray(groups[i].btns) ? groups[i].btns : [];
+                if (!(list.length && k < list.length)) {
+                  ok = false;
+                  break;
+                }
+              }
+              if (ok) return groups;
+            }
+            await sleep(250);
+          }
+          return last;
+        }
+
+        function buildUiVariantGroups(groups) {
+          const g = Array.isArray(groups) ? groups : [];
+          return g.map((x) => {
+            const titleEl = x && x.sec && x.sec.querySelector ? x.sec.querySelector("h2") : null;
+            const title = titleEl && titleEl.textContent ? String(titleEl.textContent).trim() : "";
+            const btns = x && Array.isArray(x.btns) ? x.btns : [];
+            const options = btns.map(getButtonLabel).filter((t) => String(t || "").trim() !== "");
+            return { title, options };
+          });
+        }
+
+        function isVariantSelected(btn) {
+          if (!btn) return false;
+          const cls = btn.classList ? Array.from(btn.classList).join(" ") : "";
+          if (cls.includes("selection-box-selected")) return true;
+          if (cls.includes("selected")) return true;
+          const ariaChecked = btn.getAttribute ? btn.getAttribute("aria-checked") : null;
+          if (ariaChecked === "true") return true;
+          const ariaPressed = btn.getAttribute ? btn.getAttribute("aria-pressed") : null;
+          if (ariaPressed === "true") return true;
+          return false;
+        }
+
+        function smartClick(el) {
+          if (!el) return;
+          try { el.focus && el.focus(); } catch (e) {}
+          const rects = el.getClientRects && el.getClientRects();
+          const rect = rects && rects.length ? rects[0] : null;
+          const clientX = rect ? Math.floor(rect.left + Math.min(10, rect.width / 2)) : 1;
+          const clientY = rect ? Math.floor(rect.top + Math.min(10, rect.height / 2)) : 1;
+          try { el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerType: "mouse", clientX, clientY })); } catch (e) {}
+          try { el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, clientX, clientY })); } catch (e) {}
+          try { el.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, pointerType: "mouse", clientX, clientY })); } catch (e) {}
+          try { el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, clientX, clientY })); } catch (e) {}
+          try { el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX, clientY })); } catch (e) {}
+          try { el.click(); } catch (e) {}
+        }
+
+        async function collectVariantNamesByIndex(path) {
+          const idx = parseVariantPathIndices(path);
+          if (!idx.length) return [];
+          const names = [];
+          const deadline = Date.now() + 12000;
+          for (let i = 0; i < idx.length; i++) {
+            const k = idx[i];
+            if (k == null || k < 0) continue;
+            let btn = null;
+            while (Date.now() < deadline) {
+              const groups = getVariantSections();
+              const group = groups[i];
+              const list = group && Array.isArray(group.btns) ? group.btns : [];
+              if (list.length && k < list.length) {
+                btn = list[k];
+                break;
+              }
+              await sleep(250);
+            }
+            if (!btn) break;
+            const label = getButtonLabel(btn);
+            if (!label) break;
+            names.push(label);
+          }
+          return names;
+        }
+
+        const groupsForPath = variantPath ? await waitForVariantGroupsForPath(variantPath) : [];
+        const uiVariantGroups = variantPath ? buildUiVariantGroups(groupsForPath) : [];
+        const uiVariantNames = variantPath ? await collectVariantNamesByIndex(variantPath) : [];
+
         // Try API first
-        const api = await fetchItemApi(variantPath);
-        if (api && api.price != null && (!variantPath || api.used_variant_model)) {
+        const api = await fetchItemApi(variantPath, uiVariantNames, uiVariantGroups);
+        if (!variantPath && api && api.price != null && (!hasDisplayModelId || api.used_variant_model)) {
           return { price: api.price, name: api.name ?? getName(), raw_text: api.raw_text || "", block_reason: blockReason };
         }
 
-        function normalizeText(s) {
-          return String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
-        }
+        async function applyVariantClicksByIndex(path) {
+          const idx = parseVariantPathIndices(path);
+          if (!idx.length) return false;
 
-        function findClickableByText(text) {
-          const target = normalizeText(text);
-          if (!target) return null;
-          const isNumber = /^\d+$/.test(target);
-          const roots = [
-            document.querySelector('div[class*="product-briefing"]'),
-            document.querySelector('div[class*="product"]'),
-            document.body
-          ].filter(Boolean);
-          for (const root of roots) {
-            const els = Array.from(root.querySelectorAll('button,[role="button"],[role="radio"],a'));
-            const hit = els.find((el) => {
-              if (!el) return false;
-              if (el.disabled) return false;
-              if (!el.getClientRects || el.getClientRects().length === 0) return false;
-              const aria = normalizeText(el.getAttribute && el.getAttribute("aria-label") ? el.getAttribute("aria-label") : "");
-              if (aria) {
-                if (aria === target) return true;
-                if (!isNumber && aria.includes(target)) return true;
+          let clickedAny = false;
+          const deadline = Date.now() + 12000;
+          for (let i = 0; i < idx.length; i++) {
+            const k = idx[i];
+            if (k == null || k < 0) continue;
+
+            let el = null;
+            while (Date.now() < deadline) {
+              const groups = getVariantSections();
+              const group = groups[i];
+              const list = group && Array.isArray(group.btns) ? group.btns : [];
+              if (list.length && k < list.length) {
+                el = list[k];
+                break;
               }
-              const t = normalizeText(el.textContent || "");
-              if (t === target) return true;
-              if (!isNumber && t.includes(target)) return true;
-              return false;
-            });
-            if (hit) return hit;
-          }
-          return null;
-        }
-
-        async function applyVariantClicks(names) {
-          const list = Array.isArray(names) ? names : [];
-          for (const nm of list) {
-            const el = findClickableByText(nm);
-            if (!el) continue;
-            try { el.scrollIntoView({ block: "center", inline: "center" }); } catch (e) {}
-            try { el.click(); } catch (e) {
-              try { el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })); } catch (e2) {}
+              await sleep(250);
             }
-            await sleep(Math.floor(Math.random() * 400) + 450);
+            if (!el) continue;
+
+            clickedAny = true;
+            try { el.scrollIntoView({ block: "center", inline: "center" }); } catch (e) {}
+            smartClick(el);
+            await sleep(Math.floor(Math.random() * 350) + 350);
+            if (!isVariantSelected(el)) {
+              smartClick(el);
+              await sleep(Math.floor(Math.random() * 350) + 350);
+            }
           }
+
+          return clickedAny;
         }
 
-        if (variantPath && api && Array.isArray(api.variant_click_names) && api.variant_click_names.length) {
-          await applyVariantClicks(api.variant_click_names);
-          await sleep(Math.floor(Math.random() * 500) + 600);
-          const priceAfter = await waitForPrice(15000, { variantMode: true });
-          if (priceAfter != null) {
-            return {
-              price: priceAfter,
-              name: (api && api.name) ? api.name : getName(),
-              raw_text: api && api.raw_text ? String(api.raw_text) : "",
-              block_reason: blockReason
-            };
+        const variantIncompleteReason = (variantPath && api && api.variant_incomplete)
+          ? `Chưa chọn đủ biến thể. Sản phẩm có ${api.tier_count || 0} nhóm biến thể, bạn nhập ${String(variantPath).split('-').filter(Boolean).length}.`
+          : "";
+
+        async function applyVariantClicksByTierIndex(tierIndex) {
+          const idx = Array.isArray(tierIndex) ? tierIndex.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x >= 0) : [];
+          if (!idx.length) return false;
+
+          let clickedAny = false;
+          const deadline = Date.now() + 12000;
+          for (let i = 0; i < idx.length; i++) {
+            const k = idx[i];
+            if (k == null || k < 0) continue;
+
+            let el = null;
+            while (Date.now() < deadline) {
+              const groups = getVariantSections();
+              const group = groups[i];
+              const list = group && Array.isArray(group.btns) ? group.btns : [];
+              if (list.length && k < list.length) {
+                el = list[k];
+                break;
+              }
+              await sleep(250);
+            }
+            if (!el) continue;
+
+            clickedAny = true;
+            try { el.scrollIntoView({ block: "center", inline: "center" }); } catch (e) {}
+            smartClick(el);
+            await sleep(Math.floor(Math.random() * 350) + 350);
+            if (!isVariantSelected(el)) {
+              smartClick(el);
+              await sleep(Math.floor(Math.random() * 350) + 350);
+            }
+          }
+
+          return clickedAny;
+        }
+
+        const apiTierIndex = api && Array.isArray(api.model_tier_index) ? api.model_tier_index : null;
+        const apiModelId = api && api.used_model_id != null ? api.used_model_id : null;
+        if (apiTierIndex && apiTierIndex.length) {
+          const didClick = await applyVariantClicksByTierIndex(apiTierIndex);
+          if (didClick) {
+            await sleep(Math.floor(Math.random() * 500) + 600);
+            const priceAfter = await waitForPrice(20000, { variantMode: true, requireSingle: true });
+            if (priceAfter != null) {
+              return {
+                price: priceAfter,
+                name: (api && api.name) ? api.name : await waitForName(8000),
+                raw_text: api && api.raw_text ? String(api.raw_text) : "",
+                block_reason: blockReason
+              };
+            }
+          }
+          if (api && api.price != null && api.used_variant_model) {
+            return { price: api.price, name: api.name ?? getName(), raw_text: api.raw_text || "", block_reason: blockReason };
+          }
+          return { price: null, name: (api && api.name) ? api.name : getName(), raw_text: api && api.raw_text ? String(api.raw_text) : "", block_reason: blockReason || `Không lấy được giá theo model_id ${String(apiModelId || "")}` };
+        }
+
+        if (variantPath && api && api.price != null && api.used_variant_model) {
+          return { price: api.price, name: api.name ?? getName(), raw_text: api.raw_text || "", block_reason: blockReason };
+        }
+
+        if (variantPath) {
+          const didClick = await applyVariantClicksByIndex(variantPath);
+          if (didClick) {
+            await sleep(Math.floor(Math.random() * 500) + 600);
+            const priceAfter = await waitForPrice(20000, { variantMode: true, requireSingle: true });
+            if (priceAfter != null) {
+              return {
+                price: priceAfter,
+                name: (api && api.name) ? api.name : await waitForName(8000),
+                raw_text: api && api.raw_text ? String(api.raw_text) : "",
+                block_reason: blockReason
+              };
+            }
           }
         }
 
         // If API fails, wait for DOM to render (up to 15 seconds)
-        const price = await waitForPrice(15000, { variantMode: !!variantPath });
-        const name = (api && api.name) ? api.name : getName();
+        const price = await waitForPrice(25000, { variantMode: !!variantPath || hasDisplayModelId, requireSingle: hasDisplayModelId || !!variantPath });
+        const name = (api && api.name) ? api.name : await waitForName(8000);
         
         return { 
           price, 
           name, 
           raw_text: price != null ? String(price) : (api && api.raw_text ? api.raw_text : ""), 
-          block_reason: blockReason 
+          block_reason: blockReason || variantIncompleteReason
         };
       })();
     }
@@ -654,20 +1340,222 @@ async function scrapeTab(tabId, variantPath) {
   return result || null;
 }
 
+async function readCapturedModelPrice(tabId, url) {
+  const u = String(url || "");
+  const m = u.match(/"display_model_id"%3A(\d+)/i) || u.match(/display_model_id(?:%22)?%3A(\d+)/i);
+  const m2 = u.match(/display_model_id[=:](\d+)/i);
+  const modelId = m ? Number(m[1]) : (m2 ? Number(m2[1]) : null);
+  if (!Number.isFinite(modelId) || modelId <= 0) return null;
+
+  const [{ result }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: "MAIN",
+    args: [modelId],
+    func: async (modelId) => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const pickModelId = (m) => {
+        if (!m || typeof m !== "object") return null;
+        const id =
+          (m.modelid != null ? m.modelid : null) ??
+          (m.model_id != null ? m.model_id : null) ??
+          (m.modelId != null ? m.modelId : null) ??
+          (m.id != null ? m.id : null) ??
+          null;
+        const n = Number(id);
+        return Number.isFinite(n) ? n : null;
+      };
+      const pickPriceValue = (v) => {
+        if (v == null) return null;
+        if (Array.isArray(v)) {
+          const nums = [];
+          for (const x of v) {
+            const n = pickPriceValue(x);
+            if (n != null) nums.push(n);
+          }
+          if (!nums.length) return null;
+          return nums.reduce((a, b) => (a > b ? a : b), nums[0]);
+        }
+        if (typeof v === "object") {
+          const candidates = [
+            v.price_after_discount,
+            v.price,
+            v.price_min,
+            v.price_max,
+            v.price_before_discount,
+            v.price_min_before_discount,
+          ];
+          for (const c of candidates) {
+            const n = pickPriceValue(c);
+            if (n != null) return n;
+          }
+          return null;
+        }
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      };
+      const pickRawPriceFromModel = (m) => {
+        if (!m || typeof m !== "object") return null;
+        const candidates = [
+          m.price_after_discount,
+          m.price,
+          m.price_min,
+          m.price_max,
+          m.price_before_discount,
+          m.price_min_before_discount,
+        ];
+        for (const c of candidates) {
+          const n = pickPriceValue(c);
+          if (n != null) return n;
+        }
+        return null;
+      };
+      const normalizeRaw = (raw) => {
+        let p = Number(raw);
+        if (!Number.isFinite(p) || p <= 0) return null;
+        if (p >= 1000000000) {
+          p = Math.round(p / 100000);
+        } else if (p >= 10000000) {
+          p = Math.round(p / 100);
+        } else if (p >= 1000000 && p % 100000 === 0) {
+          p = p / 100000;
+        }
+        return Math.trunc(p);
+      };
+      const extractItem = (json) => {
+        return (
+          (json && json.data && json.data.item ? json.data.item : null) ??
+          (json && json.item ? json.item : null) ??
+          (json && json.data && json.data.data && json.data.data.item ? json.data.data.item : null) ??
+          null
+        );
+      };
+
+      const deadline = Date.now() + 12000;
+      while (Date.now() < deadline) {
+        try {
+          const net = window.__checkgia && window.__checkgia.net ? window.__checkgia.net : null;
+          const entries = net && Array.isArray(net.entries) ? net.entries.slice(-25) : [];
+          for (let i = entries.length - 1; i >= 0; i--) {
+            const item = extractItem(entries[i] && entries[i].json ? entries[i].json : null);
+            if (!item) continue;
+            const models = Array.isArray(item.models) ? item.models : [];
+            const picked = models.find((m) => pickModelId(m) === Number(modelId));
+            if (!picked) continue;
+            const raw = pickRawPriceFromModel(picked);
+            const price = normalizeRaw(raw);
+            if (price != null) {
+              return {
+                price,
+                name: item.name ? String(item.name).slice(0, 255) : null,
+                raw_text: raw != null ? String(raw) : ""
+              };
+            }
+          }
+        } catch (e) {}
+        await sleep(300);
+      }
+      return null;
+    }
+  });
+
+  return result || null;
+}
+
 async function openAndScrape(url, variantPath) {
   try {
-    // Create tab as active and keep it focused
-    const tab = await chrome.tabs.create({ url, active: true });
+    const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+    const isTabBusyError = (e) => {
+      const msg = String(e && e.message ? e.message : e || "");
+      return /tabs cannot be edited right now/i.test(msg) || /dragging a tab/i.test(msg);
+    };
+    const withRetry = async (fn, attempts = 12, baseDelayMs = 200) => {
+      let lastErr = null;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return await fn();
+        } catch (e) {
+          lastErr = e;
+          if (!isTabBusyError(e)) throw e;
+          await sleepMs(baseDelayMs + i * baseDelayMs);
+        }
+      }
+      if (lastErr) throw lastErr;
+      return null;
+    };
+
+    const needsVariant = !!(variantPath || (typeof url === "string" && url.includes("extraParams=") && url.includes("display_model_id")));
+    const tab = await withRetry(() => chrome.tabs.create({ url, active: true }));
     const tabId = tab.id;
     if (!tabId) return null;
 
-    // Persistently spoof visibility and focus in the page's MAIN execution world
-    try {
+    const injectMainWorldHelpers = async () => {
       await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
-        func: () => {
+        args: [needsVariant],
+        func: (needsVariant) => {
           try {
+            if (!window.__checkgia) window.__checkgia = {};
+            if (!window.__checkgia.net) {
+              window.__checkgia.net = { entries: [], max: 25 };
+
+              const shouldCapture = (u) => {
+                const s = String(u || "");
+                return s.includes("/api/") && s.includes("/item/") && s.includes("/get");
+              };
+              const pushEntry = (url, json) => {
+                try {
+                  const net = window.__checkgia.net;
+                  const arr = Array.isArray(net.entries) ? net.entries : [];
+                  arr.push({ url: String(url || ""), ts: Date.now(), json });
+                  while (arr.length > (net.max || 25)) arr.shift();
+                  net.entries = arr;
+                } catch (e) {}
+              };
+
+              try {
+                const origFetch = window.fetch;
+                if (typeof origFetch === "function") {
+                  window.fetch = async function (...args) {
+                    const res = await origFetch.apply(this, args);
+                    try {
+                      const u = (args && args[0]) ? (typeof args[0] === "string" ? args[0] : (args[0] && args[0].url ? args[0].url : "")) : "";
+                      if (shouldCapture(u)) {
+                        const cloned = res.clone();
+                        cloned.json().then((j) => pushEntry(u, j)).catch(() => {});
+                      }
+                    } catch (e) {}
+                    return res;
+                  };
+                }
+              } catch (e) {}
+
+              try {
+                const origOpen = XMLHttpRequest.prototype.open;
+                const origSend = XMLHttpRequest.prototype.send;
+                XMLHttpRequest.prototype.open = function (method, url) {
+                  try { this.__checkgia_url = url; } catch (e) {}
+                  return origOpen.apply(this, arguments);
+                };
+                XMLHttpRequest.prototype.send = function () {
+                  try {
+                    this.addEventListener("load", () => {
+                      try {
+                        const u = this.__checkgia_url || "";
+                        if (!shouldCapture(u)) return;
+                        const txt = this.responseText;
+                        if (!txt || typeof txt !== "string") return;
+                        if (txt[0] !== "{" && txt[0] !== "[") return;
+                        const j = JSON.parse(txt);
+                        pushEntry(u, j);
+                      } catch (e) {}
+                    });
+                  } catch (e) {}
+                  return origSend.apply(this, arguments);
+                };
+              } catch (e) {}
+            }
+
             // Force visibility state
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible', configurable: true });
             Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
@@ -686,21 +1574,23 @@ async function openAndScrape(url, variantPath) {
             const observer = new MutationObserver(hideMedia);
             observer.observe(document.body, { childList: true, subtree: true });
 
-            // Simulate human-like scrolling
-            const scrollInterval = setInterval(() => {
-              const scrollAmount = Math.floor(Math.random() * 300) + 100;
-              window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
-              if (window.innerHeight + window.scrollY >= document.body.offsetHeight) {
-                clearInterval(scrollInterval);
-              }
-            }, Math.random() * 2000 + 1000);
-
-            // Clear interval after some time
-            setTimeout(() => clearInterval(scrollInterval), 15000);
+            if (!needsVariant) {
+              const scrollInterval = setInterval(() => {
+                const scrollAmount = Math.floor(Math.random() * 140) + 60;
+                window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+                if (window.innerHeight + window.scrollY >= document.body.offsetHeight) {
+                  clearInterval(scrollInterval);
+                }
+              }, Math.random() * 2500 + 1400);
+              setTimeout(() => clearInterval(scrollInterval), 12000);
+            }
           } catch (e) {}
         }
       });
-    } catch (e) {}
+    };
+
+    // Try once early (best-effort), then re-inject after page load to ensure hook is active.
+    try { await withRetry(() => injectMainWorldHelpers(), 3, 150); } catch (e) {}
 
     // Wait for tab to complete loading
     await new Promise((resolve) => {
@@ -716,8 +1606,18 @@ async function openAndScrape(url, variantPath) {
       chrome.tabs.onUpdated.addListener(onUpdated);
     });
 
+    try { await withRetry(() => injectMainWorldHelpers(), 5, 200); } catch (e) {}
+
     // Random wait before scraping (1-3 seconds)
     await new Promise(r => setTimeout(r, Math.random() * 2000 + 1000));
+
+    const captured = await readCapturedModelPrice(tabId, url).catch(() => null);
+    if (captured && captured.price != null) {
+      const stayTime = Math.random() * 2000 + 800;
+      await new Promise(r => setTimeout(r, stayTime));
+      await withRetry(() => chrome.tabs.remove(tabId)).catch(() => {});
+      return { price: captured.price, name: captured.name, raw_text: captured.raw_text, block_reason: "" };
+    }
 
     // Scrape the tab
     const res = await scrapeTab(tabId, variantPath);
@@ -727,7 +1627,7 @@ async function openAndScrape(url, variantPath) {
     await new Promise(r => setTimeout(r, stayTime));
 
     // Close the tab
-    await chrome.tabs.remove(tabId).catch(() => {});
+    await withRetry(() => chrome.tabs.remove(tabId)).catch(() => {});
     
     return res;
   } catch (e) {
