@@ -104,11 +104,11 @@ function pickFromLdJson(json) {
   return null;
 }
 
-async function scrapeTab(tabId, variantPath) {
+async function scrapeTab(tabId, variantPath, preferMax) {
   const [{ result }] = await chrome.scripting.executeScript({
     target: { tabId },
-    args: [variantPath || null],
-    func: (variantPath) => {
+    args: [variantPath || null, !!preferMax],
+    func: (variantPath, preferMax) => {
       function normalizePriceNumber(text) {
         if (text == null || text === "") return null;
         let s = String(text).trim();
@@ -178,7 +178,7 @@ async function scrapeTab(tabId, variantPath) {
         return out;
       }
 
-      function pickBestCandidate(cands) {
+      function pickBestCandidate(cands, preferMax) {
         if (!cands.length) return null;
         const counts = new Map();
         for (const c of cands) {
@@ -203,14 +203,13 @@ async function scrapeTab(tabId, variantPath) {
           .sort((a, b) => {
             if (b.score !== a.score) return b.score - a.score;
             if (b.count !== a.count) return b.count - a.count;
-            // Prefer the LOWER price (usually the discounted one) if scores are tied
-            return a.value - b.value;
+            return preferMax ? (b.value - a.value) : (a.value - b.value);
           });
 
         return scored[0];
       }
 
-      function pickFromLdJson(json) {
+      function pickFromLdJson(json, preferMax) {
         if (!json) return null;
         const j = Array.isArray(json) ? json : [json];
         for (const obj of j) {
@@ -218,7 +217,7 @@ async function scrapeTab(tabId, variantPath) {
           const offers = obj.offers || obj.Offers;
           if (!offers) continue;
           const o = Array.isArray(offers) ? offers[0] : offers;
-          const price = o && (o.price || o.lowPrice || o.highPrice);
+          const price = o && (o.price || (preferMax ? o.highPrice : o.lowPrice) || o.lowPrice || o.highPrice);
           if (price != null) {
             const n = normalizePriceNumber(price);
             if (n != null) return n;
@@ -332,7 +331,7 @@ async function scrapeTab(tabId, variantPath) {
           const txt = s.textContent || "";
           try {
             const json = JSON.parse(txt);
-            const n = pickFromLdJson(json);
+            const n = pickFromLdJson(json, preferMax);
             if (n != null) return n;
           } catch (e) {
           }
@@ -394,7 +393,7 @@ async function scrapeTab(tabId, variantPath) {
             }
           }
         }
-        const best = pickBestCandidate(candidates);
+        const best = pickBestCandidate(candidates, preferMax);
         return best ? best.value : null;
       }
 
@@ -419,7 +418,7 @@ async function scrapeTab(tabId, variantPath) {
             candidates.push(...cands);
         }
         
-        const best = pickBestCandidate(candidates);
+        const best = pickBestCandidate(candidates, preferMax);
         return best ? best.value : null;
       }
 
@@ -877,7 +876,7 @@ async function scrapeTab(tabId, variantPath) {
           const isRangeText = /(\s-\s|–|—|đến|to)/i.test(rangeText);
           const singleFromRangeText = getSinglePriceFromText(rangeText);
           const isRange = variantMode && isRangeText && singleFromRangeText == null;
-          const rangePrice = getPriceFromShopeeRangeClass(false);
+          const rangePrice = getPriceFromShopeeRangeClass(!!preferMax);
           if (rangePrice != null && !isRange && (!requireSingle || singleFromRangeText != null)) return (singleFromRangeText != null ? singleFromRangeText : rangePrice);
 
           if (variantMode && isRange) {
@@ -1634,7 +1633,7 @@ async function readDirectModelPrice(tabId, url) {
   }
 }
 
-async function openAndScrape(url, variantPath) {
+async function openAndScrape(url, variantPath, pricePick) {
   try {
     const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
     const isRetryableError = (e) => {
@@ -1660,6 +1659,7 @@ async function openAndScrape(url, variantPath) {
       return null;
     };
 
+    const preferMax = String(pricePick || "low").toLowerCase() === "high";
     const needsVariant = !!(variantPath || (typeof url === "string" && url.includes("extraParams=") && url.includes("display_model_id")));
     const tab = await withRetry(() => chrome.tabs.create({ url, active: true }));
     const tabId = tab.id;
@@ -1805,7 +1805,7 @@ async function openAndScrape(url, variantPath) {
     }
 
     // Scrape the tab
-    const res = await scrapeTab(tabId, variantPath);
+    const res = await scrapeTab(tabId, variantPath, preferMax);
     
     // Random "stay time" after scraping (3-7 seconds) to simulate reading
     const stayTime = Math.random() * 4000 + 3000;
@@ -1903,7 +1903,7 @@ async function pollOnce() {
   }
 
   await chrome.storage.local.set({ lastTaskUrl: task.url });
-  const scrape = await openAndScrape(task.url, null).catch((e) => {
+  const scrape = await openAndScrape(task.url, null, task.price_pick || "low").catch((e) => {
     setLastError(e);
     return null;
   });

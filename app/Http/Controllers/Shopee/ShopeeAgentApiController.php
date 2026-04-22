@@ -129,7 +129,7 @@ class ShopeeAgentApiController extends Controller
                     $q->where('user_id', (int) $agent->assigned_user_id);
                 }
             })
-            ->with(['product:id,user_id']);
+            ->with(['product:id,user_id,price_pick']);
 
         $competitor = $competitorQuery
             ->orderByRaw('last_scraped_at is null desc')
@@ -148,6 +148,7 @@ class ShopeeAgentApiController extends Controller
                     'product_id' => (int) $product->id,
                     'user_id' => (int) $product->user_id,
                     'url' => (string) $product->own_url,
+                    'price_pick' => (string) ($product->price_pick ?: 'low'),
                 ];
             } else {
                 $task = [
@@ -156,6 +157,7 @@ class ShopeeAgentApiController extends Controller
                     'product_id' => (int) $competitor->shopee_product_id,
                     'user_id' => (int) ($competitor->product?->user_id ?? 0),
                     'url' => (string) $competitor->url,
+                    'price_pick' => (string) (($competitor->product?->price_pick ?: 'low')),
                 ];
             }
         } elseif ($competitor) {
@@ -165,6 +167,7 @@ class ShopeeAgentApiController extends Controller
                 'product_id' => (int) $competitor->shopee_product_id,
                 'user_id' => (int) ($competitor->product?->user_id ?? 0),
                 'url' => (string) $competitor->url,
+                'price_pick' => (string) (($competitor->product?->price_pick ?: 'low')),
             ];
         } elseif ($product) {
             $task = [
@@ -172,6 +175,7 @@ class ShopeeAgentApiController extends Controller
                 'product_id' => (int) $product->id,
                 'user_id' => (int) $product->user_id,
                 'url' => (string) $product->own_url,
+                'price_pick' => (string) ($product->price_pick ?: 'low'),
             ];
         }
 

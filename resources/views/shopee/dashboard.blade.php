@@ -36,6 +36,18 @@
                             <div style="display:grid;grid-template-columns:1fr;gap:10px">
                                 <input class="input" name="own_url" type="url" placeholder="https://shopee.vn/..." value="{{ old('own_url') }}" required>
                             </div>
+                            <div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+                                <div class="hint" style="margin:0">Lấy theo:</div>
+                                @php($pp = old('price_pick', 'low'))
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                                    <input type="radio" name="price_pick" value="low" @checked($pp === 'low')>
+                                    <span>Giá thấp</span>
+                                </label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                                    <input type="radio" name="price_pick" value="high" @checked($pp === 'high')>
+                                    <span>Giá cao</span>
+                                </label>
+                            </div>
                         </div>
 
                         @if($shops->isNotEmpty())

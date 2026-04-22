@@ -127,12 +127,14 @@ class ShopeeSettingsController extends Controller
 
         $data = $request->validate([
             'own_url' => ['required', 'url', 'max:2048'],
+            'price_pick' => ['nullable', 'string', 'in:low,high'],
             'competitor_urls' => ['nullable', 'array'],
         ]);
 
         $product = ShopeeProduct::create([
             'user_id' => $ownerId,
             'own_url' => trim((string) $data['own_url']),
+            'price_pick' => (string) ($data['price_pick'] ?? 'low'),
             'is_enabled' => true,
         ]);
 
