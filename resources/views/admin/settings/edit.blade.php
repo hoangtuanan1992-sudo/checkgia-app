@@ -122,6 +122,35 @@
                         </div>
                     </div>
 
+                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Check giá website</h2>
+                            <p class="card-sub">Giới hạn tải để tránh treo hosting</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+                                <div class="field" style="margin-top:0">
+                                    <label class="label" for="website_scrape_batch_per_minute">Sản phẩm/phút</label>
+                                    <input class="input" id="website_scrape_batch_per_minute" name="website_scrape_batch_per_minute" type="number" min="1" max="1000" value="{{ old('website_scrape_batch_per_minute', $setting->website_scrape_batch_per_minute ?? 40) }}">
+                                    @error('website_scrape_batch_per_minute')<div class="error">{{ $message }}</div>@enderror
+                                    <div class="hint" style="margin-top:6px">Khuyến nghị 40–80.</div>
+                                </div>
+                                <div class="field" style="margin-top:0">
+                                    <label class="label" for="website_scrape_concurrency">Concurrency</label>
+                                    <input class="input" id="website_scrape_concurrency" name="website_scrape_concurrency" type="number" min="1" max="50" value="{{ old('website_scrape_concurrency', $setting->website_scrape_concurrency ?? 10) }}">
+                                    @error('website_scrape_concurrency')<div class="error">{{ $message }}</div>@enderror
+                                    <div class="hint" style="margin-top:6px">Số kết nối tải HTML song song.</div>
+                                </div>
+                                <div class="field" style="margin-top:0">
+                                    <label class="label" for="website_scrape_timeout_seconds">Timeout (giây)</label>
+                                    <input class="input" id="website_scrape_timeout_seconds" name="website_scrape_timeout_seconds" type="number" min="3" max="60" value="{{ old('website_scrape_timeout_seconds', $setting->website_scrape_timeout_seconds ?? 7) }}">
+                                    @error('website_scrape_timeout_seconds')<div class="error">{{ $message }}</div>@enderror
+                                    <div class="hint" style="margin-top:6px">Khuyến nghị 7–15.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="actions" style="justify-content:flex-end">
                         <button class="btn" type="submit">Lưu</button>
                     </div>

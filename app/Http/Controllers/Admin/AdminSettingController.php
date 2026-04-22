@@ -37,6 +37,9 @@ class AdminSettingController extends Controller
             'mail_from_address' => ['nullable', 'email', 'max:255'],
             'mail_from_name' => ['nullable', 'string', 'max:255'],
             'demo_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'owner')->whereNull('parent_user_id')],
+            'website_scrape_batch_per_minute' => ['nullable', 'integer', 'min:1', 'max:1000'],
+            'website_scrape_concurrency' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'website_scrape_timeout_seconds' => ['nullable', 'integer', 'min:3', 'max:60'],
         ]);
 
         $setting = AppSetting::current() ?? new AppSetting;
@@ -53,6 +56,18 @@ class AdminSettingController extends Controller
 
         if (array_key_exists('demo_user_id', $data) && (string) $data['demo_user_id'] === '') {
             $data['demo_user_id'] = null;
+        }
+
+        if (array_key_exists('website_scrape_batch_per_minute', $data) && (string) $data['website_scrape_batch_per_minute'] === '') {
+            $data['website_scrape_batch_per_minute'] = null;
+        }
+
+        if (array_key_exists('website_scrape_concurrency', $data) && (string) $data['website_scrape_concurrency'] === '') {
+            $data['website_scrape_concurrency'] = null;
+        }
+
+        if (array_key_exists('website_scrape_timeout_seconds', $data) && (string) $data['website_scrape_timeout_seconds'] === '') {
+            $data['website_scrape_timeout_seconds'] = null;
         }
 
         $setting->fill($data);

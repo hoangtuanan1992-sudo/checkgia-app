@@ -2,21 +2,78 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 class PriceScraper
 {
-    public function fetchHtml(string $url): string
+    public int $timeoutSeconds;
+
+    public int $connectTimeoutSeconds;
+
+    public function __construct(?int $timeoutSeconds = null, ?int $connectTimeoutSeconds = null)
     {
-        $response = Http::withHeaders([
+        $this->timeoutSeconds = max(1, (int) ($timeoutSeconds ?? 7));
+        $this->connectTimeoutSeconds = max(1, (int) ($connectTimeoutSeconds ?? 7));
+    }
+
+    private function pendingRequest()
+    {
+        return Http::withHeaders([
             'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
             'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language' => 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-        ])->timeout(25)->retry(2, 250)->get($url);
+        ])->connectTimeout($this->connectTimeoutSeconds)->timeout($this->timeoutSeconds)->retry(1, 100);
+    }
+
+    public function fetchHtml(string $url): string
+    {
+        $response = $this->pendingRequest()->get($url);
 
         $response->throw();
 
         return (string) $response->body();
+    }
+
+    public function fetchHtmlPool(array $urlsByKey, int $concurrency = 10): array
+    {
+        $filtered = [];
+        foreach ($urlsByKey as $key => $url) {
+            $key = (string) $key;
+            $url = trim((string) $url);
+            if ($key === '' || $url === '') {
+                continue;
+            }
+            $filtered[$key] = $url;
+        }
+
+        if ($filtered === []) {
+            return [];
+        }
+
+        $responses = $this->pendingRequest()->pool(function (Pool $pool) use ($filtered, $concurrency) {
+            $pool->concurrency(max(1, (int) $concurrency));
+
+            $reqs = [];
+            foreach ($filtered as $key => $url) {
+                $reqs[$key] = $pool->as($key)->get($url);
+            }
+
+            return $reqs;
+        });
+
+        $out = [];
+        foreach ($filtered as $key => $_url) {
+            $res = $responses[$key] ?? null;
+            if ($res instanceof Response && $res->successful()) {
+                $out[$key] = (string) $res->body();
+            } else {
+                $out[$key] = null;
+            }
+        }
+
+        return $out;
     }
 
     public function extractFirstByXPath(string $html, string $xpath): ?string

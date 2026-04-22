@@ -4,10 +4,9 @@ namespace App\Http\Controllers\Shopee;
 
 use App\Http\Controllers\Controller;
 use App\Models\ShopeeProduct;
+use App\Models\ShopeeShop;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
-use App\Models\ShopeeShop;
-use Illuminate\Support\Facades\DB;
 
 class ShopeeDashboardController extends Controller
 {
@@ -44,10 +43,10 @@ class ShopeeDashboardController extends Controller
             ->where('scraped_at', '>=', $since)
             ->orderBy('scraped_at')
             ->get()
-            ->map(fn($p) => [
+            ->map(fn ($p) => [
                 't' => $p->scraped_at->setTimezone('Asia/Ho_Chi_Minh')->toIso8601String(),
                 'y' => (int) $p->price,
-                'label' => 'Shop bạn'
+                'label' => 'Shop bạn',
             ]);
 
         // Lấy lịch sử giá của tất cả đối thủ
@@ -59,16 +58,16 @@ class ShopeeDashboardController extends Controller
                 ->where('scraped_at', '>=', $since)
                 ->orderBy('scraped_at')
                 ->get()
-                ->map(fn($p) => [
+                ->map(fn ($p) => [
                     't' => $p->scraped_at->setTimezone('Asia/Ho_Chi_Minh')->toIso8601String(),
                     'y' => (int) $p->price + (int) ($competitor->price_adjustment ?? 0),
-                    'label' => $competitor->shop->name
+                    'label' => $competitor->shop->name,
                 ]);
-            
+
             if ($prices->isNotEmpty()) {
                 $competitorSeries[] = [
                     'name' => $competitor->shop->name,
-                    'data' => $prices
+                    'data' => $prices,
                 ];
             }
         }
@@ -76,9 +75,9 @@ class ShopeeDashboardController extends Controller
         $chartData = [
             [
                 'name' => 'Shop bạn',
-                'data' => $ownPrices
+                'data' => $ownPrices,
             ],
-            ...$competitorSeries
+            ...$competitorSeries,
         ];
 
         return view('shopee.history', compact('product', 'chartData', 'days'));
