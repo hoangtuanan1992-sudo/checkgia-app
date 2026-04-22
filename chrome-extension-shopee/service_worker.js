@@ -565,12 +565,9 @@ async function scrapeTab(tabId, variantPath) {
             const pickRawPriceFromModel = (m) => {
               if (!m || typeof m !== "object") return null;
               const candidates = [
-                m.price,
                 m.price_after_discount,
-                m.price_min,
-                m.price_max,
+                m.price,
                 m.price_before_discount,
-                m.price_min_before_discount,
               ];
               for (const c of candidates) {
                 const n = pickPriceValue(c);
@@ -829,8 +826,21 @@ async function scrapeTab(tabId, variantPath) {
       }
 
       function detectBlock() {
+        try {
+          const href = String(location && location.href ? location.href : "");
+          if (href.includes("/verify/traffic")) {
+            return "Shopee chặn (verify/traffic).";
+          }
+        } catch (e) {}
+
         const html = document.documentElement ? document.documentElement.innerText || "" : "";
         const s = html.toLowerCase();
+        if (s.includes("verify/traffic") || s.includes("unusual traffic")) {
+          return "Shopee chặn (verify/traffic).";
+        }
+        if (s.includes("trang không khả dụng") || s.includes("page not available")) {
+          return "Shopee chặn (trang không khả dụng).";
+        }
         if (s.includes("captcha") || s.includes("xác minh") || s.includes("verify") || s.includes("unusual traffic")) {
           return "Shopee chặn (captcha/verify).";
         }
@@ -895,6 +905,14 @@ async function scrapeTab(tabId, variantPath) {
         } catch (e) {}
 
         const blockReason = detectBlock();
+        if (blockReason) {
+          return {
+            price: null,
+            name: await waitForName(8000),
+            raw_text: "",
+            block_reason: blockReason
+          };
+        }
 
         const modelIdFromUrl = (() => {
           try {
@@ -956,10 +974,7 @@ async function scrapeTab(tabId, variantPath) {
             const candidates = [
               m.price_after_discount,
               m.price,
-              m.price_min,
-              m.price_max,
               m.price_before_discount,
-              m.price_min_before_discount,
             ];
             for (const c of candidates) {
               const n = pickPriceValue(c);
@@ -1347,12 +1362,141 @@ async function readCapturedModelPrice(tabId, url) {
   const modelId = m ? Number(m[1]) : (m2 ? Number(m2[1]) : null);
   if (!Number.isFinite(modelId) || modelId <= 0) return null;
 
-  const [{ result }] = await chrome.scripting.executeScript({
-    target: { tabId },
-    world: "MAIN",
-    args: [modelId],
-    func: async (modelId) => {
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      args: [modelId],
+      func: async (modelId) => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const pickModelId = (m) => {
+          if (!m || typeof m !== "object") return null;
+          const id =
+            (m.modelid != null ? m.modelid : null) ??
+            (m.model_id != null ? m.model_id : null) ??
+            (m.modelId != null ? m.modelId : null) ??
+            (m.id != null ? m.id : null) ??
+            null;
+          const n = Number(id);
+          return Number.isFinite(n) ? n : null;
+        };
+        const pickPriceValue = (v) => {
+          if (v == null) return null;
+          if (Array.isArray(v)) {
+            const nums = [];
+            for (const x of v) {
+              const n = pickPriceValue(x);
+              if (n != null) nums.push(n);
+            }
+            if (!nums.length) return null;
+            return nums.reduce((a, b) => (a > b ? a : b), nums[0]);
+          }
+          if (typeof v === "object") {
+            const candidates = [
+              v.price_after_discount,
+              v.price,
+              v.price_min,
+              v.price_max,
+              v.price_before_discount,
+              v.price_min_before_discount,
+            ];
+            for (const c of candidates) {
+              const n = pickPriceValue(c);
+              if (n != null) return n;
+            }
+            return null;
+          }
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        };
+        const pickRawPriceFromModel = (m) => {
+          if (!m || typeof m !== "object") return null;
+          const candidates = [
+            m.price_after_discount,
+            m.price,
+            m.price_before_discount,
+          ];
+          for (const c of candidates) {
+            const n = pickPriceValue(c);
+            if (n != null) return n;
+          }
+          return null;
+        };
+        const normalizeRaw = (raw) => {
+          let p = Number(raw);
+          if (!Number.isFinite(p) || p <= 0) return null;
+          if (p >= 1000000000) {
+            p = Math.round(p / 100000);
+          } else if (p >= 10000000) {
+            p = Math.round(p / 100);
+          } else if (p >= 1000000 && p % 100000 === 0) {
+            p = p / 100000;
+          }
+          return Math.trunc(p);
+        };
+        const extractItem = (json) => {
+          return (
+            (json && json.data && json.data.item ? json.data.item : null) ??
+            (json && json.item ? json.item : null) ??
+            (json && json.data && json.data.data && json.data.data.item ? json.data.data.item : null) ??
+            null
+          );
+        };
+
+        const deadline = Date.now() + 12000;
+        while (Date.now() < deadline) {
+          try {
+            const net = window.__checkgia && window.__checkgia.net ? window.__checkgia.net : null;
+            const entries = net && Array.isArray(net.entries) ? net.entries.slice(-25) : [];
+            for (let i = entries.length - 1; i >= 0; i--) {
+              const item = extractItem(entries[i] && entries[i].json ? entries[i].json : null);
+              if (!item) continue;
+              const models = Array.isArray(item.models) ? item.models : [];
+              const picked = models.find((m) => pickModelId(m) === Number(modelId));
+              if (!picked) continue;
+              const raw = pickRawPriceFromModel(picked);
+              const price = normalizeRaw(raw);
+              if (price != null) {
+                return {
+                  price,
+                  name: item.name ? String(item.name).slice(0, 255) : null,
+                  raw_text: raw != null ? String(raw) : ""
+                };
+              }
+            }
+          } catch (e) {}
+          await sleep(300);
+        }
+        return null;
+      }
+    });
+
+    return result || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function readDirectModelPrice(tabId, url) {
+  const u = String(url || "");
+  const m = u.match(/"display_model_id"%3A(\d+)/i) || u.match(/display_model_id(?:%22)?%3A(\d+)/i);
+  const m2 = u.match(/display_model_id[=:](\d+)/i);
+  const modelId = m ? Number(m[1]) : (m2 ? Number(m2[1]) : null);
+  const ids = u.match(/i\.(\d+)\.(\d+)/);
+  const shopId = ids ? Number(ids[1]) : null;
+  const itemId = ids ? Number(ids[2]) : null;
+  if (!Number.isFinite(modelId) || modelId <= 0) return null;
+  if (!Number.isFinite(shopId) || shopId <= 0) return null;
+  if (!Number.isFinite(itemId) || itemId <= 0) return null;
+
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      args: [shopId, itemId, modelId],
+      func: async (shopId, itemId, modelId) => {
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
       const pickModelId = (m) => {
         if (!m || typeof m !== "object") return null;
         const id =
@@ -1364,6 +1508,7 @@ async function readCapturedModelPrice(tabId, url) {
         const n = Number(id);
         return Number.isFinite(n) ? n : null;
       };
+
       const pickPriceValue = (v) => {
         if (v == null) return null;
         if (Array.isArray(v)) {
@@ -1393,15 +1538,13 @@ async function readCapturedModelPrice(tabId, url) {
         const n = Number(v);
         return Number.isFinite(n) ? n : null;
       };
+
       const pickRawPriceFromModel = (m) => {
         if (!m || typeof m !== "object") return null;
         const candidates = [
           m.price_after_discount,
           m.price,
-          m.price_min,
-          m.price_max,
           m.price_before_discount,
-          m.price_min_before_discount,
         ];
         for (const c of candidates) {
           const n = pickPriceValue(c);
@@ -1409,6 +1552,7 @@ async function readCapturedModelPrice(tabId, url) {
         }
         return null;
       };
+
       const normalizeRaw = (raw) => {
         let p = Number(raw);
         if (!Number.isFinite(p) || p <= 0) return null;
@@ -1421,6 +1565,7 @@ async function readCapturedModelPrice(tabId, url) {
         }
         return Math.trunc(p);
       };
+
       const extractItem = (json) => {
         return (
           (json && json.data && json.data.item ? json.data.item : null) ??
@@ -1430,43 +1575,75 @@ async function readCapturedModelPrice(tabId, url) {
         );
       };
 
+      const urls = [
+        `/api/v4/item/get?shopid=${encodeURIComponent(String(shopId))}&itemid=${encodeURIComponent(String(itemId))}`,
+        `/api/v2/item/get?shopid=${encodeURIComponent(String(shopId))}&itemid=${encodeURIComponent(String(itemId))}`,
+        `/api/v4/item/get?shopid=${encodeURIComponent(String(shopId))}&itemid=${encodeURIComponent(String(itemId))}&selected_model_id=${encodeURIComponent(String(modelId))}`,
+        `/api/v4/item/get?shopid=${encodeURIComponent(String(shopId))}&itemid=${encodeURIComponent(String(itemId))}&modelid=${encodeURIComponent(String(modelId))}`,
+        `/api/v4/item/get?shopid=${encodeURIComponent(String(shopId))}&itemid=${encodeURIComponent(String(itemId))}&display_model_id=${encodeURIComponent(String(modelId))}`,
+        `/api/v2/item/get?shopid=${encodeURIComponent(String(shopId))}&itemid=${encodeURIComponent(String(itemId))}&selected_model_id=${encodeURIComponent(String(modelId))}`,
+        `/api/v2/item/get?shopid=${encodeURIComponent(String(shopId))}&itemid=${encodeURIComponent(String(itemId))}&modelid=${encodeURIComponent(String(modelId))}`,
+        `/api/v2/item/get?shopid=${encodeURIComponent(String(shopId))}&itemid=${encodeURIComponent(String(itemId))}&display_model_id=${encodeURIComponent(String(modelId))}`,
+      ];
+
+      const fetchJson = async (url) => {
+        try {
+          const res = await fetch(url, {
+            credentials: "include",
+            headers: {
+              "accept": "application/json",
+              "x-api-source": "pc",
+              "x-requested-with": "XMLHttpRequest"
+            }
+          });
+          if (!res.ok) return null;
+          return await res.json().catch(() => null);
+        } catch (e) {
+          return null;
+        }
+      };
+
       const deadline = Date.now() + 12000;
       while (Date.now() < deadline) {
-        try {
-          const net = window.__checkgia && window.__checkgia.net ? window.__checkgia.net : null;
-          const entries = net && Array.isArray(net.entries) ? net.entries.slice(-25) : [];
-          for (let i = entries.length - 1; i >= 0; i--) {
-            const item = extractItem(entries[i] && entries[i].json ? entries[i].json : null);
-            if (!item) continue;
-            const models = Array.isArray(item.models) ? item.models : [];
-            const picked = models.find((m) => pickModelId(m) === Number(modelId));
-            if (!picked) continue;
-            const raw = pickRawPriceFromModel(picked);
-            const price = normalizeRaw(raw);
-            if (price != null) {
-              return {
-                price,
-                name: item.name ? String(item.name).slice(0, 255) : null,
-                raw_text: raw != null ? String(raw) : ""
-              };
-            }
+        for (const u of urls) {
+          const json = await fetchJson(u);
+          const item = extractItem(json);
+          if (!item) continue;
+          const models = Array.isArray(item.models) ? item.models : [];
+          const picked = models.find((m) => pickModelId(m) === Number(modelId));
+          if (!picked) continue;
+          const raw = pickRawPriceFromModel(picked);
+          const price = normalizeRaw(raw);
+          if (price != null) {
+            return {
+              price,
+              name: item.name ? String(item.name).slice(0, 255) : null,
+              raw_text: raw != null ? String(raw) : ""
+            };
           }
-        } catch (e) {}
+        }
         await sleep(300);
       }
       return null;
-    }
-  });
+      }
+    });
 
-  return result || null;
+    return result || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 async function openAndScrape(url, variantPath) {
   try {
     const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
-    const isTabBusyError = (e) => {
+    const isRetryableError = (e) => {
       const msg = String(e && e.message ? e.message : e || "");
-      return /tabs cannot be edited right now/i.test(msg) || /dragging a tab/i.test(msg);
+      if (/tabs cannot be edited right now/i.test(msg)) return true;
+      if (/dragging a tab/i.test(msg)) return true;
+      if (/frame with id/i.test(msg) && /was removed/i.test(msg)) return true;
+      if (/the frame was removed/i.test(msg)) return true;
+      return false;
     };
     const withRetry = async (fn, attempts = 12, baseDelayMs = 200) => {
       let lastErr = null;
@@ -1475,7 +1652,7 @@ async function openAndScrape(url, variantPath) {
           return await fn();
         } catch (e) {
           lastErr = e;
-          if (!isTabBusyError(e)) throw e;
+          if (!isRetryableError(e)) throw e;
           await sleepMs(baseDelayMs + i * baseDelayMs);
         }
       }
@@ -1611,6 +1788,14 @@ async function openAndScrape(url, variantPath) {
     // Random wait before scraping (1-3 seconds)
     await new Promise(r => setTimeout(r, Math.random() * 2000 + 1000));
 
+    const direct = await readDirectModelPrice(tabId, url).catch(() => null);
+    if (direct && direct.price != null) {
+      const stayTime = Math.random() * 1600 + 700;
+      await new Promise(r => setTimeout(r, stayTime));
+      await withRetry(() => chrome.tabs.remove(tabId)).catch(() => {});
+      return { price: direct.price, name: direct.name, raw_text: direct.raw_text, block_reason: "" };
+    }
+
     const captured = await readCapturedModelPrice(tabId, url).catch(() => null);
     if (captured && captured.price != null) {
       const stayTime = Math.random() * 2000 + 800;
@@ -1718,7 +1903,7 @@ async function pollOnce() {
   }
 
   await chrome.storage.local.set({ lastTaskUrl: task.url });
-  const scrape = await openAndScrape(task.url, task.variant_path || null).catch((e) => {
+  const scrape = await openAndScrape(task.url, null).catch((e) => {
     setLastError(e);
     return null;
   });
@@ -1728,6 +1913,7 @@ async function pollOnce() {
   const rawText = scrape && scrape.raw_text ? String(scrape.raw_text).slice(0, 20000) : null;
   const blockReason = scrape && scrape.block_reason ? String(scrape.block_reason) : "";
 
+  let nextSleep = sleepSeconds || 60;
   if (price != null && Number.isFinite(price) && price > 0) {
     const payload = {
       agent_key: agentKey,
@@ -1763,9 +1949,14 @@ async function pollOnce() {
       lastError: errorMsg,
       lastTaskUrl: task.url
     });
+
+    const low = String(errorMsg || "").toLowerCase();
+    if (low.includes("verify/traffic") || low.includes("captcha") || low.includes("xác minh") || low.includes("unusual traffic")) {
+      nextSleep = Math.max(nextSleep, 600);
+    }
   }
 
-  await scheduleNext(sleepSeconds || 60);
+  await scheduleNext(nextSleep);
 }
 
 chrome.runtime.onInstalled.addListener(() => {

@@ -33,11 +33,9 @@
                         @csrf
                         <div class="field" style="margin-top:0">
                             <label class="label">Link shop bạn (Shopee)</label>
-                            <div style="display:grid;grid-template-columns:1fr 140px;gap:10px">
+                            <div style="display:grid;grid-template-columns:1fr;gap:10px">
                                 <input class="input" name="own_url" type="url" placeholder="https://shopee.vn/..." value="{{ old('own_url') }}" required>
-                                <input class="input" name="own_variant_path" type="text" placeholder="VD: 2-3" value="{{ old('own_variant_path') }}">
                             </div>
-                            <div class="hint" style="margin-top:6px">Biến thể: 2-3 nghĩa là chọn biến thể 1 = mục #2, biến thể 2 = mục #3.</div>
                         </div>
 
                         @if($shops->isNotEmpty())

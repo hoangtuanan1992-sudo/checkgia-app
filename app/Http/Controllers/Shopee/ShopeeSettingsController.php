@@ -127,14 +127,12 @@ class ShopeeSettingsController extends Controller
 
         $data = $request->validate([
             'own_url' => ['required', 'url', 'max:2048'],
-            'own_variant_path' => ['nullable', 'string', 'max:50', 'regex:/^\d+(?:-\d+)*$/'],
             'competitor_urls' => ['nullable', 'array'],
         ]);
 
         $product = ShopeeProduct::create([
             'user_id' => $ownerId,
             'own_url' => trim((string) $data['own_url']),
-            'own_variant_path' => isset($data['own_variant_path']) ? trim((string) $data['own_variant_path']) : null,
             'is_enabled' => true,
         ]);
 
