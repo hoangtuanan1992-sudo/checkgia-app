@@ -624,6 +624,11 @@
         .cg-tour-actions{margin-top:10px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
         .cg-tour-step{margin-top:10px;color:var(--muted);font-size:12px}
         .cg-tour-highlight{position:relative !important;z-index:2147483647 !important;box-shadow:0 0 0 4px rgba(13,110,253,.22);border-radius:12px}
+        .cg-tour-launcher{position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:2147483647 !important;background:rgba(255,255,255,.95);backdrop-filter:saturate(180%) blur(12px);border:1px solid rgba(17,24,39,.12);border-left:none;border-radius:0 16px 16px 0;box-shadow:0 16px 34px rgba(17,24,39,.18);padding:12px 12px 12px 14px;max-width:min(260px,calc(100% - 12px))}
+        .cg-tour-launcher-title{font-weight:900;font-size:13px;letter-spacing:.6px}
+        .cg-tour-launcher-sub{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.35}
+        .cg-tour-launcher-actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+        .cg-tour-launcher .btn{padding:8px 10px;font-size:12px;border-radius:12px}
     </style>
 
     <script>
@@ -1268,6 +1273,38 @@
             document.body.appendChild(overlay);
             document.body.appendChild(tooltip);
 
+            const launcher = document.createElement('div');
+            launcher.className = 'cg-tour-launcher';
+            launcher.style.display = 'none';
+
+            const launcherTitle = document.createElement('div');
+            launcherTitle.className = 'cg-tour-launcher-title';
+            launcherTitle.textContent = 'HƯỚNG DẪN SỬ DỤNG';
+            launcher.appendChild(launcherTitle);
+
+            const launcherSub = document.createElement('div');
+            launcherSub.className = 'cg-tour-launcher-sub';
+            launcherSub.textContent = 'Hướng dẫn thêm sản phẩm và thao tác so sánh giá.';
+            launcher.appendChild(launcherSub);
+
+            const launcherActions = document.createElement('div');
+            launcherActions.className = 'cg-tour-launcher-actions';
+
+            const launcherHide = document.createElement('button');
+            launcherHide.type = 'button';
+            launcherHide.className = 'btn btn-secondary';
+            launcherHide.textContent = 'Không hiển thị lại';
+            launcherActions.appendChild(launcherHide);
+
+            const launcherStart = document.createElement('button');
+            launcherStart.type = 'button';
+            launcherStart.className = 'btn';
+            launcherStart.textContent = 'Bắt đầu';
+            launcherActions.appendChild(launcherStart);
+
+            launcher.appendChild(launcherActions);
+            document.body.appendChild(launcher);
+
             let current = -1;
             let highlighted = null;
 
@@ -1495,6 +1532,7 @@
                     } catch (e) {
                     }
                 }
+                launcher.style.display = 'none';
                 showStep(0);
             }
 
@@ -1524,7 +1562,28 @@
                 });
             }
 
-            setTimeout(() => start(false), 800);
+            function isTourDone() {
+                try {
+                    return localStorage.getItem(tourKey) === '1';
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function showLauncherIfNeeded() {
+                launcher.style.display = isTourDone() ? 'none' : '';
+            }
+
+            launcherStart.addEventListener('click', () => start(true));
+            launcherHide.addEventListener('click', () => {
+                try {
+                    localStorage.setItem(tourKey, '1');
+                } catch (e) {
+                }
+                launcher.style.display = 'none';
+            });
+
+            showLauncherIfNeeded();
         })();
     </script>
 @endsection
