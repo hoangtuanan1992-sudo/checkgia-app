@@ -629,6 +629,8 @@
         .cg-tour-launcher-sub{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.35}
         .cg-tour-launcher-actions{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
         .cg-tour-launcher .btn{padding:8px 10px;font-size:12px;border-radius:12px}
+        .cg-tour-launcher-tab{position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:2147483647 !important;background:rgba(255,255,255,.95);backdrop-filter:saturate(180%) blur(12px);border:1px solid rgba(17,24,39,.12);border-left:none;border-radius:0 14px 14px 0;box-shadow:0 16px 34px rgba(17,24,39,.18);padding:10px 10px 10px 10px;width:54px;cursor:pointer;user-select:none}
+        .cg-tour-launcher-tab-text{font-weight:900;font-size:13px;line-height:1.05;text-align:center;white-space:pre-line;color:#111827}
     </style>
 
     <script>
@@ -1234,6 +1236,7 @@
 
             const tooltip = document.createElement('div');
             tooltip.className = 'cg-tour-tooltip';
+            tooltip.style.display = 'none';
 
             const titleEl = document.createElement('div');
             titleEl.className = 'cg-tour-title';
@@ -1304,6 +1307,15 @@
 
             launcher.appendChild(launcherActions);
             document.body.appendChild(launcher);
+
+            const launcherTab = document.createElement('div');
+            launcherTab.className = 'cg-tour-launcher-tab';
+            launcherTab.style.display = 'none';
+            const launcherTabText = document.createElement('div');
+            launcherTabText.className = 'cg-tour-launcher-tab-text';
+            launcherTabText.textContent = "Hướng\nDẫn";
+            launcherTab.appendChild(launcherTabText);
+            document.body.appendChild(launcherTab);
 
             let current = -1;
             let highlighted = null;
@@ -1523,6 +1535,7 @@
                     } catch (e) {
                     }
                 }
+                showLauncherIfNeeded();
             }
 
             function start(force) {
@@ -1533,6 +1546,7 @@
                     }
                 }
                 launcher.style.display = 'none';
+                launcherTab.style.display = 'none';
                 showStep(0);
             }
 
@@ -1571,7 +1585,13 @@
             }
 
             function showLauncherIfNeeded() {
-                launcher.style.display = isTourDone() ? 'none' : '';
+                if (isTourDone()) {
+                    launcher.style.display = 'none';
+                    launcherTab.style.display = '';
+                } else {
+                    launcher.style.display = '';
+                    launcherTab.style.display = 'none';
+                }
             }
 
             launcherStart.addEventListener('click', () => start(true));
@@ -1580,7 +1600,11 @@
                     localStorage.setItem(tourKey, '1');
                 } catch (e) {
                 }
-                launcher.style.display = 'none';
+                showLauncherIfNeeded();
+            });
+            launcherTab.addEventListener('click', () => {
+                launcher.style.display = '';
+                launcherTab.style.display = 'none';
             });
 
             showLauncherIfNeeded();
