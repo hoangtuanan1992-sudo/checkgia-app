@@ -2,16 +2,25 @@
 
 @section('content')
     <div style="width:100%;max-width:1500px">
-        <div class="card" style="max-width:none;margin-bottom:16px">
+        <div class="card" id="addProductCard" style="max-width:none;margin-bottom:16px">
             <div id="addProductHeader" style="display:flex;justify-content:space-between;gap:12px;align-items:center;cursor:pointer;user-select:none;padding:16px 16px 6px">
                 <div>
                     <h1 class="card-title">Nhập link sản phẩm</h1>
                     <p class="card-sub">Thêm nhanh sản phẩm và link đối thủ để so sánh</p>
                 </div>
-                <div id="addProductChevron" style="width:28px;height:28px;border-radius:999px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <button type="button" class="icon-btn" id="dashboardTourStart" title="Hướng dẫn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M12 18h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M9.09 9a3 3 0 1 1 4.83 2.36c-.76.57-1.42 1.07-1.42 2.14V14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 22c5.52 0 10-4.48 10-10S17.52 2 12 2 2 6.48 2 12s4.48 10 10 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                    <div id="addProductChevron" style="width:28px;height:28px;border-radius:999px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
                 </div>
             </div>
             <div id="addProductBody" class="card-body">
@@ -24,11 +33,11 @@
                     </div>
 
                     @if($competitorSites->isNotEmpty())
-                        <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+                        <div id="competitorUrlGrid" style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
                             @foreach($competitorSites as $site)
                                 <div class="field" style="margin-top:0">
                                     <label class="label">Link {{ $site->name }}</label>
-                                    <input class="input" name="competitor_urls[{{ $site->id }}]" type="url" value="{{ old('competitor_urls.'.$site->id) }}" placeholder="https://...">
+                                    <input class="input" name="competitor_urls[{{ $site->id }}]" type="url" value="{{ old('competitor_urls.'.$site->id) }}" placeholder="https://..." data-tour="competitor-url">
                                 </div>
                             @endforeach
                         </div>
@@ -58,7 +67,7 @@
                     </div>
 
                     <div class="actions">
-                        <button class="btn" type="submit">Thêm vào danh sách</button>
+                        <button class="btn" type="submit" id="addProductSubmit">Thêm vào danh sách</button>
                     </div>
                 </form>
             </div>
@@ -104,7 +113,7 @@
             </div>
         </div>
 
-        <div class="card" style="max-width:none">
+        <div class="card" id="comparisonCard" style="max-width:none">
             <div class="card-header" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
                 <div>
                     <h2 class="card-title">Kết quả so sánh</h2>
@@ -143,10 +152,12 @@
                     <div class="actions" style="margin-top:0">
                         <a class="btn btn-secondary" id="exportAll" href="{{ route('dashboard.export.products') }}">Xuất Excel</a>
                         <a class="btn btn-secondary" id="exportGroup" href="{{ route('dashboard.export.products') }}">Xuất theo nhóm</a>
-                        <form method="POST" action="{{ route('dashboard.scrape.now') }}" style="display:inline">
-                            @csrf
-                            <button class="btn btn-secondary" type="submit">Cập nhật</button>
-                        </form>
+                        @if(!auth()->user()->isViewer())
+                            <form method="POST" action="{{ route('dashboard.scrape.now') }}" style="display:inline">
+                                @csrf
+                                <button class="btn btn-secondary" type="submit">Cập nhật</button>
+                            </form>
+                        @endif
                         <button class="btn btn-secondary" type="button" id="compareViewToggle" style="display:none">Dạng thẻ</button>
                         <button class="btn btn-secondary" type="button" id="filterReset">Reset</button>
                     </div>
@@ -205,19 +216,21 @@
                                     <td>
                                         <div style="display:flex;flex-direction:column;gap:4px;padding-top:0px">
                                             <div style="display:flex;align-items:center;gap:8px">
-                                                <button
-                                                    type="button"
-                                                    class="icon-btn icon-btn-sm js-edit-url"
-                                                    data-action="{{ route('dashboard.products.url.update', $product) }}"
-                                                    data-field="product_url"
-                                                    data-value="{{ $product->product_url }}"
-                                                    title="Sửa link sản phẩm của bạn"
-                                                >
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                        <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                    </svg>
-                                                </button>
+                                                    @if(!auth()->user()->isViewer())
+                                                        <button
+                                                            type="button"
+                                                            class="icon-btn icon-btn-sm js-edit-url"
+                                                            data-action="{{ route('dashboard.products.url.update', $product) }}"
+                                                            data-field="product_url"
+                                                            data-value="{{ $product->product_url }}"
+                                                            title="Sửa link sản phẩm của bạn"
+                                                        >
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                                <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        </button>
+                                                    @endif
                                                 @if($product->product_url)
                                                     <a href="{{ $product->product_url }}" target="_blank" style="font-size:13px">link sản phẩm</a>
                                                 @else
@@ -266,36 +279,40 @@
                                                                     0đ
                                                                 @endif
                                                             </a>
-                                                            <button
-                                                                type="button"
-                                                                class="icon-btn icon-btn-sm js-edit-adjustment"
-                                                                data-action="{{ route('competitors.adjustment.update', $c) }}"
-                                                                data-value="{{ $adj }}"
-                                                                data-span-id="adjDiff-{{ $c->id }}"
-                                                                data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
-                                                                data-own="{{ $own }}"
-                                                                data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
-                                                                title="Điều chỉnh giá (+/-)"
-                                                            >
-                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                                                </svg>
-                                                            </button>
+                                                            @if(!auth()->user()->isViewer())
+                                                                <button
+                                                                    type="button"
+                                                                    class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                                    data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                                    data-value="{{ $adj }}"
+                                                                    data-span-id="adjDiff-{{ $c->id }}"
+                                                                    data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
+                                                                    data-own="{{ $own }}"
+                                                                    data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                                    title="Điều chỉnh giá (+/-)"
+                                                                >
+                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                                    </svg>
+                                                                </button>
+                                                            @endif
                                                         @endif
                                                     </div>
                                                     <div style="display:flex;align-items:center;gap:8px">
-                                                        <button type="button"
-                                                                class="icon-btn icon-btn-sm js-edit-url"
-                                                                data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
-                                                                data-field="url"
-                                                                data-value="{{ $c->url }}"
-                                                                title="Sửa URL">
-                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                                <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            </svg>
-                                                        </button>
+                                                        @if(!auth()->user()->isViewer())
+                                                            <button type="button"
+                                                                    class="icon-btn icon-btn-sm js-edit-url"
+                                                                    data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                                    data-field="url"
+                                                                    data-value="{{ $c->url }}"
+                                                                    title="Sửa URL">
+                                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                                    <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                    <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                </svg>
+                                                            </button>
+                                                        @endif
                                                         @if($cPrice)
                                                             <a href="{{ route('competitors.history', $c) }}" title="{{ $product->name }}">{{ number_format($cPrice, 0, ',', '.') }}đ</a>
                                                             @if(! is_null($delta) && $delta !== 0)
@@ -319,19 +336,21 @@
                                             @else
                                                 <div style="display:flex;flex-direction:column;gap:6px;padding-top:15px">
                                                     <span class="hint" style="margin-top:0">---</span>
-                                                    <button
-                                                        type="button"
-                                                        class="icon-btn icon-btn-sm js-edit-url"
-                                                        data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
-                                                        data-field="url"
-                                                        data-value=""
-                                                        title="Thêm URL"
-                                                    >
-                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                            <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                        </svg>
-                                                    </button>
+                                                    @if(!auth()->user()->isViewer())
+                                                        <button
+                                                            type="button"
+                                                            class="icon-btn icon-btn-sm js-edit-url"
+                                                            data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                            data-field="url"
+                                                            data-value=""
+                                                            title="Thêm URL"
+                                                        >
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                                <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        </button>
+                                                    @endif
                                                 </div>
                                             @endif
                                         </td>
@@ -344,14 +363,18 @@
                                         @endif
                                     </td>
                                     <td style="text-align:right">
-                                        <button
-                                            type="button"
-                                            class="btn js-delete-product"
-                                            data-action="{{ route('dashboard.products.destroy', $product) }}"
-                                            data-product-id="{{ $product->id }}"
-                                        >
-                                            Xoá
-                                        </button>
+                                        @if(!auth()->user()->isViewer())
+                                            <button
+                                                type="button"
+                                                class="btn js-delete-product"
+                                                data-action="{{ route('dashboard.products.destroy', $product) }}"
+                                                data-product-id="{{ $product->id }}"
+                                            >
+                                                Xoá
+                                            </button>
+                                        @else
+                                            <span class="hint" style="margin-top:0">---</span>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty
@@ -392,21 +415,23 @@
                             data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
                             style="max-width:none;border-radius:16px;margin-top:0;overflow:hidden"
                         >
-                            <button
-                                type="button"
-                                class="compare-card-delete js-delete-product"
-                                data-action="{{ route('dashboard.products.destroy', $product) }}"
-                                data-product-id="{{ $product->id }}"
-                                title="Xoá"
-                            >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                    <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                    <path d="M8 6V4h8v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                    <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                    <path d="M10 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                    <path d="M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                </svg>
-                            </button>
+                            @if(!auth()->user()->isViewer())
+                                <button
+                                    type="button"
+                                    class="compare-card-delete js-delete-product"
+                                    data-action="{{ route('dashboard.products.destroy', $product) }}"
+                                    data-product-id="{{ $product->id }}"
+                                    title="Xoá"
+                                >
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        <path d="M8 6V4h8v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                        <path d="M10 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                        <path d="M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                </button>
+                            @endif
 
                             <div class="compare-card-header">
                                 <div class="compare-card-title">
@@ -470,40 +495,42 @@
                                             @endif
                                         </div>
                                         <div class="compare-card-cell-actions">
-                                            <button
-                                                type="button"
-                                                class="icon-btn icon-btn-sm js-edit-url"
-                                                data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
-                                                data-field="url"
-                                                data-value="{{ $c->url }}"
-                                                title="Sửa URL"
-                                            >
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                    <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                    <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                </svg>
-                                            </button>
+                                            @if(!auth()->user()->isViewer())
+                                                <button
+                                                    type="button"
+                                                    class="icon-btn icon-btn-sm js-edit-url"
+                                                    data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                    data-field="url"
+                                                    data-value="{{ $c->url }}"
+                                                    title="Sửa URL"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    </svg>
+                                                </button>
 
-                                            <button
-                                                type="button"
-                                                class="icon-btn icon-btn-sm js-edit-adjustment"
-                                                data-action="{{ route('competitors.adjustment.update', $c) }}"
-                                                data-value="{{ $adj }}"
-                                                data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
-                                                data-own="{{ $own }}"
-                                                data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
-                                                title="Điều chỉnh giá (+/-)"
-                                            >
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                                </svg>
-                                            </button>
+                                                <button
+                                                    type="button"
+                                                    class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                    data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                    data-value="{{ $adj }}"
+                                                    data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
+                                                    data-own="{{ $own }}"
+                                                    data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                    title="Điều chỉnh giá (+/-)"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                    </svg>
+                                                </button>
+                                            @endif
                                         </div>
                                     </div>
                                 @endforeach
 
-                                @if($missingSites->isNotEmpty())
+                                @if($missingSites->isNotEmpty() && !auth()->user()->isViewer())
                                     <div style="padding:12px 16px 16px">
                                         <button type="button" class="compare-card-addlink js-add-link" data-target="addLink-{{ $product->id }}">
                                             + Thêm link
@@ -585,6 +612,16 @@
             </div>
         </div>
     </dialog>
+
+    <style>
+        .cg-tour-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:3000;display:none}
+        .cg-tour-tooltip{position:fixed;z-index:3001;max-width:min(380px,calc(100% - 24px));background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.25);padding:12px}
+        .cg-tour-title{font-weight:900;font-size:14px;margin:0}
+        .cg-tour-text{margin-top:6px;color:var(--muted);font-size:13px;white-space:pre-line;line-height:1.45}
+        .cg-tour-actions{margin-top:10px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+        .cg-tour-step{margin-top:10px;color:var(--muted);font-size:12px}
+        .cg-tour-highlight{position:relative;z-index:3002;box-shadow:0 0 0 4px rgba(13,110,253,.22);border-radius:12px}
+    </style>
 
     <script>
         (function () {
@@ -1180,6 +1217,219 @@
             if (filterGroup) filterGroup.addEventListener('change', syncExportLinks);
             syncExportLinks();
             applyFiltersAndSort();
+        })();
+
+        (function () {
+            const tourKey = 'checkgia_tour_dashboard_v1_done';
+            const overlay = document.createElement('div');
+            overlay.className = 'cg-tour-overlay';
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'cg-tour-tooltip';
+
+            const titleEl = document.createElement('div');
+            titleEl.className = 'cg-tour-title';
+            tooltip.appendChild(titleEl);
+
+            const textEl = document.createElement('div');
+            textEl.className = 'cg-tour-text';
+            tooltip.appendChild(textEl);
+
+            const stepEl = document.createElement('div');
+            stepEl.className = 'cg-tour-step';
+            tooltip.appendChild(stepEl);
+
+            const actions = document.createElement('div');
+            actions.className = 'cg-tour-actions';
+
+            const btnSkip = document.createElement('button');
+            btnSkip.type = 'button';
+            btnSkip.className = 'btn btn-secondary';
+            btnSkip.textContent = 'Bỏ qua';
+            actions.appendChild(btnSkip);
+
+            const btnBack = document.createElement('button');
+            btnBack.type = 'button';
+            btnBack.className = 'btn btn-secondary';
+            btnBack.textContent = 'Trước';
+            actions.appendChild(btnBack);
+
+            const btnNext = document.createElement('button');
+            btnNext.type = 'button';
+            btnNext.className = 'btn';
+            btnNext.textContent = 'Tiếp';
+            actions.appendChild(btnNext);
+
+            tooltip.appendChild(actions);
+
+            document.body.appendChild(overlay);
+            document.body.appendChild(tooltip);
+
+            let current = -1;
+            let highlighted = null;
+
+            function clearHighlight() {
+                if (!highlighted) return;
+                highlighted.classList.remove('cg-tour-highlight');
+                highlighted = null;
+            }
+
+            function getEl(selector) {
+                if (!selector) return null;
+                if (typeof selector === 'function') return selector();
+                return document.querySelector(selector);
+            }
+
+            function ensureAddFormOpen() {
+                const body = document.getElementById('addProductBody');
+                const chevron = document.getElementById('addProductChevron');
+                if (body && body.style.display === 'none') {
+                    body.style.display = '';
+                    if (chevron) chevron.style.transform = 'rotate(180deg)';
+                }
+            }
+
+            const steps = [
+                {
+                    title: 'Bước 1: Nhập link sản phẩm',
+                    text: 'Dán link sản phẩm của bạn vào ô URL.\nSau đó có thể nhập thêm link đối thủ để so sánh.',
+                    target: '#product_url',
+                    before: ensureAddFormOpen,
+                },
+                {
+                    title: 'Bước 2: Link đối thủ (tuỳ chọn)',
+                    text: 'Nếu đã tạo cột đối thủ, dán link đối thủ vào các ô bên dưới.\nNếu chưa có đối thủ, vào mục “Cài đặt” để tạo cột so sánh.',
+                    target: () => document.getElementById('competitorUrlGrid') || document.getElementById('addProductCard'),
+                    before: ensureAddFormOpen,
+                },
+                {
+                    title: 'Bước 3: Nhóm sản phẩm (tuỳ chọn)',
+                    text: 'Bạn có thể chọn nhóm có sẵn hoặc tạo nhóm mới để lọc và xuất Excel theo nhóm.',
+                    target: '#product_group_id',
+                    before: ensureAddFormOpen,
+                },
+                {
+                    title: 'Bước 4: Thêm vào danh sách',
+                    text: 'Bấm nút để thêm sản phẩm vào bảng so sánh.\nSau khi thêm, dữ liệu sẽ xuất hiện ở phần “Kết quả so sánh”.',
+                    target: '#addProductSubmit',
+                    before: ensureAddFormOpen,
+                },
+                {
+                    title: 'Bước 5: Tìm kiếm / lọc / sắp xếp',
+                    text: 'Dùng thanh Tìm kiếm, lọc theo Nhóm và Sắp xếp để quản lý danh sách nhanh hơn.',
+                    target: '#filterSearch',
+                },
+                {
+                    title: 'Bước 6: Bảng kết quả so sánh',
+                    text: 'Đây là nơi xem giá của bạn, giá đối thủ, chênh lệch và thời gian cập nhật.\nBạn có thể đổi “Dạng thẻ/Dạng bảng” trên desktop.',
+                    target: '#comparisonCard',
+                },
+            ];
+
+            function positionTooltip(el) {
+                const pad = 12;
+                const rect = el.getBoundingClientRect();
+                const tipRect = tooltip.getBoundingClientRect();
+
+                let top = rect.bottom + 10;
+                let left = rect.left;
+
+                if (left + tipRect.width > window.innerWidth - pad) {
+                    left = window.innerWidth - pad - tipRect.width;
+                }
+                if (left < pad) left = pad;
+
+                if (top + tipRect.height > window.innerHeight - pad) {
+                    top = rect.top - 10 - tipRect.height;
+                }
+                if (top < pad) top = pad;
+
+                tooltip.style.top = `${Math.round(top)}px`;
+                tooltip.style.left = `${Math.round(left)}px`;
+            }
+
+            function showStep(idx) {
+                if (idx < 0 || idx >= steps.length) return;
+                const step = steps[idx];
+                if (step.before) step.before();
+
+                const el = getEl(step.target);
+                if (!el) {
+                    const next = idx + 1;
+                    if (next < steps.length) showStep(next);
+                    else close(true);
+                    return;
+                }
+
+                current = idx;
+                clearHighlight();
+                highlighted = el;
+                highlighted.classList.add('cg-tour-highlight');
+                highlighted.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+
+                titleEl.textContent = step.title;
+                textEl.textContent = step.text;
+                stepEl.textContent = `(${idx + 1}/${steps.length})`;
+
+                btnBack.style.display = idx === 0 ? 'none' : '';
+                btnNext.textContent = idx === steps.length - 1 ? 'Hoàn tất' : 'Tiếp';
+
+                overlay.style.display = '';
+                tooltip.style.display = '';
+
+                requestAnimationFrame(() => positionTooltip(el));
+            }
+
+            function close(markDone) {
+                clearHighlight();
+                overlay.style.display = 'none';
+                tooltip.style.display = 'none';
+                current = -1;
+                if (markDone) {
+                    try {
+                        localStorage.setItem(tourKey, '1');
+                    } catch (e) {
+                    }
+                }
+            }
+
+            function start(force) {
+                if (!force) {
+                    try {
+                        if (localStorage.getItem(tourKey) === '1') return;
+                    } catch (e) {
+                    }
+                }
+                showStep(0);
+            }
+
+            btnSkip.addEventListener('click', () => close(true));
+            btnBack.addEventListener('click', () => showStep(Math.max(0, current - 1)));
+            btnNext.addEventListener('click', () => {
+                if (current >= steps.length - 1) {
+                    close(true);
+                    return;
+                }
+                showStep(current + 1);
+            });
+            overlay.addEventListener('click', () => close(true));
+            window.addEventListener('resize', () => {
+                if (current < 0) return;
+                const step = steps[current];
+                const el = getEl(step.target);
+                if (el) positionTooltip(el);
+            });
+
+            const startBtn = document.getElementById('dashboardTourStart');
+            if (startBtn) {
+                startBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    start(true);
+                });
+            }
+
+            setTimeout(() => start(false), 800);
         })();
     </script>
 @endsection
