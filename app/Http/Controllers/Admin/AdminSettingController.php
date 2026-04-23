@@ -18,8 +18,15 @@ class AdminSettingController extends Controller
         $setting = AppSetting::current() ?? new AppSetting;
 
         $demoUsers = User::query()
-            ->where('role', 'owner')
-            ->whereNull('parent_user_id')
+            ->where(function ($q) {
+                $q->where(function ($qq) {
+                    $qq->where('role', 'owner')->whereNull('parent_user_id');
+                })->orWhere(function ($qq) {
+                    $qq->where('role', 'viewer')->whereNotNull('parent_user_id');
+                });
+            })
+            ->orderBy('parent_user_id')
+            ->orderBy('role')
             ->orderBy('id')
             ->get(['id', 'name', 'email', 'parent_user_id', 'role']);
 
@@ -47,7 +54,13 @@ class AdminSettingController extends Controller
             'mail_encryption' => ['nullable', 'in:,tls,ssl'],
             'mail_from_address' => ['nullable', 'email', 'max:255'],
             'mail_from_name' => ['nullable', 'string', 'max:255'],
-            'demo_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'owner')->whereNull('parent_user_id')],
+            'demo_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where(function ($q) {
+                $q->where(function ($qq) {
+                    $qq->where('role', 'owner')->whereNull('parent_user_id');
+                })->orWhere(function ($qq) {
+                    $qq->where('role', 'viewer')->whereNotNull('parent_user_id');
+                });
+            })],
             'website_scrape_batch_per_minute' => ['nullable', 'integer', 'min:1', 'max:1000'],
             'website_scrape_concurrency' => ['nullable', 'integer', 'min:1', 'max:50'],
             'website_scrape_timeout_seconds' => ['nullable', 'integer', 'min:3', 'max:60'],

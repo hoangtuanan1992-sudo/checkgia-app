@@ -108,7 +108,7 @@
                                         <option value="" @selected(old('demo_user_id', $setting->demo_user_id) === null || (string) old('demo_user_id', $setting->demo_user_id) === '')>Không dùng demo</option>
                                         @foreach($demoUsers as $u)
                                             <option value="{{ $u->id }}" @selected((string) old('demo_user_id', $setting->demo_user_id) === (string) $u->id)>
-                                                #{{ $u->id }} - {{ $u->name }} ({{ $u->email }})
+                                                #{{ $u->id }} - {{ $u->name }} ({{ $u->email }}){{ $u->role === 'viewer' && $u->parent_user_id ? ' - viewer của #'.$u->parent_user_id : '' }}
                                             </option>
                                         @endforeach
                                     </select>
@@ -116,7 +116,7 @@
                                     <div class="hint" style="margin-top:6px">Link demo: <a href="{{ route('demo') }}" target="_blank">{{ route('demo') }}</a></div>
                                 </div>
                                 <div class="hint" style="margin-top:0">
-                                    Chỉ hiển thị các Shop (role owner, không phải sub-user).
+                                    Có thể chọn Shop (owner) hoặc tài khoản con (viewer, chỉ xem).
                                 </div>
                             </div>
                         </div>
