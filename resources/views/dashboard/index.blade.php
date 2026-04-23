@@ -617,13 +617,13 @@
     </dialog>
 
     <style>
-        .cg-tour-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:99998;display:none}
-        .cg-tour-tooltip{position:fixed;z-index:99999;max-width:min(380px,calc(100% - 24px));background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.25);padding:12px}
+        .cg-tour-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:2147483646 !important;display:none}
+        .cg-tour-tooltip{position:fixed;z-index:2147483647 !important;max-width:min(380px,calc(100% - 24px));background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.25);padding:12px}
         .cg-tour-title{font-weight:900;font-size:14px;margin:0}
         .cg-tour-text{margin-top:6px;color:var(--muted);font-size:13px;white-space:pre-line;line-height:1.45}
         .cg-tour-actions{margin-top:10px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
         .cg-tour-step{margin-top:10px;color:var(--muted);font-size:12px}
-        .cg-tour-highlight{position:relative;z-index:100000;box-shadow:0 0 0 4px rgba(13,110,253,.22);border-radius:12px}
+        .cg-tour-highlight{position:relative !important;z-index:2147483647 !important;box-shadow:0 0 0 4px rgba(13,110,253,.22);border-radius:12px}
     </style>
 
     <script>
