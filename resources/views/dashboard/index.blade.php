@@ -223,6 +223,7 @@
                                                             data-action="{{ route('dashboard.products.url.update', $product) }}"
                                                             data-field="product_url"
                                                             data-value="{{ $product->product_url }}"
+                                                            data-tour="edit-own-url"
                                                             title="Sửa link sản phẩm của bạn"
                                                         >
                                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -232,7 +233,7 @@
                                                         </button>
                                                     @endif
                                                 @if($product->product_url)
-                                                    <a href="{{ $product->product_url }}" target="_blank" style="font-size:13px">link sản phẩm</a>
+                                                    <a href="{{ $product->product_url }}" target="_blank" style="font-size:13px" data-tour="open-own-link">link sản phẩm</a>
                                                 @else
                                                     <span class="hint" style="margin-top:0">chưa có link</span>
                                                 @endif
@@ -261,11 +262,11 @@
                                                         @if(is_null($diff))
                                                             <span class="hint" style="margin-top:0">---</span>
                                                         @elseif($diff === 0)
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:#6b7280">không chênh</a>
+                                                            <a href="{{ $c->url }}" target="_blank" style="color:#6b7280" data-tour="open-competitor-link">không chênh</a>
                                                         @elseif($diff > 0)
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--success)">+{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--success)" data-tour="open-competitor-link">+{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @else
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)">{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)" data-tour="open-competitor-link">{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @endif
 
                                                         @if(! is_null($adjDiff))
@@ -289,6 +290,7 @@
                                                                     data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
                                                                     data-own="{{ $own }}"
                                                                     data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                                    data-tour="price-adjustment"
                                                                     title="Điều chỉnh giá (+/-)"
                                                                 >
                                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -306,6 +308,7 @@
                                                                     data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
                                                                     data-field="url"
                                                                     data-value="{{ $c->url }}"
+                                                                    data-tour="edit-competitor-url"
                                                                     title="Sửa URL">
                                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                                                     <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1289,42 +1292,68 @@
                 }
             }
 
+            const isViewer = @json(auth()->user()->isViewer());
             const steps = [
                 {
-                    title: 'Bước 1: Nhập link sản phẩm',
+                    title: 'Nhập link sản phẩm',
                     text: 'Dán link sản phẩm của bạn vào ô URL.\nSau đó có thể nhập thêm link đối thủ để so sánh.',
                     target: '#product_url',
                     before: ensureAddFormOpen,
                 },
                 {
-                    title: 'Bước 2: Link đối thủ (tuỳ chọn)',
+                    title: 'Link đối thủ (tuỳ chọn)',
                     text: 'Nếu đã tạo cột đối thủ, dán link đối thủ vào các ô bên dưới.\nNếu chưa có đối thủ, vào mục “Cài đặt” để tạo cột so sánh.',
                     target: () => document.getElementById('competitorUrlGrid') || document.getElementById('addProductCard'),
                     before: ensureAddFormOpen,
                 },
                 {
-                    title: 'Bước 3: Nhóm sản phẩm (tuỳ chọn)',
+                    title: 'Nhóm sản phẩm (tuỳ chọn)',
                     text: 'Bạn có thể chọn nhóm có sẵn hoặc tạo nhóm mới để lọc và xuất Excel theo nhóm.',
                     target: '#product_group_id',
                     before: ensureAddFormOpen,
                 },
                 {
-                    title: 'Bước 4: Thêm vào danh sách',
+                    title: 'Thêm vào danh sách',
                     text: 'Bấm nút để thêm sản phẩm vào bảng so sánh.\nSau khi thêm, dữ liệu sẽ xuất hiện ở phần “Kết quả so sánh”.',
                     target: '#addProductSubmit',
                     before: ensureAddFormOpen,
                 },
                 {
-                    title: 'Bước 5: Tìm kiếm / lọc / sắp xếp',
-                    text: 'Dùng thanh Tìm kiếm, lọc theo Nhóm và Sắp xếp để quản lý danh sách nhanh hơn.',
-                    target: '#filterSearch',
-                },
-                {
-                    title: 'Bước 6: Bảng kết quả so sánh',
-                    text: 'Đây là nơi xem giá của bạn, giá đối thủ, chênh lệch và thời gian cập nhật.\nBạn có thể đổi “Dạng thẻ/Dạng bảng” trên desktop.',
+                    title: 'Bảng kết quả so sánh',
+                    text: 'Đây là nơi xem giá của bạn, giá đối thủ, chênh lệch và thời gian cập nhật.',
                     target: '#comparisonCard',
                 },
+                {
+                    title: 'Bấm link sản phẩm',
+                    text: 'Bấm “link sản phẩm” để mở trang sản phẩm của bạn.',
+                    target: '[data-tour="open-own-link"]',
+                },
+                {
+                    title: 'Bấm link đối thủ',
+                    text: 'Bấm vào chênh lệch (hoặc link) để mở trang đối thủ.',
+                    target: '[data-tour="open-competitor-link"]',
+                },
             ];
+
+            if (!isViewer) {
+                steps.push(
+                    {
+                        title: 'Sửa link sản phẩm',
+                        text: 'Bấm nút “Sửa link” để đổi URL sản phẩm của bạn.',
+                        target: '[data-tour="edit-own-url"]',
+                    },
+                    {
+                        title: 'Sửa link đối thủ',
+                        text: 'Bấm nút “Sửa URL” ở cột đối thủ để cập nhật link đối thủ.',
+                        target: '[data-tour="edit-competitor-url"]',
+                    },
+                    {
+                        title: 'Giá điều chỉnh',
+                        text: 'Dùng “Giá điều chỉnh (+/-)” để cộng/trừ chênh lệch theo phí ship/khuyến mãi.',
+                        target: '[data-tour="price-adjustment"]',
+                    }
+                );
+            }
 
             function positionTooltip(el) {
                 const pad = 12;
@@ -1367,7 +1396,7 @@
                 highlighted.classList.add('cg-tour-highlight');
                 highlighted.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
 
-                titleEl.textContent = step.title;
+                titleEl.textContent = `Bước ${idx + 1}: ${step.title}`;
                 textEl.textContent = step.text;
                 stepEl.textContent = `(${idx + 1}/${steps.length})`;
 
