@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\AppSetting;
 use App\Models\CompetitorPrice;
 use App\Models\Product;
 use App\Models\ProductPriceHistory;
@@ -14,6 +15,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 
 class ScrapeProductPrices implements ShouldQueue
 {
@@ -22,10 +24,13 @@ class ScrapeProductPrices implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    public int $timeout = 120;
+
     public function __construct(public int $productId) {}
 
     public function handle(): void
     {
+        $now = now();
         $product = Product::query()
             ->with([
                 'competitors' => function ($q) {
@@ -49,29 +54,47 @@ class ScrapeProductPrices implements ShouldQueue
             return;
         }
 
-        $scraper = new PriceScraper;
+        $appSetting = AppSetting::current();
+        $concurrency = max(1, (int) ($appSetting?->website_scrape_concurrency ?? 10));
+        $timeoutSeconds = max(1, (int) ($appSetting?->website_scrape_timeout_seconds ?? 7));
+
+        $scraper = new PriceScraper(timeoutSeconds: $timeoutSeconds, connectTimeoutSeconds: $timeoutSeconds);
         $notifier = new AlertNotifier;
 
+        $userXpaths = UserScrapeXpath::query()
+            ->where('user_id', $product->user_id)
+            ->orderBy('type')
+            ->orderBy('position')
+            ->get()
+            ->groupBy('type');
+
+        $urlsByKey = [
+            'p' => (string) $product->product_url,
+        ];
+        foreach ($product->competitors as $competitor) {
+            $site = $competitor->competitorSite;
+            if (! $site || ! $site->price_xpath || ! $competitor->url) {
+                continue;
+            }
+
+            $urlsByKey['c:'.$competitor->id] = (string) $competitor->url;
+        }
+
+        $htmlByKey = $scraper->fetchHtmlPool($urlsByKey, $concurrency);
+
         try {
-            $html = $scraper->fetchHtml($product->product_url);
+            $html = $htmlByKey['p'] ?? null;
+            if (! is_string($html) || $html === '') {
+                return;
+            }
 
             $nameXpaths = array_merge(
                 [(string) $settings->own_name_xpath],
-                UserScrapeXpath::query()
-                    ->where('user_id', $product->user_id)
-                    ->where('type', 'name')
-                    ->orderBy('position')
-                    ->pluck('xpath')
-                    ->all()
+                $userXpaths->get('name', collect())->pluck('xpath')->all()
             );
             $priceXpaths = array_merge(
                 [(string) $settings->own_price_xpath],
-                UserScrapeXpath::query()
-                    ->where('user_id', $product->user_id)
-                    ->where('type', 'price')
-                    ->orderBy('position')
-                    ->pluck('xpath')
-                    ->all()
+                $userXpaths->get('price', collect())->pluck('xpath')->all()
             );
 
             $name = $scraper->extractFirstByXPaths($html, $nameXpaths) ?? $scraper->extractTitle($html);
@@ -89,7 +112,7 @@ class ScrapeProductPrices implements ShouldQueue
                     ProductPriceHistory::create([
                         'product_id' => $product->id,
                         'price' => $price,
-                        'fetched_at' => now(),
+                        'fetched_at' => $now,
                     ]);
                 }
             }
@@ -103,7 +126,11 @@ class ScrapeProductPrices implements ShouldQueue
             }
 
             try {
-                $cHtml = $scraper->fetchHtml($competitor->url);
+                $cHtml = $htmlByKey['c:'.$competitor->id] ?? null;
+                if (! is_string($cHtml) || $cHtml === '') {
+                    continue;
+                }
+
                 $fallbacks = $site->scrapeXpaths
                     ->where('type', 'price')
                     ->sortBy('position')
@@ -119,7 +146,7 @@ class ScrapeProductPrices implements ShouldQueue
                         CompetitorPrice::create([
                             'competitor_id' => $competitor->id,
                             'price' => $price,
-                            'fetched_at' => now(),
+                            'fetched_at' => $now,
                         ]);
                         $notifier->notifyOnCompetitorPriceChange($product, $competitor, (int) $price, $previousPrice);
                     }
@@ -128,7 +155,11 @@ class ScrapeProductPrices implements ShouldQueue
             }
         }
 
-        $product->last_scraped_at = now();
+        $product->last_scraped_at = $now;
         $product->save();
+
+        Cache::add('checkgia:scrape-due:last_updated', 0, $now->copy()->addDays(2));
+        Cache::increment('checkgia:scrape-due:last_updated');
+        Cache::put('checkgia:scrape-due:last_job_finished_at', $now->toIso8601String(), $now->copy()->addDays(2));
     }
 }

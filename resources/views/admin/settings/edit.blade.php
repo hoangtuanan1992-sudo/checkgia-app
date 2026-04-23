@@ -129,7 +129,7 @@
                         </div>
                         <div class="card-body" style="padding:8px 16px 16px">
                             <div class="hint" style="margin-top:0">
-                                Cron gần nhất: bắt đầu {{ $scrapeStatus['last_started_at'] ?? '-' }}, kết thúc {{ $scrapeStatus['last_finished_at'] ?? '-' }}, chọn {{ $scrapeStatus['last_selected'] ?? '-' }}, cập nhật {{ $scrapeStatus['last_updated'] ?? '-' }} sản phẩm.
+                                Cron gần nhất: bắt đầu {{ $scrapeStatus['last_started_at'] ?? '-' }}, kết thúc {{ $scrapeStatus['last_finished_at'] ?? '-' }}, chọn {{ $scrapeStatus['last_selected'] ?? '-' }}, đẩy job {{ $scrapeStatus['last_dispatched'] ?? '-' }}, job cập nhật {{ $scrapeStatus['last_updated'] ?? '-' }}, job gần nhất {{ $scrapeStatus['last_job_finished_at'] ?? '-' }}.
                             </div>
                             <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
                                 <div class="field" style="margin-top:0">
