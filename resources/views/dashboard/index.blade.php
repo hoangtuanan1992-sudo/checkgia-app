@@ -239,7 +239,7 @@
                                                 @endif
                                             </div>
                                             <div style="font-weight:600">
-                                                <a href="{{ route('products.history', $product) }}" style="color:#111827">
+                                                <a href="{{ route('products.history', $product) }}" style="color:#111827" data-tour="price-history-own">
                                                     {{ number_format($own, 0, ',', '.') }}đ
                                                 </a>
                                             </div>
@@ -317,7 +317,7 @@
                                                             </button>
                                                         @endif
                                                         @if($cPrice)
-                                                            <a href="{{ route('competitors.history', $c) }}" title="{{ $product->name }}">{{ number_format($cPrice, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ route('competitors.history', $c) }}" title="{{ $product->name }}" data-tour="price-history-competitor">{{ number_format($cPrice, 0, ',', '.') }}đ</a>
                                                             @if(! is_null($delta) && $delta !== 0)
                                                                 <span title="{{ $delta > 0 ? 'Tăng' : 'Giảm' }} {{ number_format(abs($delta), 0, ',', '.') }}đ" style="display:inline-flex;align-items:center">
                                                                     @if($delta > 0)
@@ -446,7 +446,7 @@
 
                             <div class="compare-card-own-row">
                                 <div class="compare-card-own-label">Giá bạn</div>
-                                <a href="{{ route('products.history', $product) }}" class="compare-card-own-price">
+                                <a href="{{ route('products.history', $product) }}" class="compare-card-own-price" data-tour="price-history-own">
                                     {{ number_format($own, 0, ',', '.') }}đ
                                 </a>
                             </div>
@@ -478,7 +478,7 @@
                                         <div class="compare-card-cell-site">{{ $site->name }}</div>
                                         <div class="compare-card-cell-price">
                                             @if($cPrice)
-                                                <a href="{{ route('competitors.history', $c) }}" style="color:#6b7280">
+                                                <a href="{{ route('competitors.history', $c) }}" style="color:#6b7280" data-tour="price-history-competitor">
                                                     {{ number_format($cPrice, 0, ',', '.') }}
                                                 </a>
                                             @else
@@ -1333,6 +1333,11 @@
                     text: 'Bấm vào chênh lệch (hoặc link) để mở trang đối thủ.',
                     target: '[data-tour="open-competitor-link"]',
                 },
+                {
+                    title: 'Lịch sử giá',
+                    text: 'Bấm vào giá để xem lịch sử biến động giá (của bạn hoặc của đối thủ).',
+                    target: '[data-tour="price-history-own"]',
+                },
             ];
 
             if (!isViewer) {
@@ -1351,30 +1356,86 @@
                         title: 'Giá điều chỉnh',
                         text: 'Dùng “Giá điều chỉnh (+/-)” để cộng/trừ chênh lệch theo phí ship/khuyến mãi.',
                         target: '[data-tour="price-adjustment"]',
+                        placement: 'bottom',
+                        offsetY: 18,
                     }
                 );
             }
 
-            function positionTooltip(el) {
+            function rectsOverlap(a, b) {
+                return !(
+                    a.right <= b.left ||
+                    a.left >= b.right ||
+                    a.bottom <= b.top ||
+                    a.top >= b.bottom
+                );
+            }
+
+            function clamp(n, min, max) {
+                return Math.max(min, Math.min(max, n));
+            }
+
+            function positionTooltip(el, step) {
                 const pad = 12;
                 const rect = el.getBoundingClientRect();
                 const tipRect = tooltip.getBoundingClientRect();
+                const margin = 10;
+                const offsetX = Number(step?.offsetX ?? 0) || 0;
+                const offsetY = Number(step?.offsetY ?? 0) || 0;
 
-                let top = rect.bottom + 10;
-                let left = rect.left;
+                const placements = step?.placement ? [step.placement] : ['bottom', 'top', 'right', 'left'];
 
-                if (left + tipRect.width > window.innerWidth - pad) {
-                    left = window.innerWidth - pad - tipRect.width;
+                let chosen = null;
+                for (const p of placements) {
+                    let top = rect.bottom + margin;
+                    let left = rect.left;
+
+                    if (p === 'top') {
+                        top = rect.top - margin - tipRect.height;
+                        left = rect.left;
+                    } else if (p === 'right') {
+                        top = rect.top;
+                        left = rect.right + margin;
+                    } else if (p === 'left') {
+                        top = rect.top;
+                        left = rect.left - margin - tipRect.width;
+                    }
+
+                    top += offsetY;
+                    left += offsetX;
+
+                    left = clamp(left, pad, window.innerWidth - pad - tipRect.width);
+                    top = clamp(top, pad, window.innerHeight - pad - tipRect.height);
+
+                    const tip = {
+                        left,
+                        top,
+                        right: left + tipRect.width,
+                        bottom: top + tipRect.height,
+                    };
+                    const target = {
+                        left: rect.left,
+                        top: rect.top,
+                        right: rect.right,
+                        bottom: rect.bottom,
+                    };
+
+                    if (!rectsOverlap(tip, target)) {
+                        chosen = { top, left };
+                        break;
+                    }
                 }
-                if (left < pad) left = pad;
 
-                if (top + tipRect.height > window.innerHeight - pad) {
-                    top = rect.top - 10 - tipRect.height;
+                if (!chosen) {
+                    let top = rect.bottom + margin + offsetY;
+                    let left = rect.left + offsetX;
+                    left = clamp(left, pad, window.innerWidth - pad - tipRect.width);
+                    top = clamp(top, pad, window.innerHeight - pad - tipRect.height);
+                    chosen = { top, left };
                 }
-                if (top < pad) top = pad;
 
-                tooltip.style.top = `${Math.round(top)}px`;
-                tooltip.style.left = `${Math.round(left)}px`;
+                tooltip.style.top = `${Math.round(chosen.top)}px`;
+                tooltip.style.left = `${Math.round(chosen.left)}px`;
             }
 
             function showStep(idx) {
@@ -1406,7 +1467,7 @@
                 overlay.style.display = '';
                 tooltip.style.display = '';
 
-                requestAnimationFrame(() => positionTooltip(el));
+                requestAnimationFrame(() => positionTooltip(el, step));
             }
 
             function close(markDone) {
@@ -1446,7 +1507,7 @@
                 if (current < 0) return;
                 const step = steps[current];
                 const el = getEl(step.target);
-                if (el) positionTooltip(el);
+                if (el) positionTooltip(el, step);
             });
 
             const startBtn = document.getElementById('dashboardTourStart');
