@@ -1373,6 +1373,19 @@
                     target: '#comparisonCard',
                 },
                 {
+                    title: 'Dạng thẻ / Dạng bảng',
+                    text: 'Trên máy tính, bạn có thể bấm nút “Dạng thẻ / Dạng bảng” để đổi kiểu hiển thị.\nTrên điện thoại, hệ thống sẽ tự ưu tiên dạng thẻ cho dễ xem.',
+                    target: () => {
+                        const btn = document.getElementById('compareViewToggle');
+                        if (btn && btn.offsetParent !== null) {
+                            return btn;
+                        }
+
+                        return document.getElementById('comparisonCard');
+                    },
+                    placement: 'top',
+                },
+                {
                     title: 'Bấm link sản phẩm',
                     text: 'Bấm “link sản phẩm” để mở trang sản phẩm của bạn.',
                     target: '[data-tour="open-own-link"]',
