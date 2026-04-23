@@ -30,6 +30,7 @@ class AdminSettingController extends Controller
             'last_dispatched' => Cache::get('checkgia:scrape-due:last_dispatched'),
             'last_updated' => Cache::get('checkgia:scrape-due:last_updated'),
             'last_job_finished_at' => Cache::get('checkgia:scrape-due:last_job_finished_at'),
+            'last_job_error' => Cache::get('checkgia:scrape-due:last_job_error'),
         ];
 
         return view('admin.settings.edit', compact('setting', 'demoUsers', 'scrapeStatus'));
