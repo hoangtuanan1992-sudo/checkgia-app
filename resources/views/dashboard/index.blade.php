@@ -1228,7 +1228,7 @@
         })();
 
         (function () {
-            const tourKey = 'checkgia_tour_dashboard_v1_done';
+            const tourKey = 'checkgia_tour_dashboard_v2_done';
             const overlay = document.createElement('div');
             overlay.className = 'cg-tour-overlay';
 
