@@ -265,4 +265,4 @@ Artisan::command('checkgia:admin-create {email} {--name=Admin} {--password=}', f
     return 0;
 })->purpose('Create an admin account (outputs generated password if not provided)');
 
-Schedule::command('checkgia:scrape-due')->everyMinute()->withoutOverlapping();
+Schedule::command('checkgia:scrape-due')->everyMinute()->withoutOverlapping(15);
