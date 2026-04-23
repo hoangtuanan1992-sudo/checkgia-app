@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -80,6 +81,13 @@ class AdminSettingController extends Controller
 
         if (array_key_exists('demo_user_id', $data) && (string) $data['demo_user_id'] === '') {
             $data['demo_user_id'] = null;
+        }
+
+        $table = (new AppSetting)->getTable();
+        foreach (['website_scrape_batch_per_minute', 'website_scrape_concurrency', 'website_scrape_timeout_seconds'] as $col) {
+            if (array_key_exists($col, $data) && ! Schema::hasColumn($table, $col)) {
+                unset($data[$col]);
+            }
         }
 
         if (array_key_exists('website_scrape_batch_per_minute', $data) && (string) $data['website_scrape_batch_per_minute'] === '') {
