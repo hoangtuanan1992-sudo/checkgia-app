@@ -250,19 +250,32 @@ class AlertNotifier
     {
         if ($setting->email_enabled && $setting->email_to) {
             try {
-                Mail::raw($body, function ($m) use ($setting, $title, $productName) {
-                    $m->to($setting->email_to)->subject($title.': '.$productName);
-                });
+                $oldSocketTimeout = ini_get('default_socket_timeout');
+                ini_set('default_socket_timeout', '7');
+
+                try {
+                    Mail::raw($body, function ($m) use ($setting, $title, $productName) {
+                        $m->to($setting->email_to)->subject($title.': '.$productName);
+                    });
+                } finally {
+                    if (is_string($oldSocketTimeout) && $oldSocketTimeout !== '') {
+                        ini_set('default_socket_timeout', $oldSocketTimeout);
+                    }
+                }
             } catch (\Throwable $e) {
             }
         }
 
         if ($setting->telegram_enabled && $setting->telegram_bot_token && $setting->telegram_chat_id) {
             try {
-                Http::asForm()->post('https://api.telegram.org/bot'.$setting->telegram_bot_token.'/sendMessage', [
-                    'chat_id' => $setting->telegram_chat_id,
-                    'text' => $title."\n\n".$body,
-                ]);
+                Http::asForm()
+                    ->connectTimeout(7)
+                    ->timeout(7)
+                    ->retry(0, 0)
+                    ->post('https://api.telegram.org/bot'.$setting->telegram_bot_token.'/sendMessage', [
+                        'chat_id' => $setting->telegram_chat_id,
+                        'text' => $title."\n\n".$body,
+                    ]);
             } catch (\Throwable $e) {
             }
         }
