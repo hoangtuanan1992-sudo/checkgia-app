@@ -1346,6 +1346,8 @@
                         title: 'Sửa link sản phẩm',
                         text: 'Bấm nút “Sửa link” để đổi URL sản phẩm của bạn.',
                         target: '[data-tour="edit-own-url"]',
+                        placement: 'bottom',
+                        offsetY: 18,
                     },
                     {
                         title: 'Sửa link đối thủ',
@@ -1383,7 +1385,10 @@
                 const offsetX = Number(step?.offsetX ?? 0) || 0;
                 const offsetY = Number(step?.offsetY ?? 0) || 0;
 
-                const placements = step?.placement ? [step.placement] : ['bottom', 'top', 'right', 'left'];
+                const basePlacements = ['bottom', 'top', 'right', 'left'];
+                const placements = step?.placement
+                    ? [step.placement, ...basePlacements.filter((p) => p !== step.placement)]
+                    : basePlacements;
 
                 let chosen = null;
                 for (const p of placements) {
