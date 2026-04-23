@@ -128,6 +128,9 @@
                             <p class="card-sub">Giới hạn tải để tránh treo hosting</p>
                         </div>
                         <div class="card-body" style="padding:8px 16px 16px">
+                            <div class="hint" style="margin-top:0">
+                                Cron gần nhất: bắt đầu {{ $scrapeStatus['last_started_at'] ?? '-' }}, kết thúc {{ $scrapeStatus['last_finished_at'] ?? '-' }}, chọn {{ $scrapeStatus['last_selected'] ?? '-' }}, cập nhật {{ $scrapeStatus['last_updated'] ?? '-' }} sản phẩm.
+                            </div>
                             <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
                                 <div class="field" style="margin-top:0">
                                     <label class="label" for="website_scrape_batch_per_minute">Sản phẩm/phút</label>

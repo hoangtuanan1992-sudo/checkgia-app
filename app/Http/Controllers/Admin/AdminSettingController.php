@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -22,7 +23,14 @@ class AdminSettingController extends Controller
             ->orderBy('id')
             ->get(['id', 'name', 'email', 'parent_user_id', 'role']);
 
-        return view('admin.settings.edit', compact('setting', 'demoUsers'));
+        $scrapeStatus = [
+            'last_started_at' => Cache::get('checkgia:scrape-due:last_started_at'),
+            'last_finished_at' => Cache::get('checkgia:scrape-due:last_finished_at'),
+            'last_selected' => Cache::get('checkgia:scrape-due:last_selected'),
+            'last_updated' => Cache::get('checkgia:scrape-due:last_updated'),
+        ];
+
+        return view('admin.settings.edit', compact('setting', 'demoUsers', 'scrapeStatus'));
     }
 
     public function update(Request $request): RedirectResponse

@@ -24,12 +24,14 @@ Artisan::command('checkgia:scrape-due', function () {
     $now = now();
 
     $lockKey = 'checkgia:scrape-due:lock';
-    $locked = ! Cache::add($lockKey, 1, $now->copy()->addMinutes(15));
+    $locked = ! Cache::add($lockKey, 1, $now->copy()->addMinutes(2));
     if ($locked) {
         return 0;
     }
 
     try {
+        Cache::put('checkgia:scrape-due:last_started_at', $now->toIso8601String(), $now->copy()->addDays(2));
+
         $appSetting = AppSetting::current();
         $batchSize = max(1, (int) ($appSetting?->website_scrape_batch_per_minute ?? 40));
         $concurrency = max(1, (int) ($appSetting?->website_scrape_concurrency ?? 10));
@@ -85,8 +87,13 @@ Artisan::command('checkgia:scrape-due', function () {
 
         $selectedIds = array_values(array_unique($selectedIds));
         if ($selectedIds === []) {
+            Cache::put('checkgia:scrape-due:last_selected', 0, $now->copy()->addDays(2));
+            Cache::put('checkgia:scrape-due:last_finished_at', now()->toIso8601String(), $now->copy()->addDays(2));
+
             return 0;
         }
+
+        Cache::put('checkgia:scrape-due:last_selected', count($selectedIds), $now->copy()->addDays(2));
 
         $products = Product::query()
             ->with([
@@ -104,6 +111,8 @@ Artisan::command('checkgia:scrape-due', function () {
             ->get();
 
         if ($products->isEmpty()) {
+            Cache::put('checkgia:scrape-due:last_finished_at', now()->toIso8601String(), $now->copy()->addDays(2));
+
             return 0;
         }
 
@@ -139,6 +148,7 @@ Artisan::command('checkgia:scrape-due', function () {
 
         $htmlByKey = $scraper->fetchHtmlPool($urlsByKey, $concurrency);
 
+        $updatedCount = 0;
         foreach ($products as $product) {
             try {
                 if (! $product->product_url) {
@@ -224,8 +234,12 @@ Artisan::command('checkgia:scrape-due', function () {
             } catch (Throwable $e) {
             } finally {
                 $product->forceFill(['last_scraped_at' => $now])->save();
+                $updatedCount++;
             }
         }
+
+        Cache::put('checkgia:scrape-due:last_updated', $updatedCount, $now->copy()->addDays(2));
+        Cache::put('checkgia:scrape-due:last_finished_at', now()->toIso8601String(), $now->copy()->addDays(2));
     } finally {
         Cache::forget($lockKey);
     }
