@@ -138,6 +138,142 @@ class PriceScraper
         return $this->extractFirstByXPath($html, '//title');
     }
 
+    public function extractProductNameAndPriceFromStructuredData(string $html): array
+    {
+        $result = [
+            'name' => null,
+            'price_raw' => null,
+        ];
+
+        if (! preg_match_all('/<script[^>]*type=[\"\']application\/ld\+json[\"\'][^>]*>(.*?)<\/script>/is', $html, $m)) {
+            return $result;
+        }
+
+        foreach ($m[1] as $json) {
+            $json = trim((string) $json);
+            if ($json === '') {
+                continue;
+            }
+
+            $data = json_decode($json, true);
+            if (! is_array($data)) {
+                continue;
+            }
+
+            foreach ($this->flattenJsonLdNodes($data) as $node) {
+                if (! is_array($node) || ! $this->isJsonLdProductNode($node)) {
+                    continue;
+                }
+
+                if (! $result['name'] && isset($node['name']) && is_string($node['name'])) {
+                    $name = trim($node['name']);
+                    if ($name !== '') {
+                        $result['name'] = $name;
+                    }
+                }
+
+                if (! $result['price_raw']) {
+                    $priceRaw = $this->extractPriceRawFromJsonLdOffers($node['offers'] ?? null);
+                    if ($priceRaw !== null) {
+                        $result['price_raw'] = $priceRaw;
+                    }
+                }
+
+                if ($result['name'] && $result['price_raw']) {
+                    return $result;
+                }
+            }
+        }
+
+        return $result;
+    }
+
+    private function flattenJsonLdNodes(mixed $data): array
+    {
+        $out = [];
+
+        if (! is_array($data)) {
+            return $out;
+        }
+
+        if (array_key_exists('@graph', $data) && is_array($data['@graph'])) {
+            foreach ($data['@graph'] as $node) {
+                if (is_array($node)) {
+                    $out[] = $node;
+                }
+            }
+        }
+
+        if (array_key_exists('@type', $data)) {
+            $out[] = $data;
+        }
+
+        $isList = array_keys($data) === range(0, count($data) - 1);
+        if ($isList) {
+            foreach ($data as $item) {
+                foreach ($this->flattenJsonLdNodes($item) as $node) {
+                    $out[] = $node;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    private function isJsonLdProductNode(array $node): bool
+    {
+        $type = $node['@type'] ?? null;
+        $types = [];
+
+        if (is_string($type)) {
+            $types = [$type];
+        } elseif (is_array($type)) {
+            $types = array_values(array_filter($type, fn ($v) => is_string($v)));
+        }
+
+        foreach ($types as $t) {
+            if (mb_strtolower($t) === 'product') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function extractPriceRawFromJsonLdOffers(mixed $offers): ?string
+    {
+        $offerNodes = [];
+
+        if (is_array($offers)) {
+            $isList = array_keys($offers) === range(0, count($offers) - 1);
+            if ($isList) {
+                $offerNodes = array_values(array_filter($offers, fn ($v) => is_array($v)));
+            } else {
+                $offerNodes = [$offers];
+            }
+        }
+
+        foreach ($offerNodes as $offer) {
+            foreach (['sale_price', 'price', 'lowPrice', 'highPrice'] as $k) {
+                if (! array_key_exists($k, $offer)) {
+                    continue;
+                }
+                $v = $offer[$k];
+                if (is_int($v) || is_float($v)) {
+                    return (string) $v;
+                }
+                if (is_string($v)) {
+                    $s = trim($v);
+                    if ($s !== '') {
+                        return $s;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
     public function parsePriceToInt(?string $raw, ?string $regex = null): ?int
     {
         if ($raw === null) {

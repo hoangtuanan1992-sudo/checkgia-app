@@ -55,6 +55,16 @@ class DashboardProductController extends Controller
         $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
 
         if (! $name || is_null($price)) {
+            $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+            if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
+                $name = (string) $structured['name'];
+            }
+            if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
+            }
+        }
+
+        if (! $name || is_null($price)) {
             $parts = [];
             if (! $name) {
                 $lines = ['Tên: không trích xuất được bằng XPath.'];
@@ -148,6 +158,12 @@ class DashboardProductController extends Controller
                     $fallbacks = $site->scrapeXpaths->where('type', 'price')->sortBy('position')->pluck('xpath')->all();
                     $cPriceRaw = $scraper->extractFirstByXPaths($cHtml, array_merge([(string) $site->price_xpath], $fallbacks));
                     $cPrice = $scraper->parsePriceToInt($cPriceRaw, $site->price_regex);
+                    if (is_null($cPrice)) {
+                        $structured = $scraper->extractProductNameAndPriceFromStructuredData($cHtml);
+                        if (is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                            $cPrice = $scraper->parsePriceToInt((string) $structured['price_raw'], $site->price_regex);
+                        }
+                    }
                     if (! is_null($cPrice)) {
                         $latest = $competitor->prices()->latest('fetched_at')->first();
                         if (! $latest || (int) $latest->price !== (int) $cPrice) {

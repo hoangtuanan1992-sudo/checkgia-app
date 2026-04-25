@@ -107,6 +107,16 @@ class ScrapeProductPrices implements ShouldQueue
                     $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
                     $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
 
+                    if (! $name || is_null($price)) {
+                        $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+                        if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
+                            $name = (string) $structured['name'];
+                        }
+                        if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                            $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
+                        }
+                    }
+
                     if ($name && ! is_null($price)) {
                         $product->update([
                             'name' => $name,
@@ -150,6 +160,13 @@ class ScrapeProductPrices implements ShouldQueue
                         ->all();
                     $raw = $scraper->extractFirstByXPaths($cHtml, array_merge([(string) $site->price_xpath], $fallbacks));
                     $price = $scraper->parsePriceToInt($raw, $site->price_regex);
+
+                    if (is_null($price)) {
+                        $structured = $scraper->extractProductNameAndPriceFromStructuredData($cHtml);
+                        if (is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                            $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $site->price_regex);
+                        }
+                    }
 
                     if (! is_null($price)) {
                         $latest = $competitor->prices()->latest('fetched_at')->first();

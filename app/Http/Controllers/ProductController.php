@@ -67,6 +67,16 @@ class ProductController extends Controller
         $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
 
         if (! $name || is_null($price)) {
+            $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+            if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
+                $name = (string) $structured['name'];
+            }
+            if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
+            }
+        }
+
+        if (! $name || is_null($price)) {
             $parts = [];
             if (! $name) {
                 $lines = ['Tên: không trích xuất được bằng XPath.'];
@@ -178,6 +188,16 @@ class ProductController extends Controller
         $priceDebug = $scraper->extractFirstByXPathsWithDebug($html, $priceXpaths);
         $priceRaw = $priceDebug['value'] ?? null;
         $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
+
+        if (! $name || is_null($price)) {
+            $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+            if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
+                $name = (string) $structured['name'];
+            }
+            if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
+            }
+        }
 
         if (! $name || is_null($price)) {
             $parts = [];
@@ -293,6 +313,16 @@ class ProductController extends Controller
         $name = $scraper->extractFirstByXPaths($html, $nameXpaths) ?? $scraper->extractTitle($html);
         $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
         $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
+
+        if (! $name || is_null($price)) {
+            $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+            if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
+                $name = (string) $structured['name'];
+            }
+            if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
+            }
+        }
 
         if (! $name || is_null($price)) {
             return back()
