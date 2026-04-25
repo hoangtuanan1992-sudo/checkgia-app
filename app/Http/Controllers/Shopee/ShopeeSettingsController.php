@@ -163,7 +163,10 @@ class ShopeeSettingsController extends Controller
             ]);
         }
 
-        return redirect()->route('shopee.dashboard')->with('status', 'Đã thêm sản phẩm Shopee');
+        return redirect()
+            ->route('shopee.dashboard')
+            ->with('status', 'Đã thêm sản phẩm Shopee')
+            ->with('shopee_pending_product_id', (int) $product->id);
     }
 
     public function toggleProduct(Request $request, ShopeeProduct $product): RedirectResponse

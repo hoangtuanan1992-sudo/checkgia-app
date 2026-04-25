@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ShopeeProduct;
 use App\Models\ShopeeShop;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ShopeeDashboardController extends Controller
@@ -28,6 +29,42 @@ class ShopeeDashboardController extends Controller
             ->get();
 
         return view('shopee.dashboard', compact('products', 'shops'));
+    }
+
+    public function poll(Request $request): JsonResponse
+    {
+        $ownerId = $request->user()->effectiveUserId();
+        $productId = (int) $request->query('product_id');
+
+        if ($productId <= 0) {
+            return response()->json(['message' => 'product_id is required'], 422);
+        }
+
+        $product = ShopeeProduct::query()
+            ->where('user_id', $ownerId)
+            ->with(['competitors'])
+            ->find($productId);
+
+        if (! $product) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        $hasOwnPrice = ! is_null($product->last_price);
+        $hasCompetitorPrice = false;
+        foreach ($product->competitors as $c) {
+            if (! is_null($c->last_price)) {
+                $hasCompetitorPrice = true;
+                break;
+            }
+        }
+
+        return response()->json([
+            'product_id' => (int) $product->id,
+            'ready' => $hasOwnPrice || $hasCompetitorPrice,
+            'has_own_price' => $hasOwnPrice,
+            'has_competitor_price' => $hasCompetitorPrice,
+            'last_scraped_at' => $product->last_scraped_at?->toIso8601String(),
+        ]);
     }
 
     public function history(Request $request, ShopeeProduct $product): View

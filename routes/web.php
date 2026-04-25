@@ -46,6 +46,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/dashboard/scrape-now', [DashboardScrapeNowController::class, 'run'])->name('dashboard.scrape.now');
 
     Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->name('shopee.dashboard');
+    Route::get('/shopee/poll', [ShopeeDashboardController::class, 'poll'])->name('shopee.poll');
     Route::get('/shopee/history/{product}', [ShopeeDashboardController::class, 'history'])->name('shopee.history');
     Route::middleware('owner')->group(function () {
         Route::get('/shopee/settings', [ShopeeSettingsController::class, 'index'])->name('shopee.settings');

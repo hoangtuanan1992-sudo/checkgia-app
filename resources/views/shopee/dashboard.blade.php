@@ -22,6 +22,10 @@
             @if(session('status'))
                 <div class="pill" style="margin-bottom:14px">{{ session('status') }}</div>
             @endif
+            @php($pendingProductId = (int) session('shopee_pending_product_id', 0))
+            @if($pendingProductId > 0)
+                <div class="pill" id="shopee-pending-pill" style="margin-bottom:14px">Đang lấy giá sản phẩm mới thêm (ID: {{ $pendingProductId }}). Trang sẽ tự cập nhật khi có giá.</div>
+            @endif
 
             <div class="card" style="max-width:none;box-shadow:none;margin-top:0">
                 <div class="card-header">
@@ -99,6 +103,48 @@
                     triggerExtensionPoll();
                 });
             </script>
+
+            @if($pendingProductId > 0)
+                <script>
+                    (function() {
+                        const productId = {{ $pendingProductId }};
+                        const pollUrl = @json(route('shopee.poll'));
+                        const pill = document.getElementById('shopee-pending-pill');
+                        let ticks = 0;
+                        const maxTicks = 60;
+
+                        async function tick() {
+                            ticks++;
+                            try {
+                                triggerExtensionPoll();
+                            } catch (e) {}
+
+                            try {
+                                const res = await fetch(pollUrl + '?product_id=' + encodeURIComponent(String(productId)), {
+                                    headers: { 'Accept': 'application/json' },
+                                });
+                                if (res.ok) {
+                                    const data = await res.json();
+                                    if (data && data.ready) {
+                                        window.location.reload();
+                                        return;
+                                    }
+                                }
+                            } catch (e) {}
+
+                            if (ticks >= maxTicks) {
+                                clearInterval(timer);
+                                if (pill) {
+                                    pill.textContent = 'Đang chờ lấy giá sản phẩm (ID: ' + productId + '). Nếu chưa thấy giá, hãy F5 hoặc kiểm tra Chrome extension.';
+                                }
+                            }
+                        }
+
+                        tick();
+                        const timer = setInterval(tick, 2500);
+                    })();
+                </script>
+            @endif
 
             <div style="height:14px"></div>
 
@@ -377,6 +423,7 @@
                                 @forelse($products as $i => $product)
                                     @php($own = is_null($product->last_price) ? null : (int) $product->last_price)
                                     @php($map = $product->competitors->keyBy('shopee_shop_id'))
+                                    @php($isPendingNew = ($pendingProductId ?? 0) > 0 && (int) $product->id === (int) ($pendingProductId ?? 0) && trim((string) $product->own_url) !== '')
                                     @php($maxAbsDiff = 0)
                                     @foreach($shops as $shop)
                                         @php($tmpC = $map->get($shop->id))
@@ -404,7 +451,7 @@
                                                     <a href="javascript:void(0)" onclick="updateOwnUrl({{ $product->id }}, '')" class="icon-box" title="Thêm link Shopee">
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                                     </a>
-                                                    <span class="hint" style="margin-top:0">---</span>
+                                                    <span class="hint" style="margin-top:0">{{ $isPendingNew ? 'Đang lấy giá...' : '---' }}</span>
                                                 </div>
                                             @else
                                                 <div style="display:flex;flex-direction:column;gap:6px">
@@ -429,7 +476,7 @@
                                                         <a href="javascript:void(0)" onclick="upsertCompetitorUrl({{ $product->id }}, {{ $shop->id }}, '{{ $c?->url ?? '' }}')" class="icon-box" title="Thêm link đối thủ">
                                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                                                         </a>
-                                                        <span class="hint" style="margin-top:0">---</span>
+                                                        <span class="hint" style="margin-top:0">{{ ($isPendingNew && trim((string) ($c?->url ?? '')) !== '') ? 'Đang lấy giá...' : '---' }}</span>
                                                     </div>
                                                 @else
                                                     <div style="display:flex;flex-direction:column;gap:6px">
