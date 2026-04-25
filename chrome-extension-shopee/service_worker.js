@@ -843,6 +843,9 @@ async function scrapeTab(tabId, variantPath, preferMax) {
         if (s.includes("captcha") || s.includes("xác minh") || s.includes("verify") || s.includes("unusual traffic")) {
           return "Shopee chặn (captcha/verify).";
         }
+        if (s.includes("quay lại trang chủ") || s.includes("trở về trang chủ") || s.includes("something went wrong") || s.includes("đã xảy ra lỗi")) {
+          return "Shopee báo lỗi và bắt quay về trang chủ.";
+        }
         if (s.includes("enable cookies") || s.includes("cookies")) {
           return "Shopee yêu cầu cookies.";
         }
@@ -1633,6 +1636,189 @@ async function readDirectModelPrice(tabId, url) {
   }
 }
 
+function extractShopeeIdsFromUrl(url) {
+  const u = String(url || "");
+
+  const ids1 = u.match(/i\.(\d+)\.(\d+)/);
+  const ids2 = u.match(/\/product\/(\d+)\/(\d+)/i);
+  const shopId = ids1 ? Number(ids1[1]) : (ids2 ? Number(ids2[1]) : null);
+  const itemId = ids1 ? Number(ids1[2]) : (ids2 ? Number(ids2[2]) : null);
+
+  const m = u.match(/"display_model_id"%3A(\d+)/i) || u.match(/display_model_id(?:%22)?%3A(\d+)/i);
+  const m2 = u.match(/display_model_id[=:](\d+)/i);
+  const modelId = m ? Number(m[1]) : (m2 ? Number(m2[1]) : null);
+
+  return {
+    shopId: Number.isFinite(shopId) ? shopId : null,
+    itemId: Number.isFinite(itemId) ? itemId : null,
+    modelId: Number.isFinite(modelId) ? modelId : null,
+  };
+}
+
+function normalizeShopeeRawPrice(raw) {
+  let p = Number(raw);
+  if (!Number.isFinite(p) || p <= 0) return null;
+  if (p >= 1000000000) {
+    p = Math.round(p / 100000);
+  } else if (p >= 10000000) {
+    p = Math.round(p / 100);
+  } else if (p >= 1000000 && p % 100000 === 0) {
+    p = p / 100000;
+  }
+  return Math.trunc(p);
+}
+
+function extractItemFromApiJson(json) {
+  return (
+    (json && json.data && json.data.item ? json.data.item : null) ??
+    (json && json.item ? json.item : null) ??
+    (json && json.data && json.data.data && json.data.data.item ? json.data.data.item : null) ??
+    null
+  );
+}
+
+function pickModelId(model) {
+  if (!model || typeof model !== "object") return null;
+  const id =
+    (model.modelid != null ? model.modelid : null) ??
+    (model.model_id != null ? model.model_id : null) ??
+    (model.modelId != null ? model.modelId : null) ??
+    (model.id != null ? model.id : null) ??
+    null;
+  const n = Number(id);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pickPriceValue(v) {
+  if (v == null) return null;
+  if (Array.isArray(v)) {
+    const nums = [];
+    for (const x of v) {
+      const n = pickPriceValue(x);
+      if (n != null) nums.push(n);
+    }
+    if (!nums.length) return null;
+    return nums.reduce((a, b) => (a > b ? a : b), nums[0]);
+  }
+  if (typeof v === "object") {
+    const candidates = [
+      v.price_after_discount,
+      v.price,
+      v.price_min,
+      v.price_max,
+      v.price_before_discount,
+      v.price_min_before_discount,
+      v.price_max_before_discount,
+    ];
+    for (const c of candidates) {
+      const n = pickPriceValue(c);
+      if (n != null) return n;
+    }
+    return null;
+  }
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function pickRawPriceFromModel(model) {
+  if (!model || typeof model !== "object") return null;
+  const candidates = [
+    model.price_after_discount,
+    model.price,
+    model.price_before_discount,
+  ];
+  for (const c of candidates) {
+    const n = pickPriceValue(c);
+    if (n != null) return n;
+  }
+  return null;
+}
+
+function pickNameFromItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const n = item.name != null ? String(item.name).trim() : "";
+  return n ? n.slice(0, 255) : null;
+}
+
+function pickPriceFromItem(item, modelId, preferMax) {
+  if (!item || typeof item !== "object") return null;
+
+  if (modelId != null && Number.isFinite(modelId) && modelId > 0) {
+    const models = Array.isArray(item.models) ? item.models : [];
+    const picked = models.find((m) => pickModelId(m) === Number(modelId));
+    if (picked) {
+      const raw = pickRawPriceFromModel(picked);
+      const price = normalizeShopeeRawPrice(raw);
+      if (price != null) return { price, raw_text: raw != null ? String(raw) : "" };
+    }
+  }
+
+  const candidates = [
+    item.price_after_discount,
+    item.price,
+    item.price_min,
+    item.price_max,
+    item.price_before_discount,
+    item.price_min_before_discount,
+    item.price_max_before_discount,
+  ]
+    .map((x) => normalizeShopeeRawPrice(pickPriceValue(x)))
+    .filter((x) => x != null);
+
+  if (!candidates.length) return null;
+  const price = preferMax ? Math.max(...candidates) : Math.min(...candidates);
+  return { price, raw_text: String(price) };
+}
+
+async function tryFetchPriceViaApi(url, preferMax) {
+  const ids = extractShopeeIdsFromUrl(url);
+  if (!ids.shopId || !ids.itemId) return null;
+
+  const base = "https://shopee.vn";
+  const candidates = [
+    `${base}/api/v4/item/get?shopid=${encodeURIComponent(String(ids.shopId))}&itemid=${encodeURIComponent(String(ids.itemId))}&x_api_source=pc`,
+    `${base}/api/v2/item/get?shopid=${encodeURIComponent(String(ids.shopId))}&itemid=${encodeURIComponent(String(ids.itemId))}`,
+  ];
+
+  for (const apiUrl of candidates) {
+    try {
+      const res = await fetch(apiUrl, {
+        credentials: "include",
+        headers: {
+          accept: "application/json",
+          "x-api-source": "pc",
+          "x-requested-with": "XMLHttpRequest",
+        },
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        const low = String(txt || "").toLowerCase();
+        if (low.includes("verify/traffic") || low.includes("unusual traffic") || low.includes("captcha") || low.includes("xác minh")) {
+          return { price: null, name: null, raw_text: "", block_reason: "Shopee chặn (verify/traffic)." };
+        }
+        continue;
+      }
+
+      const json = await res.json().catch(() => null);
+      const item = extractItemFromApiJson(json);
+      if (!item) continue;
+
+      const picked = pickPriceFromItem(item, ids.modelId, preferMax);
+      if (picked && picked.price != null) {
+        return {
+          price: picked.price,
+          name: pickNameFromItem(item),
+          raw_text: picked.raw_text || "",
+          block_reason: "",
+        };
+      }
+    } catch (e) {}
+  }
+
+  return null;
+}
+
 async function openAndScrape(url, variantPath, pricePick) {
   try {
     const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1660,6 +1846,10 @@ async function openAndScrape(url, variantPath, pricePick) {
     };
 
     const preferMax = String(pricePick || "low").toLowerCase() === "high";
+    const apiFirst = await tryFetchPriceViaApi(url, preferMax).catch(() => null);
+    if (apiFirst && (apiFirst.price != null || apiFirst.block_reason)) {
+      return apiFirst;
+    }
     const needsVariant = !!(variantPath || (typeof url === "string" && url.includes("extraParams=") && url.includes("display_model_id")));
     const tab = await withRetry(() => chrome.tabs.create({ url, active: true }));
     const tabId = tab.id;
@@ -1796,6 +1986,168 @@ async function openAndScrape(url, variantPath, pricePick) {
     // Try once early (best-effort), then re-inject after page load to ensure hook is active.
     try { await withRetry(() => injectMainWorldHelpers(), 3, 150); } catch (e) {}
 
+    const scrapeOnceFast = async () => {
+      if (!(await ensureTabExists())) return null;
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId },
+        args: [!!preferMax],
+        func: (preferMax) => {
+          function normalizePriceNumber(text) {
+            if (text == null || text === "") return null;
+            let s = String(text).trim();
+            if (s.includes(".") && !s.includes(",")) {
+              const parts = s.split(".");
+              if (parts.length === 2 && parts[1].length !== 3) {
+                const n = parseFloat(s);
+                return Number.isFinite(n) ? Math.trunc(n) : null;
+              }
+            }
+            s = s.replace(/[^\d]/g, "");
+            if (!s) return null;
+            const n = Number(s);
+            if (!Number.isFinite(n)) return null;
+            return Math.max(0, Math.trunc(n));
+          }
+
+          function detectBlock() {
+            const t = (document && document.body && document.body.innerText) ? String(document.body.innerText) : "";
+            const s = t.toLowerCase();
+            if (s.includes("trang không khả dụng") || s.includes("page not available")) return "Shopee chặn (trang không khả dụng).";
+            if (s.includes("captcha") || s.includes("xác minh") || s.includes("verify") || s.includes("unusual traffic")) return "Shopee chặn (captcha/verify).";
+            if (s.includes("enable cookies") || s.includes("cookies")) return "Shopee yêu cầu cookies.";
+            if (s.includes("quay lại trang chủ") || s.includes("trở về trang chủ") || s.includes("trang chủ")) {
+              if (s.includes("lỗi") || s.includes("error") || s.includes("something went wrong") || s.includes("đã xảy ra lỗi")) {
+                return "Shopee báo lỗi và bắt quay về trang chủ.";
+              }
+            }
+            if (s.includes("something went wrong") || s.includes("đã xảy ra lỗi")) return "Shopee báo lỗi (Something went wrong).";
+            return null;
+          }
+
+          function pickFromMeta() {
+            const metas = [
+              'meta[itemprop="price"]',
+              'meta[property="product:price:amount"]',
+              'meta[property="og:price:amount"]',
+              'meta[name="twitter:data1"]'
+            ];
+            for (const sel of metas) {
+              const el = document.querySelector(sel);
+              const c = el ? (el.getAttribute("content") || el.getAttribute("value") || "") : "";
+              const n = normalizePriceNumber(c);
+              if (n != null) return { price: n, raw_text: c };
+            }
+            return null;
+          }
+
+          function pickFromLdJson() {
+            const nodes = Array.from(document.querySelectorAll('script[type="application/ld+json"]')).slice(0, 10);
+            for (const n of nodes) {
+              const txt = n && n.textContent ? String(n.textContent) : "";
+              if (!txt || txt.length > 300000) continue;
+              try {
+                const json = JSON.parse(txt);
+                const arr = Array.isArray(json) ? json : [json];
+                for (const obj of arr) {
+                  if (!obj || typeof obj !== "object") continue;
+                  const offers = obj.offers || obj.Offers;
+                  if (!offers) continue;
+                  const o = Array.isArray(offers) ? offers[0] : offers;
+                  const p = o && (o.price || (preferMax ? o.highPrice : o.lowPrice) || o.lowPrice || o.highPrice);
+                  const nn = normalizePriceNumber(p);
+                  if (nn != null) return { price: nn, raw_text: String(p) };
+                }
+              } catch (e) {}
+            }
+            return null;
+          }
+
+          function extractFromText() {
+            const t = (document && document.body && document.body.innerText) ? String(document.body.innerText) : "";
+            if (!t) return null;
+            const re = /(?:₫\s*)?(\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:\s*(?:₫|đ|k))?/gi;
+            const cands = [];
+            let m;
+            while ((m = re.exec(t)) !== null) {
+              const raw = m[0] || "";
+              const numPart = m[1] || "";
+              const nextChar = t.charAt(re.lastIndex);
+              if (nextChar === '+') continue;
+              let value = normalizePriceNumber(numPart);
+              if (value == null) continue;
+              const hasCurrency = /₫|đ|vnđ/i.test(raw);
+              if (raw.toLowerCase().endsWith("k")) {
+                const context = t.toLowerCase();
+                if (context.includes("đã bán") || context.includes("sold") || context.includes("đánh giá") || context.includes("rating")) continue;
+                if (value < 10000) value *= 1000;
+              }
+              if (value < 500 || value > 1e12) continue;
+              if (!hasCurrency) {
+                const beforeMatch = t.substring(Math.max(0, m.index - 12), m.index).toLowerCase();
+                if (beforeMatch.includes("đã bán") || beforeMatch.includes("sold") || beforeMatch.includes("đánh giá")) continue;
+              }
+              cands.push({ value, raw, hasCurrency });
+            }
+            if (!cands.length) return null;
+            const counts = new Map();
+            for (const c of cands) counts.set(c.value, (counts.get(c.value) || 0) + 1);
+            cands.sort((a, b) => {
+              const ca = counts.get(a.value) || 0;
+              const cb = counts.get(b.value) || 0;
+              const sa = (a.hasCurrency ? 6 : 0) + (a.value >= 10000 ? 2 : 0) + Math.min(5, ca) + (a.value < 10000 && !a.hasCurrency ? -5 : 0);
+              const sb = (b.hasCurrency ? 6 : 0) + (b.value >= 10000 ? 2 : 0) + Math.min(5, cb) + (b.value < 10000 && !b.hasCurrency ? -5 : 0);
+              if (sb !== sa) return sb - sa;
+              if (cb !== ca) return cb - ca;
+              return preferMax ? (b.value - a.value) : (a.value - b.value);
+            });
+            return { price: cands[0].value, raw_text: cands[0].raw };
+          }
+
+          function getName() {
+            const og = document.querySelector('meta[property="og:title"]');
+            if (og && og.getAttribute("content")) {
+              let c = String(og.getAttribute("content") || "").trim();
+              c = c.replace(/\s+-\s+Shopee.*$/i, "").replace(/\s*\|\s*Shopee.*$/i, "").trim();
+              if (c && !c.toLowerCase().includes("shopee việt nam")) return c;
+            }
+            const h1 = document.querySelector("h1");
+            const t = h1 && h1.textContent ? String(h1.textContent).trim() : "";
+            return t || null;
+          }
+
+          const blockReason = detectBlock();
+          if (blockReason) {
+            return { price: null, name: getName(), raw_text: "", block_reason: blockReason };
+          }
+
+          const meta = pickFromMeta();
+          if (meta && meta.price != null) return { price: meta.price, name: getName(), raw_text: meta.raw_text || "", block_reason: "" };
+          const ld = pickFromLdJson();
+          if (ld && ld.price != null) return { price: ld.price, name: getName(), raw_text: ld.raw_text || "", block_reason: "" };
+          const txt = extractFromText();
+          if (txt && txt.price != null) return { price: txt.price, name: getName(), raw_text: txt.raw_text || "", block_reason: "" };
+          return { price: null, name: getName(), raw_text: "", block_reason: "" };
+        }
+      });
+
+      return result || null;
+    };
+
+    const quickDeadline = Date.now() + 9000;
+    while (Date.now() < quickDeadline) {
+      if (!(await ensureTabExists())) return safeReturnTabClosed();
+      const quick = await scrapeOnceFast().catch(() => null);
+      if (quick && quick.block_reason) {
+        await withRetry(() => chrome.tabs.remove(tabId)).catch(() => {});
+        return quick;
+      }
+      if (quick && quick.price != null) {
+        await withRetry(() => chrome.tabs.remove(tabId)).catch(() => {});
+        return quick;
+      }
+      await sleepMs(350);
+    }
+
     // Wait for tab to complete loading
     await new Promise((resolve) => {
       const timeout = setTimeout(resolve, 25000);
@@ -1833,8 +2185,7 @@ async function openAndScrape(url, variantPath, pricePick) {
 
     try { await withRetry(() => injectMainWorldHelpers(), 5, 200); } catch (e) {}
 
-    // Random wait before scraping (1-3 seconds)
-    await new Promise(r => setTimeout(r, Math.random() * 2000 + 1000));
+    await new Promise(r => setTimeout(r, Math.random() * 250 + 80));
 
     if (!(await ensureTabExists())) {
       return safeReturnTabClosed();
@@ -1874,9 +2225,7 @@ async function openAndScrape(url, variantPath, pricePick) {
       throw e;
     });
     
-    // Random "stay time" after scraping (3-7 seconds) to simulate reading
-    const stayTime = Math.random() * 4000 + 3000;
-    await new Promise(r => setTimeout(r, stayTime));
+    await new Promise(r => setTimeout(r, Math.random() * 500 + 150));
 
     // Close the tab
     await withRetry(() => chrome.tabs.remove(tabId)).catch(() => {});

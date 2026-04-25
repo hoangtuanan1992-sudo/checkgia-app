@@ -115,14 +115,6 @@ class ShopeeAgentApiController extends Controller
             return response()->json(['sleep_seconds' => 60]);
         }
 
-        $err = strtolower((string) ($agent->last_error ?? ''));
-        if (
-            $err !== '' &&
-            (str_contains($err, 'verify/traffic') || str_contains($err, 'captcha') || str_contains($err, 'unusual traffic') || str_contains($err, 'xác minh'))
-        ) {
-            return response()->json(['sleep_seconds' => 600]);
-        }
-
         $interval = max(10, (int) ($setting->shopee_scrape_interval_seconds ?? 300));
         $minRest = max(0, (int) ($setting->shopee_rest_seconds_min ?? 5));
         $maxRest = max($minRest, (int) ($setting->shopee_rest_seconds_max ?? 15));
