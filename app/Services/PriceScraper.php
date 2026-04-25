@@ -146,6 +146,8 @@ class PriceScraper
         ];
 
         if (! preg_match_all('/<script[^>]*type=[\"\']application\/ld\+json[\"\'][^>]*>(.*?)<\/script>/is', $html, $m)) {
+            $result['price_raw'] = $this->extractPriceRawFromCommonMeta($html);
+
             return $result;
         }
 
@@ -155,7 +157,7 @@ class PriceScraper
                 continue;
             }
 
-            $data = json_decode($json, true);
+            $data = $this->decodeJsonLd($json);
             if (! is_array($data)) {
                 continue;
             }
@@ -185,34 +187,78 @@ class PriceScraper
             }
         }
 
+        if (! $result['price_raw']) {
+            $result['price_raw'] = $this->extractPriceRawFromCommonMeta($html);
+        }
+
         return $result;
+    }
+
+    private function decodeJsonLd(string $json): ?array
+    {
+        $clean = trim($json);
+        if ($clean === '') {
+            return null;
+        }
+
+        $clean = preg_replace('/^\s*<!--/u', '', $clean) ?? $clean;
+        $clean = preg_replace('/-->\s*$/u', '', $clean) ?? $clean;
+        $clean = preg_replace('/^\s*\/\*\s*<!\[CDATA\[\s*\*\/\s*/u', '', $clean) ?? $clean;
+        $clean = preg_replace('/\s*\/\*\s*\]\]>\s*\*\/\s*$/u', '', $clean) ?? $clean;
+        $clean = trim($clean);
+
+        $data = json_decode($clean, true);
+        if (is_array($data)) {
+            return $data;
+        }
+
+        $o1 = strpos($clean, '{');
+        $o2 = strrpos($clean, '}');
+        if ($o1 !== false && $o2 !== false && $o2 > $o1) {
+            $sub = substr($clean, $o1, $o2 - $o1 + 1);
+            $data = json_decode($sub, true);
+            if (is_array($data)) {
+                return $data;
+            }
+        }
+
+        $a1 = strpos($clean, '[');
+        $a2 = strrpos($clean, ']');
+        if ($a1 !== false && $a2 !== false && $a2 > $a1) {
+            $sub = substr($clean, $a1, $a2 - $a1 + 1);
+            $data = json_decode($sub, true);
+            if (is_array($data)) {
+                return $data;
+            }
+        }
+
+        return null;
     }
 
     private function flattenJsonLdNodes(mixed $data): array
     {
         $out = [];
+        $stack = [$data];
+        $visited = 0;
 
-        if (! is_array($data)) {
-            return $out;
-        }
-
-        if (array_key_exists('@graph', $data) && is_array($data['@graph'])) {
-            foreach ($data['@graph'] as $node) {
-                if (is_array($node)) {
-                    $out[] = $node;
-                }
+        while ($stack !== []) {
+            $visited++;
+            if ($visited > 5000) {
+                break;
             }
-        }
 
-        if (array_key_exists('@type', $data)) {
-            $out[] = $data;
-        }
+            $cur = array_pop($stack);
+            if (! is_array($cur)) {
+                continue;
+            }
 
-        $isList = array_keys($data) === range(0, count($data) - 1);
-        if ($isList) {
-            foreach ($data as $item) {
-                foreach ($this->flattenJsonLdNodes($item) as $node) {
-                    $out[] = $node;
+            if (array_key_exists('@type', $cur)) {
+                $out[] = $cur;
+            }
+
+            foreach ($cur as $v) {
+                if (is_array($v)) {
+                    $stack[] = $v;
                 }
             }
         }
@@ -254,24 +300,75 @@ class PriceScraper
         }
 
         foreach ($offerNodes as $offer) {
-            foreach (['sale_price', 'price', 'lowPrice', 'highPrice'] as $k) {
-                if (! array_key_exists($k, $offer)) {
-                    continue;
-                }
-                $v = $offer[$k];
-                if (is_int($v) || is_float($v)) {
-                    return (string) $v;
-                }
-                if (is_string($v)) {
-                    $s = trim($v);
-                    if ($s !== '') {
-                        return $s;
+            $direct = $this->extractPriceRawFromJsonLdNode($offer);
+            if ($direct !== null) {
+                return $direct;
+            }
+
+            $priceSpec = $offer['priceSpecification'] ?? null;
+            if (is_array($priceSpec)) {
+                $specNodes = array_keys($priceSpec) === range(0, count($priceSpec) - 1)
+                    ? array_values(array_filter($priceSpec, fn ($v) => is_array($v)))
+                    : [$priceSpec];
+
+                foreach ($specNodes as $spec) {
+                    $specPrice = $this->extractPriceRawFromJsonLdNode($spec);
+                    if ($specPrice !== null) {
+                        return $specPrice;
                     }
                 }
             }
         }
 
         return null;
+    }
+
+    private function extractPriceRawFromJsonLdNode(array $node): ?string
+    {
+        foreach (['sale_price', 'price', 'lowPrice', 'highPrice', 'minPrice', 'maxPrice', 'currentPrice'] as $k) {
+            if (! array_key_exists($k, $node)) {
+                continue;
+            }
+
+            $v = $node[$k];
+            if (is_int($v) || is_float($v)) {
+                return (string) $v;
+            }
+            if (is_string($v)) {
+                $s = trim($v);
+                if ($s !== '') {
+                    return $s;
+                }
+            }
+            if (is_array($v)) {
+                foreach (['@value', 'value', 'price'] as $vk) {
+                    if (array_key_exists($vk, $v) && (is_string($v[$vk]) || is_int($v[$vk]) || is_float($v[$vk]))) {
+                        $s = trim((string) $v[$vk]);
+                        if ($s !== '') {
+                            return $s;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function extractPriceRawFromCommonMeta(string $html): ?string
+    {
+        $xpaths = [
+            '//meta[@property="product:price:amount"]/@content',
+            '//meta[@property="og:price:amount"]/@content',
+            '//meta[@property="og:price:standard_amount"]/@content',
+            '//meta[@property="og:price"]/@content',
+            '//meta[@name="price"]/@content',
+            '//meta[@itemprop="price"]/@content',
+            '//*[@itemprop="price"]/@content',
+            '//*[@itemprop="price"]',
+        ];
+
+        return $this->extractFirstByXPaths($html, $xpaths);
     }
 
     public function parsePriceToInt(?string $raw, ?string $regex = null): ?int

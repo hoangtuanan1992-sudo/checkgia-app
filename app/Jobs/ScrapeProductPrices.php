@@ -77,7 +77,7 @@ class ScrapeProductPrices implements ShouldQueue
             ];
             foreach ($product->competitors as $competitor) {
                 $site = $competitor->competitorSite;
-                if (! $site || ! $site->price_xpath || ! $competitor->url) {
+                if (! $site || ! $competitor->url) {
                     continue;
                 }
 
@@ -143,7 +143,7 @@ class ScrapeProductPrices implements ShouldQueue
 
             foreach ($product->competitors as $competitor) {
                 $site = $competitor->competitorSite;
-                if (! $site || ! $site->price_xpath || ! $competitor->url) {
+                if (! $site || ! $competitor->url) {
                     continue;
                 }
 
@@ -158,7 +158,8 @@ class ScrapeProductPrices implements ShouldQueue
                         ->sortBy('position')
                         ->pluck('xpath')
                         ->all();
-                    $raw = $scraper->extractFirstByXPaths($cHtml, array_merge([(string) $site->price_xpath], $fallbacks));
+                    $primary = $site->price_xpath ? [(string) $site->price_xpath] : [];
+                    $raw = $scraper->extractFirstByXPaths($cHtml, array_merge($primary, $fallbacks));
                     $price = $scraper->parsePriceToInt($raw, $site->price_regex);
 
                     if (is_null($price)) {

@@ -151,23 +151,30 @@ class CompetitorController extends Controller
         $competitor->url = $url;
         $competitor->save();
 
-        if ($competitorSite->price_xpath) {
-            try {
-                $scraper = new PriceScraper;
-                $html = $scraper->fetchHtml($competitor->url);
-                $fallbacks = $competitorSite->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
-                $raw = $scraper->extractFirstByXPaths($html, array_merge([(string) $competitorSite->price_xpath], $fallbacks));
-                $price = $scraper->parsePriceToInt($raw, $competitorSite->price_regex);
+        $fallbacks = $competitorSite->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
 
-                if (! is_null($price)) {
-                    CompetitorPrice::create([
-                        'competitor_id' => $competitor->id,
-                        'price' => $price,
-                        'fetched_at' => now(),
-                    ]);
+        try {
+            $scraper = new PriceScraper;
+            $html = $scraper->fetchHtml($competitor->url);
+            $primary = $competitorSite->price_xpath ? [(string) $competitorSite->price_xpath] : [];
+            $raw = $scraper->extractFirstByXPaths($html, array_merge($primary, $fallbacks));
+            $price = $scraper->parsePriceToInt($raw, $competitorSite->price_regex);
+
+            if (is_null($price)) {
+                $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+                if (is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $competitorSite->price_regex);
                 }
-            } catch (\Throwable $e) {
             }
+
+            if (! is_null($price)) {
+                CompetitorPrice::create([
+                    'competitor_id' => $competitor->id,
+                    'price' => $price,
+                    'fetched_at' => now(),
+                ]);
+            }
+        } catch (\Throwable $e) {
         }
 
         return back()->with('status', 'Đã cập nhật URL');
@@ -251,7 +258,7 @@ class CompetitorController extends Controller
         abort_unless($product && $product->user_id === $request->user()->effectiveUserId(), 404);
 
         $site = $competitor->competitorSite;
-        if (! $site || ! $site->price_xpath) {
+        if (! $site) {
             return back()->withErrors(['price' => 'Chưa cấu hình XPath giá cho đối thủ này.']);
         }
 
@@ -259,8 +266,16 @@ class CompetitorController extends Controller
             $scraper = new PriceScraper;
             $html = $scraper->fetchHtml($competitor->url);
             $fallbacks = $site->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
-            $raw = $scraper->extractFirstByXPaths($html, array_merge([(string) $site->price_xpath], $fallbacks));
+            $primary = $site->price_xpath ? [(string) $site->price_xpath] : [];
+            $raw = $scraper->extractFirstByXPaths($html, array_merge($primary, $fallbacks));
             $price = $scraper->parsePriceToInt($raw, $site->price_regex);
+
+            if (is_null($price)) {
+                $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+                if (is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $site->price_regex);
+                }
+            }
 
             if (is_null($price)) {
                 return back()->withErrors(['price' => 'Không lấy được giá. Vui lòng kiểm tra lại XPath/Regex.']);
