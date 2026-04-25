@@ -1665,7 +1665,36 @@ async function openAndScrape(url, variantPath, pricePick) {
     const tabId = tab.id;
     if (!tabId) return null;
 
+    let tabClosed = false;
+    const onRemoved = (id) => {
+      if (id !== tabId) return;
+      tabClosed = true;
+      chrome.tabs.onRemoved.removeListener(onRemoved);
+    };
+    chrome.tabs.onRemoved.addListener(onRemoved);
+
+    const ensureTabExists = async () => {
+      if (tabClosed) return false;
+      try {
+        await chrome.tabs.get(tabId);
+        return true;
+      } catch (e) {
+        tabClosed = true;
+        return false;
+      }
+    };
+
+    const safeReturnTabClosed = () => {
+      return {
+        price: null,
+        name: null,
+        raw_text: "",
+        block_reason: "Tab đã bị đóng hoặc trang bị chặn trước khi tải xong."
+      };
+    };
+
     const injectMainWorldHelpers = async () => {
+      if (!(await ensureTabExists())) return;
       await chrome.scripting.executeScript({
         target: { tabId },
         world: 'MAIN',
@@ -1738,18 +1767,16 @@ async function openAndScrape(url, variantPath, pricePick) {
             Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
             document.hasFocus = () => true;
 
-            // Hide existing image/video elements without removing them (to avoid breaking React)
-            const hideMedia = () => {
-              document.querySelectorAll('img, video, iframe, canvas, picture').forEach(el => {
-                  el.style.opacity = '0';
-                  el.style.pointerEvents = 'none';
-                  el.style.height = '0';
+            // Avoid aggressive DOM mutations (can trigger anti-bot / break captcha). Only apply low-risk hints.
+            try {
+              document.querySelectorAll('img').forEach((img) => {
+                try {
+                  img.loading = 'lazy';
+                  img.decoding = 'async';
+                  img.fetchPriority = 'low';
+                } catch (e) {}
               });
-              document.querySelectorAll('[style*="background-image"]').forEach(el => el.style.backgroundImage = 'none');
-            };
-            hideMedia();
-            const observer = new MutationObserver(hideMedia);
-            observer.observe(document.body, { childList: true, subtree: true });
+            } catch (e) {}
 
             if (!needsVariant) {
               const scrollInterval = setInterval(() => {
@@ -1771,22 +1798,47 @@ async function openAndScrape(url, variantPath, pricePick) {
 
     // Wait for tab to complete loading
     await new Promise((resolve) => {
-      const timeout = setTimeout(resolve, 25000); 
+      const timeout = setTimeout(resolve, 25000);
+      let interval = null;
       function onUpdated(id, info) {
         if (id !== tabId) return;
         if (info.status === "complete") {
+          if (interval) clearInterval(interval);
           chrome.tabs.onUpdated.removeListener(onUpdated);
           clearTimeout(timeout);
           resolve();
         }
       }
       chrome.tabs.onUpdated.addListener(onUpdated);
+
+      interval = setInterval(() => {
+        if (!tabClosed) return;
+        clearInterval(interval);
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        clearTimeout(timeout);
+        resolve();
+      }, 500);
+
+      if (tabClosed) {
+        clearInterval(interval);
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        clearTimeout(timeout);
+        resolve();
+      }
     });
+
+    if (!(await ensureTabExists())) {
+      return safeReturnTabClosed();
+    }
 
     try { await withRetry(() => injectMainWorldHelpers(), 5, 200); } catch (e) {}
 
     // Random wait before scraping (1-3 seconds)
     await new Promise(r => setTimeout(r, Math.random() * 2000 + 1000));
+
+    if (!(await ensureTabExists())) {
+      return safeReturnTabClosed();
+    }
 
     const direct = await readDirectModelPrice(tabId, url).catch(() => null);
     if (direct && direct.price != null) {
@@ -1794,6 +1846,10 @@ async function openAndScrape(url, variantPath, pricePick) {
       await new Promise(r => setTimeout(r, stayTime));
       await withRetry(() => chrome.tabs.remove(tabId)).catch(() => {});
       return { price: direct.price, name: direct.name, raw_text: direct.raw_text, block_reason: "" };
+    }
+
+    if (!(await ensureTabExists())) {
+      return safeReturnTabClosed();
     }
 
     const captured = await readCapturedModelPrice(tabId, url).catch(() => null);
@@ -1805,7 +1861,18 @@ async function openAndScrape(url, variantPath, pricePick) {
     }
 
     // Scrape the tab
-    const res = await scrapeTab(tabId, variantPath, preferMax);
+    if (!(await ensureTabExists())) {
+      return safeReturnTabClosed();
+    }
+
+    const res = await scrapeTab(tabId, variantPath, preferMax).catch((e) => {
+      const msg = String(e && e.message ? e.message : e || "");
+      if (/no tab with id/i.test(msg)) {
+        tabClosed = true;
+        return safeReturnTabClosed();
+      }
+      throw e;
+    });
     
     // Random "stay time" after scraping (3-7 seconds) to simulate reading
     const stayTime = Math.random() * 4000 + 3000;
@@ -1816,6 +1883,15 @@ async function openAndScrape(url, variantPath, pricePick) {
     
     return res;
   } catch (e) {
+    const msg = String(e && e.message ? e.message : e || "");
+    if (/no tab with id/i.test(msg)) {
+      return {
+        price: null,
+        name: null,
+        raw_text: "",
+        block_reason: "Tab đã bị đóng hoặc trang bị chặn trước khi tải xong."
+      };
+    }
     console.error("openAndScrape error:", e);
     return null;
   }
