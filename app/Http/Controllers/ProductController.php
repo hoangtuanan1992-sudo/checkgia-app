@@ -76,6 +76,16 @@ class ProductController extends Controller
             }
         }
 
+        if (is_null($price)) {
+            $tgdd = $scraper->scrapeTgddPriceAndName((string) $data['product_url']);
+            if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                $price = $tgdd['price'];
+                if (! $name && isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '') {
+                    $name = trim($tgdd['name']);
+                }
+            }
+        }
+
         if (! $name || is_null($price)) {
             $parts = [];
             if (! $name) {
