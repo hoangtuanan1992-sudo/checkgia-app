@@ -25,10 +25,22 @@ class CompetitorController extends Controller
         $userId = $request->user()->effectiveUserId();
         $domain = CompetitorSite::normalizedDomainFromUrl($data['url'] ?? null);
         if ($domain) {
-            $site = CompetitorSite::query()->firstOrCreate(
-                ['user_id' => $userId, 'domain' => $domain],
-                ['name' => $data['name'], 'domain' => $domain]
-            );
+            $site = CompetitorSite::query()
+                ->where('user_id', $userId)
+                ->where(function ($q) use ($domain) {
+                    $q->where('domain', $domain)->orWhere('name', $domain);
+                })
+                ->first();
+            if (! $site) {
+                $site = CompetitorSite::create([
+                    'user_id' => $userId,
+                    'name' => $data['name'],
+                    'domain' => $domain,
+                ]);
+            } elseif (! $site->domain) {
+                $site->domain = $domain;
+                $site->save();
+            }
             if (! $site->name) {
                 $site->name = $data['name'];
                 $site->save();
@@ -65,10 +77,22 @@ class CompetitorController extends Controller
         $userId = $request->user()->effectiveUserId();
         $domain = CompetitorSite::normalizedDomainFromUrl($data['url'] ?? null);
         if ($domain) {
-            $site = CompetitorSite::query()->firstOrCreate(
-                ['user_id' => $userId, 'domain' => $domain],
-                ['name' => $data['name'], 'domain' => $domain]
-            );
+            $site = CompetitorSite::query()
+                ->where('user_id', $userId)
+                ->where(function ($q) use ($domain) {
+                    $q->where('domain', $domain)->orWhere('name', $domain);
+                })
+                ->first();
+            if (! $site) {
+                $site = CompetitorSite::create([
+                    'user_id' => $userId,
+                    'name' => $data['name'],
+                    'domain' => $domain,
+                ]);
+            } elseif (! $site->domain) {
+                $site->domain = $domain;
+                $site->save();
+            }
             if (! $site->name) {
                 $site->name = $data['name'];
                 $site->save();
@@ -277,8 +301,18 @@ class CompetitorController extends Controller
             return back()->withErrors(['url' => 'Không nhận diện được domain từ URL này.']);
         }
 
-        $site = CompetitorSite::query()->where('user_id', $userId)->where('domain', $domain)->first();
-        if (! $site) {
+        $site = CompetitorSite::query()
+            ->where('user_id', $userId)
+            ->where(function ($q) use ($domain) {
+                $q->where('domain', $domain)->orWhere('name', $domain);
+            })
+            ->first();
+        if ($site) {
+            if (! $site->domain) {
+                $site->domain = $domain;
+                $site->save();
+            }
+        } else {
             $nextPos = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
             $site = CompetitorSite::create([
                 'user_id' => $userId,

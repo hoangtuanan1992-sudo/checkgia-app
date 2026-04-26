@@ -178,13 +178,30 @@ class DashboardProductController extends Controller
 
                 $site = $sitesByDomain->get($domain);
                 if (! $site) {
-                    $nextPos = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
-                    $site = CompetitorSite::create([
-                        'user_id' => $userId,
-                        'name' => $domain,
-                        'domain' => $domain,
-                        'position' => $nextPos,
-                    ]);
+                    $site = $sites->first(fn ($s) => (string) $s->name === (string) $domain);
+                    if (! $site) {
+                        $site = CompetitorSite::query()
+                            ->where('user_id', $userId)
+                            ->where(function ($q) use ($domain) {
+                                $q->where('domain', $domain)->orWhere('name', $domain);
+                            })
+                            ->first();
+                    }
+
+                    if ($site) {
+                        if (! $site->domain) {
+                            $site->domain = $domain;
+                            $site->save();
+                        }
+                    } else {
+                        $nextPos = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
+                        $site = CompetitorSite::create([
+                            'user_id' => $userId,
+                            'name' => $domain,
+                            'domain' => $domain,
+                            'position' => $nextPos,
+                        ]);
+                    }
 
                     $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
                     if ($template) {
