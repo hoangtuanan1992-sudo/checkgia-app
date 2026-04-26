@@ -493,19 +493,23 @@
 
                                 @foreach($competitorSites as $site)
                                     @php($c = $map->get($site->id))
+                                    @if(! $c)
+                                        @continue
+                                    @endif
+
                                     @php($latest = $c?->prices->first())
                                     @php($prev = $c?->prices->skip(1)->first())
                                     @php($cPrice = $latest?->price)
                                     @php($prevPrice = $prev?->price)
                                     @php($adj = (int) ($c?->price_adjustment ?? 0))
-                                    @php($adjDiff = (! $c || is_null($cPrice)) ? null : ((int) $cPrice + $adj - $own))
+                                    @php($adjDiff = is_null($cPrice) ? null : ((int) $cPrice + $adj - $own))
                                     @php($diffSign = is_null($adjDiff) ? 'na' : ($adjDiff > 0 ? 'pos' : ($adjDiff < 0 ? 'neg' : 'zero')))
                                     @php($diffArrow = is_null($adjDiff) ? '' : ($adjDiff > 0 ? '↑' : ($adjDiff < 0 ? '↓' : '←')))
 
                                     <div class="compare-card-table-row">
                                         <div class="compare-card-cell-site">{{ $site->name }}</div>
                                         <div class="compare-card-cell-price">
-                                            @if($c && $cPrice)
+                                            @if($cPrice)
                                                 <a href="{{ route('competitors.history', $c) }}" style="color:#6b7280" data-tour="price-history-competitor">
                                                     {{ number_format($cPrice, 0, ',', '.') }}
                                                 </a>
@@ -533,8 +537,8 @@
                                                     data-product-id="{{ $product->id }}"
                                                     data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
                                                     data-field="url"
-                                                    data-value="{{ $c?->url ?? '' }}"
-                                                    title="{{ $c ? 'Sửa URL' : 'Thêm URL' }}"
+                                                    data-value="{{ $c->url }}"
+                                                    title="Sửa URL"
                                                 >
                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                                         <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -542,28 +546,42 @@
                                                     </svg>
                                                 </button>
 
-                                                @if($c)
-                                                    <button
-                                                        type="button"
-                                                        class="icon-btn icon-btn-sm js-edit-adjustment"
-                                                        data-product-id="{{ $product->id }}"
-                                                        data-action="{{ route('competitors.adjustment.update', $c) }}"
-                                                        data-value="{{ $adj }}"
-                                                        data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
-                                                        data-own="{{ $own }}"
-                                                        data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
-                                                        title="Điều chỉnh giá (+/-)"
-                                                    >
-                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                            <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                                        </svg>
-                                                    </button>
-                                                @endif
+                                                <button
+                                                    type="button"
+                                                    class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                    data-product-id="{{ $product->id }}"
+                                                    data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                    data-value="{{ $adj }}"
+                                                    data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
+                                                    data-own="{{ $own }}"
+                                                    data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                    title="Điều chỉnh giá (+/-)"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                    </svg>
+                                                </button>
                                             @endif
                                         </div>
                                     </div>
                                 @endforeach
+
+                                @if($missingSites->isNotEmpty() && !auth()->user()->isViewer())
+                                    <div style="padding:12px 16px 16px">
+                                        <button type="button" class="compare-card-addlink js-add-link" data-target="addLink-{{ $product->id }}">
+                                            + Thêm link đối thủ
+                                        </button>
+                                    </div>
+                                    <div id="addLink-{{ $product->id }}" style="display:none;padding:0 16px 16px">
+                                        <select class="input js-add-link-select" data-target="addLink-{{ $product->id }}" data-product-id="{{ $product->id }}">
+                                            <option value="">Chọn đối thủ...</option>
+                                            @foreach($missingSites as $site)
+                                                <option value="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}">{{ $site->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     @empty
@@ -1208,7 +1226,7 @@
                 select.addEventListener('change', () => {
                     const action = select.value || '';
                     if (!action) return;
-                    open(action, '', 'url');
+                    open(action, '', 'url', select.dataset.productId);
                     const wrapId = select.dataset.target || '';
                     const wrap = wrapId ? document.getElementById(wrapId) : null;
                     if (wrap) wrap.style.display = 'none';
