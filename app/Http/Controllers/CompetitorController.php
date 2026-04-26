@@ -155,6 +155,16 @@ class CompetitorController extends Controller
 
         try {
             $scraper = new PriceScraper;
+            $tgdd = $scraper->scrapeTgddPriceAndName($competitor->url);
+            if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                CompetitorPrice::create([
+                    'competitor_id' => $competitor->id,
+                    'price' => $tgdd['price'],
+                    'fetched_at' => now(),
+                ]);
+
+                return back()->with('status', 'Đã cập nhật URL');
+            }
             $html = $scraper->fetchHtml($competitor->url);
             $primary = $competitorSite->price_xpath ? [(string) $competitorSite->price_xpath] : [];
             $raw = $scraper->extractFirstByXPaths($html, array_merge($primary, $fallbacks));
@@ -264,6 +274,20 @@ class CompetitorController extends Controller
 
         try {
             $scraper = new PriceScraper;
+            $tgdd = $scraper->scrapeTgddPriceAndName($competitor->url);
+            if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                $price = $tgdd['price'];
+                $latest = $competitor->prices()->latest('fetched_at')->first();
+                if (! $latest || (int) $latest->price !== (int) $price) {
+                    CompetitorPrice::create([
+                        'competitor_id' => $competitor->id,
+                        'price' => $price,
+                        'fetched_at' => now(),
+                    ]);
+                }
+
+                return back()->with('status', 'Đã cập nhật giá: '.number_format($price, 0, ',', '.').' đ');
+            }
             $html = $scraper->fetchHtml($competitor->url);
             $fallbacks = $site->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
             $primary = $site->price_xpath ? [(string) $site->price_xpath] : [];

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use GuzzleHttp\Cookie\CookieJar;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -74,6 +75,122 @@ class PriceScraper
         }
 
         return $out;
+    }
+
+    public function scrapeTgddPriceAndName(string $productUrl): ?array
+    {
+        $host = parse_url($productUrl, PHP_URL_HOST);
+        $host = is_string($host) ? strtolower($host) : '';
+        if ($host === '' || ! str_contains($host, 'thegioididong.com')) {
+            return null;
+        }
+
+        try {
+            $jar = new CookieJar;
+            $req = $this->pendingRequest()->withOptions([
+                'cookies' => $jar,
+                'allow_redirects' => true,
+            ]);
+
+            $pageRes = $req->get($productUrl);
+            if (! $pageRes->successful()) {
+                return null;
+            }
+
+            $pageHtml = (string) $pageRes->body();
+            $productId = null;
+            $categoryId = null;
+
+            if (preg_match('/\/Products\/Images\/(\d+)\/(\d+)\//i', $pageHtml, $m) === 1) {
+                $categoryId = (int) $m[1];
+                $productId = (int) $m[2];
+            } elseif (preg_match('/\bdata-id=["\'](\d{3,})["\']/i', $pageHtml, $m) === 1) {
+                $productId = (int) $m[1];
+            } elseif (preg_match('/\bproductId\b[^0-9]{0,20}(\d{3,})/i', $pageHtml, $m) === 1) {
+                $productId = (int) $m[1];
+            }
+
+            if (! $productId || $productId <= 0) {
+                return null;
+            }
+
+            $ajaxRes = $req
+                ->withHeaders([
+                    'Accept' => '*/*',
+                    'X-Requested-With' => 'XMLHttpRequest',
+                    'Origin' => 'https://www.thegioididong.com',
+                    'Referer' => $productUrl,
+                ])
+                ->asForm()
+                ->post('https://www.thegioididong.com/Ajax/GetViewedHistory', [
+                    'customerId' => '',
+                    'productIds[]' => (string) $productId,
+                    'categoryIds[]' => (string) max(0, (int) ($categoryId ?? 0)),
+                    'viewName' => 'detail',
+                    'shortNameCus' => '',
+                    'cateId' => '0',
+                ]);
+
+            if (! $ajaxRes->successful()) {
+                return null;
+            }
+
+            $snippet = (string) $ajaxRes->body();
+            if (trim($snippet) === '') {
+                return null;
+            }
+
+            $dom = new \DOMDocument('1.0', 'UTF-8');
+            libxml_use_internal_errors(true);
+            $dom->loadHTML($snippet);
+            libxml_clear_errors();
+
+            $xp = new \DOMXPath($dom);
+            $node = $xp->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' viewed-product ') and @data-id='".(int) $productId."']")?->item(0);
+            if (! $node) {
+                $node = $xp->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' viewed-product ')]")?->item(0);
+            }
+
+            if (! $node) {
+                return null;
+            }
+
+            $anchor = $xp->query('.//a', $node)?->item(0);
+            $dataPrice = $anchor instanceof \DOMElement ? trim((string) $anchor->getAttribute('data-price')) : '';
+            $dataName = $anchor instanceof \DOMElement ? trim((string) $anchor->getAttribute('data-name')) : '';
+
+            $price = null;
+            if ($dataPrice !== '' && preg_match('/^\d+(?:\.\d+)?$/', $dataPrice) === 1) {
+                $f = (float) $dataPrice;
+                if ($f > 0) {
+                    $price = (int) round($f);
+                }
+            }
+
+            if (is_null($price)) {
+                $priceText = trim((string) ($xp->query(".//*[contains(concat(' ', normalize-space(@class), ' '), ' viewed-product-price ')]", $node)?->item(0)?->textContent));
+                $price = $this->parsePriceToInt($priceText);
+            }
+
+            $name = $dataName !== '' ? html_entity_decode($dataName, ENT_QUOTES | ENT_HTML5, 'UTF-8') : null;
+            if (! $name) {
+                $nameText = trim((string) ($xp->query(".//*[contains(concat(' ', normalize-space(@class), ' '), ' viewed-product-title ')]", $node)?->item(0)?->textContent));
+                $name = $nameText !== '' ? $nameText : null;
+            }
+
+            if (is_null($price)) {
+                return null;
+            }
+
+            return [
+                'price' => $price,
+                'name' => $name,
+                'product_id' => $productId,
+                'category_id' => $categoryId,
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     public function extractFirstByXPath(string $html, string $xpath): ?string

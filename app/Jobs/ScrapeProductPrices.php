@@ -117,11 +117,51 @@ class ScrapeProductPrices implements ShouldQueue
                         }
                     }
 
+                    if (is_null($price)) {
+                        $tgdd = $scraper->scrapeTgddPriceAndName((string) $product->product_url);
+                        if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                            $price = $tgdd['price'];
+                            if (! $name && isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '') {
+                                $name = trim($tgdd['name']);
+                            }
+                        }
+                    }
+
                     if ($name && ! is_null($price)) {
                         $product->update([
                             'name' => $name,
                             'price' => $price,
                         ]);
+
+                        $latestOwn = ProductPriceHistory::query()
+                            ->where('product_id', $product->id)
+                            ->latest('fetched_at')
+                            ->first();
+
+                        if (! $latestOwn || (int) $latestOwn->price !== (int) $price) {
+                            ProductPriceHistory::create([
+                                'product_id' => $product->id,
+                                'price' => $price,
+                                'fetched_at' => $now,
+                            ]);
+                        }
+                    }
+                } else {
+                    $tgdd = $scraper->scrapeTgddPriceAndName((string) $product->product_url);
+                    if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                        $name = isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '' ? trim($tgdd['name']) : null;
+                        $price = $tgdd['price'];
+
+                        if ($name) {
+                            $product->update([
+                                'name' => $name,
+                                'price' => $price,
+                            ]);
+                        } else {
+                            $product->update([
+                                'price' => $price,
+                            ]);
+                        }
 
                         $latestOwn = ProductPriceHistory::query()
                             ->where('product_id', $product->id)
@@ -148,6 +188,23 @@ class ScrapeProductPrices implements ShouldQueue
                 }
 
                 try {
+                    $tgdd = $scraper->scrapeTgddPriceAndName($competitor->url);
+                    if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                        $price = $tgdd['price'];
+                        $latest = $competitor->prices()->latest('fetched_at')->first();
+                        if (! $latest || (int) $latest->price !== (int) $price) {
+                            $previousPrice = $latest ? (int) $latest->price : null;
+                            CompetitorPrice::create([
+                                'competitor_id' => $competitor->id,
+                                'price' => $price,
+                                'fetched_at' => $now,
+                            ]);
+                            $notifier->notifyOnCompetitorPriceChange($product, $competitor, (int) $price, $previousPrice);
+                        }
+
+                        continue;
+                    }
+
                     $cHtml = $htmlByKey['c:'.$competitor->id] ?? null;
                     if (! is_string($cHtml) || $cHtml === '') {
                         continue;
