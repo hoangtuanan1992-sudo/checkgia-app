@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CompetitorPrice;
 use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteTemplate;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\ProductPriceHistory;
@@ -151,28 +152,60 @@ class DashboardProductController extends Controller
             ->with(['scrapeXpaths' => function ($q) {
                 $q->orderBy('type')->orderBy('position');
             }])
-            ->get(['id', 'name', 'price_xpath', 'price_regex'])
+            ->get(['id', 'name', 'domain', 'position', 'price_xpath', 'price_regex'])
             ->keyBy('id');
+        $sitesByDomain = $sites
+            ->filter(fn ($s) => is_string($s->domain) && trim((string) $s->domain) !== '')
+            ->keyBy('domain');
 
         $urls = $validated['competitor_urls'] ?? [];
-        foreach ($urls as $siteId => $url) {
-            $siteId = (int) $siteId;
+        foreach ($urls as $key => $url) {
             $url = is_string($url) ? trim($url) : null;
 
             if ($url === null || $url === '') {
                 continue;
             }
 
-            $site = $sites->get($siteId);
-            if (! $site) {
-                continue;
+            $site = null;
+            $keyInt = is_string($key) && preg_match('/^\d+$/', $key) ? (int) $key : (is_int($key) ? (int) $key : null);
+            if (! is_null($keyInt) && $sites->has($keyInt)) {
+                $site = $sites->get($keyInt);
+            } else {
+                $domain = CompetitorSite::normalizedDomainFromUrl($url);
+                if (! $domain) {
+                    continue;
+                }
+
+                $site = $sitesByDomain->get($domain);
+                if (! $site) {
+                    $nextPos = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
+                    $site = CompetitorSite::create([
+                        'user_id' => $userId,
+                        'name' => $domain,
+                        'domain' => $domain,
+                        'position' => $nextPos,
+                    ]);
+
+                    $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+                    if ($template) {
+                        $template->applyToCompetitorSite($site);
+                    }
+
+                    $site = $site->fresh(['scrapeXpaths' => function ($q) {
+                        $q->orderBy('type')->orderBy('position');
+                    }]);
+
+                    $sites->put($site->id, $site);
+                    $sitesByDomain->put($domain, $site);
+                }
             }
 
-            $competitor = $product->competitors()->create([
+            $competitor = $product->competitors()->firstOrNew([
                 'competitor_site_id' => $site->id,
-                'name' => $site->name,
-                'url' => $url,
             ]);
+            $competitor->name = $site->name;
+            $competitor->url = $url;
+            $competitor->save();
 
             try {
                 $tgdd = $scraper->scrapeTgddPriceAndName($url);

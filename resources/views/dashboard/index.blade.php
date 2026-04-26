@@ -32,18 +32,24 @@
                         @error('product_url')<div class="error">{{ $message }}</div>@enderror
                     </div>
 
-                    @if($competitorSites->isNotEmpty())
-                        <div id="competitorUrlGrid" style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
-                            @foreach($competitorSites as $site)
-                                <div class="field" style="margin-top:0">
-                                    <label class="label">Link {{ $site->name }}</label>
-                                    <input class="input" name="competitor_urls[{{ $site->id }}]" type="url" value="{{ old('competitor_urls.'.$site->id) }}" placeholder="https://..." data-tour="competitor-url">
-                                </div>
-                            @endforeach
+                    @php($oldCompetitorUrls = old('competitor_urls', []))
+                    @php($oldCompetitorUrls = is_array($oldCompetitorUrls) ? array_values($oldCompetitorUrls) : [])
+                    @php($competitorUrlCount = max(3, count($oldCompetitorUrls)))
+
+                    <div style="margin-top:12px">
+                        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+                            <div class="hint" style="margin-top:0">Link đối thủ (tuỳ chọn)</div>
+                            <button type="button" class="btn btn-secondary" id="addCompetitorUrlBtn" style="height:32px;padding:0 10px">+ Thêm</button>
                         </div>
-                    @else
-                        <div class="hint">Chưa có đối thủ nào. Hãy bấm “Cài đặt” để tạo cột so sánh.</div>
-                    @endif
+                        <div id="competitorUrlGrid" style="margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+                            @for($i = 0; $i < $competitorUrlCount; $i++)
+                                <div class="field" style="margin-top:0">
+                                    <label class="label">Link đối thủ {{ $i + 1 }}</label>
+                                    <input class="input" name="competitor_urls[{{ $i }}]" type="url" value="{{ old('competitor_urls.'.$i) }}" placeholder="https://..." @if($i === 0) data-tour="competitor-url" @endif>
+                                </div>
+                            @endfor
+                        </div>
+                    </div>
 
                     <div class="field">
                         <label class="label">Nhóm sản phẩm (tuỳ chọn)</label>
@@ -410,7 +416,6 @@
 
                             return (int) $p + (int) ($c->price_adjustment ?? 0) - $own;
                         })->filter(fn ($v) => ! is_null($v))->min())
-                        @php($missingSites = $competitorSites->filter(fn ($s) => ! $map->has($s->id)))
 
                         <div
                             class="card compare-card"
@@ -567,19 +572,16 @@
                                     </div>
                                 @endforeach
 
-                                @if($missingSites->isNotEmpty() && !auth()->user()->isViewer())
+                                @if(!auth()->user()->isViewer())
                                     <div style="padding:12px 16px 16px">
-                                        <button type="button" class="compare-card-addlink js-add-link" data-target="addLink-{{ $product->id }}">
+                                        <button
+                                            type="button"
+                                            class="compare-card-addlink js-add-link"
+                                            data-action="{{ route('dashboard.products.competitors.upsert-by-url', $product) }}"
+                                            data-product-id="{{ $product->id }}"
+                                        >
                                             + Thêm link đối thủ
                                         </button>
-                                    </div>
-                                    <div id="addLink-{{ $product->id }}" style="display:none;padding:0 16px 16px">
-                                        <select class="input js-add-link-select" data-target="addLink-{{ $product->id }}" data-product-id="{{ $product->id }}">
-                                            <option value="">Chọn đối thủ...</option>
-                                            @foreach($missingSites as $site)
-                                                <option value="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}">{{ $site->name }}</option>
-                                            @endforeach
-                                        </select>
                                     </div>
                                 @endif
                             </div>
@@ -755,6 +757,34 @@
                 });
             }
 
+            const competitorUrlGrid = document.getElementById('competitorUrlGrid');
+            const addCompetitorUrlBtn = document.getElementById('addCompetitorUrlBtn');
+
+            function addCompetitorUrlField(value) {
+                if (!competitorUrlGrid) return null;
+                const index = competitorUrlGrid.querySelectorAll('input[name^="competitor_urls["]').length;
+                const wrap = document.createElement('div');
+                wrap.className = 'field';
+                wrap.style.marginTop = '0';
+                wrap.innerHTML = `
+                    <label class="label">Link đối thủ ${index + 1}</label>
+                    <input class="input" name="competitor_urls[${index}]" type="url" placeholder="https://...">
+                `;
+                competitorUrlGrid.appendChild(wrap);
+                const input = wrap.querySelector('input');
+                if (input) {
+                    input.value = value || '';
+                }
+                return input;
+            }
+
+            if (addCompetitorUrlBtn) {
+                addCompetitorUrlBtn.addEventListener('click', () => {
+                    const i = addCompetitorUrlField('');
+                    if (i) i.focus();
+                });
+            }
+
             const dialog = document.getElementById('urlDialog');
             const form = document.getElementById('urlDialogForm');
             const input = document.getElementById('urlDialogInput');
@@ -785,12 +815,13 @@
                 return true;
             }
 
-            function open(action, value, fieldName, productId) {
+            function open(action, value, fieldName, productId, allowDelete) {
                 form.action = action;
                 input.value = value || '';
                 input.name = fieldName || 'url';
                 input.required = true;
                 if (clear) clear.value = '0';
+                if (del) del.style.display = allowDelete === false ? 'none' : '';
                 lastEditedProductId = productId ? String(productId) : null;
                 showDialog(dialog);
                 input.focus();
@@ -802,7 +833,7 @@
                         e.preventDefault();
                         e.stopPropagation();
                     }
-                    open(btn.dataset.action, btn.dataset.value, btn.dataset.field, btn.dataset.productId);
+                    open(btn.dataset.action, btn.dataset.value, btn.dataset.field, btn.dataset.productId, (btn.dataset.allowDelete || '1') !== '0');
                 });
             });
 
@@ -1212,25 +1243,14 @@
             });
 
             document.querySelectorAll('.js-add-link').forEach((btn) => {
-                btn.addEventListener('click', () => {
-                    const targetId = btn.dataset.target || '';
-                    const target = targetId ? document.getElementById(targetId) : null;
-                    if (!target) return;
-                    target.style.display = target.style.display === 'none' ? '' : 'none';
-                    const select = target.querySelector('select');
-                    if (select) select.focus();
-                });
-            });
-
-            document.querySelectorAll('.js-add-link-select').forEach((select) => {
-                select.addEventListener('change', () => {
-                    const action = select.value || '';
+                btn.addEventListener('click', (e) => {
+                    if (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                    const action = btn.dataset.action || '';
                     if (!action) return;
-                    open(action, '', 'url', select.dataset.productId);
-                    const wrapId = select.dataset.target || '';
-                    const wrap = wrapId ? document.getElementById(wrapId) : null;
-                    if (wrap) wrap.style.display = 'none';
-                    select.value = '';
+                    open(action, '', 'url', btn.dataset.productId, false);
                 });
             });
 
