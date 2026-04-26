@@ -119,7 +119,7 @@
                     <h2 class="card-title">Kết quả so sánh</h2>
                     <p class="card-sub">Giá chênh = Giá đối thủ - Giá của bạn</p>
                 </div>
-                <div class="pill">Tổng sản phẩm: {{ $products->count() }}</div>
+                <div class="pill">Tổng sản phẩm: {{ $products->total() }}</div>
             </div>
             <div class="card-body">
                 <div id="dashboardToolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
@@ -178,6 +178,7 @@
                         </thead>
                         <tbody>
                             @forelse($products as $idx => $product)
+                                @php($rowNumber = (int) ($products->firstItem() ?? 1) + (int) $idx)
                                 @php($own = (int) $product->price)
                                 @php($map = $product->competitors->keyBy('competitor_site_id'))
                                 @php($latestTimes = $product->competitors->map(fn($c) => $c->prices->first()?->fetched_at)->filter())
@@ -193,7 +194,7 @@
                                 })->filter(fn ($v) => ! is_null($v))->min())
                                 <tr
                                     data-product-row="{{ $product->id }}"
-                                    data-row-order="{{ $idx }}"
+                                    data-row-order="{{ $rowNumber - 1 }}"
                                     data-product-name="{{ $product->name }}"
                                     data-product-id="{{ $product->id }}"
                                     data-group-id="{{ $product->product_group_id ?? '' }}"
@@ -201,7 +202,7 @@
                                     data-last-updated="{{ $lastUpdated?->timestamp ?? 0 }}"
                                     data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
                                 >
-                                    <td>{{ $idx+1 }}</td>
+                                    <td>{{ $rowNumber }}</td>
                                     <td>
                                         <div style="display:flex;gap:10px;align-items:center">
                                             <div style="display:flex;flex-direction:column;gap:4px">
@@ -221,6 +222,7 @@
                                                             type="button"
                                                             class="icon-btn icon-btn-sm js-edit-url"
                                                             data-action="{{ route('dashboard.products.url.update', $product) }}"
+                                                            data-product-id="{{ $product->id }}"
                                                             data-field="product_url"
                                                             data-value="{{ $product->product_url }}"
                                                             data-tour="edit-own-url"
@@ -306,6 +308,7 @@
                                                             <button type="button"
                                                                     class="icon-btn icon-btn-sm js-edit-url"
                                                                     data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                                    data-product-id="{{ $product->id }}"
                                                                     data-field="url"
                                                                     data-value="{{ $c->url }}"
                                                                     data-tour="edit-competitor-url"
@@ -344,6 +347,7 @@
                                                             type="button"
                                                             class="icon-btn icon-btn-sm js-edit-url"
                                                             data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                            data-product-id="{{ $product->id }}"
                                                             data-field="url"
                                                             data-value=""
                                                             title="Thêm URL"
@@ -391,6 +395,7 @@
 
                 <div id="comparisonCardView" style="display:none;flex-direction:column;gap:12px;width:100%">
                     @forelse($products as $idx => $product)
+                        @php($rowNumber = (int) ($products->firstItem() ?? 1) + (int) $idx)
                         @php($own = (int) $product->price)
                         @php($map = $product->competitors->keyBy('competitor_site_id'))
                         @php($latestTimes = $product->competitors->map(fn($c) => $c->prices->first()?->fetched_at)->filter())
@@ -409,7 +414,7 @@
                         <div
                             class="card compare-card"
                             data-product-card="{{ $product->id }}"
-                            data-row-order="{{ $idx }}"
+                            data-row-order="{{ $rowNumber - 1 }}"
                             data-product-name="{{ $product->name }}"
                             data-product-id="{{ $product->id }}"
                             data-group-id="{{ $product->product_group_id ?? '' }}"
@@ -441,6 +446,7 @@
                                     <span class="compare-card-title-full">{{ $product->name }}</span>
                                     <span class="compare-card-title-mobile">{{ \Illuminate\Support\Str::limit($product->name, 117) }}</span>
                                 </div>
+                                <div class="hint" style="margin-top:4px">#{{ $rowNumber }}</div>
                                 <div class="hint" style="margin-top:4px">ID: {{ $product->id }}</div>
                             </div>
 
@@ -502,13 +508,12 @@
                                                 <button
                                                     type="button"
                                                     class="icon-btn icon-btn-sm js-edit-url"
+                                                    data-product-id="{{ $product->id }}"
                                                     data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
                                                     data-field="url"
                                                     data-value="{{ $c->url }}"
                                                     title="Sửa URL"
                                                 >
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                                         <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                                     </svg>
                                                 </button>
@@ -554,6 +559,26 @@
                         <div class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm trước.</div>
                     @endforelse
                 </div>
+                @if($products->lastPage() > 1)
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px">
+                        <div class="hint" style="margin-top:0">
+                            Trang {{ $products->currentPage() }}/{{ $products->lastPage() }} • Hiển thị {{ $products->count() }}/{{ $products->total() }}
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            @if($products->onFirstPage())
+                                <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Trước</span>
+                            @else
+                                <a class="btn btn-secondary" href="{{ $products->previousPageUrl() }}">Trước</a>
+                            @endif
+
+                            @if($products->hasMorePages())
+                                <a class="btn btn-secondary" href="{{ $products->nextPageUrl() }}">Sau</a>
+                            @else
+                                <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Sau</span>
+                            @endif
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
     </div>
@@ -708,6 +733,8 @@
             const del = document.getElementById('urlDialogDelete');
             const clear = document.getElementById('urlDialogClear');
             const openButtons = document.querySelectorAll('.js-edit-url');
+            const scrollRestoreKey = 'checkgia:dashboard:scroll_restore';
+            let lastEditedProductId = null;
 
             function showDialog(el) {
                 if (!el) return false;
@@ -729,12 +756,13 @@
                 return true;
             }
 
-            function open(action, value, fieldName) {
+            function open(action, value, fieldName, productId) {
                 form.action = action;
                 input.value = value || '';
                 input.name = fieldName || 'url';
                 input.required = true;
                 if (clear) clear.value = '0';
+                lastEditedProductId = productId ? String(productId) : null;
                 showDialog(dialog);
                 input.focus();
             }
@@ -745,9 +773,23 @@
                         e.preventDefault();
                         e.stopPropagation();
                     }
-                    open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
+                    open(btn.dataset.action, btn.dataset.value, btn.dataset.field, btn.dataset.productId);
                 });
             });
+
+            if (form) {
+                form.addEventListener('submit', () => {
+                    try {
+                        const payload = {
+                            y: window.scrollY || 0,
+                            productId: lastEditedProductId,
+                            at: Date.now(),
+                        };
+                        sessionStorage.setItem(scrollRestoreKey, JSON.stringify(payload));
+                    } catch (e) {
+                    }
+                });
+            }
 
             cancel.addEventListener('click', () => closeDialog(dialog));
             dialog.addEventListener('click', (e) => {
@@ -762,6 +804,31 @@
                     form.requestSubmit();
                 });
             }
+
+            window.addEventListener('load', () => {
+                try {
+                    const raw = sessionStorage.getItem(scrollRestoreKey);
+                    if (!raw) {
+                        return;
+                    }
+                    sessionStorage.removeItem(scrollRestoreKey);
+
+                    const data = JSON.parse(raw);
+                    const productId = data && typeof data.productId === 'string' ? data.productId : null;
+                    if (productId) {
+                        const el = document.querySelector(`[data-product-row="${productId}"]`) || document.querySelector(`[data-product-card="${productId}"]`);
+                        if (el && typeof el.scrollIntoView === 'function') {
+                            el.scrollIntoView({ block: 'center' });
+                            return;
+                        }
+                    }
+
+                    if (data && typeof data.y === 'number' && data.y > 0) {
+                        window.scrollTo(0, data.y);
+                    }
+                } catch (e) {
+                }
+            });
 
             const adjustDialog = document.getElementById('adjustDialog');
             const adjustForm = document.getElementById('adjustDialogForm');

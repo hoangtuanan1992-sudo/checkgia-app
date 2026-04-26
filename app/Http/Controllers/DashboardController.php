@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Competitor;
 use App\Models\CompetitorSite;
 use App\Models\Product;
 use App\Models\ProductGroup;
@@ -34,39 +35,56 @@ class DashboardController extends Controller
             }])
             ->where('user_id', $userId)
             ->latest()
-            ->get(['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at']);
+            ->paginate(50, ['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at'])
+            ->withQueryString();
+
+        $competitorsForEvents = Competitor::query()
+            ->whereHas('product', function ($q) use ($userId) {
+                $q->where('user_id', $userId);
+            })
+            ->with([
+                'product:id,name',
+                'competitorSite:id,name',
+                'prices' => function ($p) {
+                    $p->latest('fetched_at')->limit(2);
+                },
+            ])
+            ->get(['id', 'product_id', 'competitor_site_id', 'name']);
 
         $tz = 'Asia/Ho_Chi_Minh';
         $now = Carbon::now($tz);
         $priceEvents = [];
-        foreach ($products as $product) {
-            foreach ($product->competitors as $competitor) {
-                $latest = $competitor->prices->get(0);
-                $prev = $competitor->prices->get(1);
-                if (! $latest || ! $prev) {
-                    continue;
-                }
-                $delta = (int) $latest->price - (int) $prev->price;
-                if ($delta === 0) {
-                    continue;
-                }
-
-                $eventTime = $latest->fetched_at ? Carbon::parse($latest->fetched_at)->setTimezone($tz) : null;
-                if (! $eventTime) {
-                    continue;
-                }
-
-                $priceEvents[] = [
-                    'at' => $eventTime,
-                    'ago' => $this->agoText($eventTime, $now),
-                    'product_id' => (int) $product->id,
-                    'product_name' => (string) $product->name,
-                    'competitor_id' => (int) $competitor->id,
-                    'site_name' => (string) ($competitor->competitorSite?->name ?? $competitor->name),
-                    'delta' => $delta,
-                    'delta_text' => $this->deltaText($delta),
-                ];
+        foreach ($competitorsForEvents as $competitor) {
+            $product = $competitor->product;
+            if (! $product) {
+                continue;
             }
+
+            $latest = $competitor->prices->get(0);
+            $prev = $competitor->prices->get(1);
+            if (! $latest || ! $prev) {
+                continue;
+            }
+            $delta = (int) $latest->price - (int) $prev->price;
+            if ($delta === 0) {
+                continue;
+            }
+
+            $eventTime = $latest->fetched_at ? Carbon::parse($latest->fetched_at)->setTimezone($tz) : null;
+            if (! $eventTime) {
+                continue;
+            }
+
+            $priceEvents[] = [
+                'at' => $eventTime,
+                'ago' => $this->agoText($eventTime, $now),
+                'product_id' => (int) $product->id,
+                'product_name' => (string) $product->name,
+                'competitor_id' => (int) $competitor->id,
+                'site_name' => (string) ($competitor->competitorSite?->name ?? $competitor->name),
+                'delta' => $delta,
+                'delta_text' => $this->deltaText($delta),
+            ];
         }
 
         usort($priceEvents, function ($a, $b) {
