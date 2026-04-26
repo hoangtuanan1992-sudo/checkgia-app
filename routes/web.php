@@ -92,6 +92,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/xpath-templates', [AdminSettingController::class, 'upsertXpathTemplate'])->name('xpath-templates.upsert');
         Route::delete('/xpath-templates/{competitorSiteTemplate}', [AdminSettingController::class, 'destroyXpathTemplate'])->name('xpath-templates.destroy');
         Route::post('/xpath-users/{user}', [AdminSettingController::class, 'updateUserXPaths'])->name('xpath-users.update');
+        Route::post('/xpath-users/{user}/promote-site/{competitorSite}', [AdminSettingController::class, 'promoteUserSiteToTemplate'])->name('xpath-users.promote-site');
     });
 
     Route::post('/dashboard/products', [DashboardProductController::class, 'store'])->name('dashboard.products.store');

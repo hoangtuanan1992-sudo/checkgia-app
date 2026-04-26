@@ -388,4 +388,89 @@ class AdminSettingController extends Controller
 
         return redirect()->route('admin.settings.edit', ['xpath_user_id' => $uid])->with('status', 'Đã cập nhật XPath của shop');
     }
+
+    public function promoteUserSiteToTemplate(Request $request, User $user, CompetitorSite $competitorSite): RedirectResponse
+    {
+        if ((int) $competitorSite->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
+        if (! Schema::hasTable('competitor_site_templates')) {
+            return redirect()->route('admin.settings.edit', ['xpath_user_id' => (int) $user->id])
+                ->withErrors(['status' => 'Chưa có bảng thư viện XPath. Hãy chạy migrate.']);
+        }
+
+        $siteId = (string) $competitorSite->id;
+        $domainInput = trim((string) $request->input("site_domain.$siteId", $competitorSite->domain));
+        $domain = $domainInput !== '' ? CompetitorSite::normalizedDomain($domainInput) : null;
+        if (! $domain) {
+            $domain = CompetitorSite::normalizedDomainFromUserInput($competitorSite->name);
+        }
+        if (! $domain) {
+            return redirect()->route('admin.settings.edit', ['xpath_user_id' => (int) $user->id])
+                ->withErrors(['status' => 'Site chưa có domain hợp lệ.']);
+        }
+
+        $nameXpath = trim((string) $request->input("site_name_xpath.$siteId", $competitorSite->name_xpath)) ?: null;
+        $priceXpath = trim((string) $request->input("site_price_xpath.$siteId", $competitorSite->price_xpath)) ?: null;
+        $priceRegex = trim((string) $request->input("site_price_regex.$siteId", $competitorSite->price_regex)) ?: null;
+
+        $nameFallbacks = array_values(array_filter(array_map(
+            fn ($v) => trim((string) $v),
+            preg_split('/\R+/', (string) $request->input("site_name_fallbacks.$siteId", ''), -1, PREG_SPLIT_NO_EMPTY) ?: []
+        )));
+        $priceFallbacks = array_values(array_filter(array_map(
+            fn ($v) => trim((string) $v),
+            preg_split('/\R+/', (string) $request->input("site_price_fallbacks.$siteId", ''), -1, PREG_SPLIT_NO_EMPTY) ?: []
+        )));
+
+        DB::transaction(function () use ($competitorSite, $domain, $nameXpath, $priceXpath, $priceRegex, $nameFallbacks, $priceFallbacks) {
+            $template = CompetitorSiteTemplate::query()->firstOrNew(['domain' => $domain]);
+            if (! $template->name) {
+                $template->name = $competitorSite->name ?: $domain;
+            }
+            $template->name_xpath = $nameXpath;
+            $template->price_xpath = $priceXpath;
+            $template->price_regex = $priceRegex;
+            $template->is_approved = true;
+            $template->approved_at = now();
+            $template->save();
+
+            if (! Schema::hasTable('competitor_site_template_scrape_xpaths')) {
+                return;
+            }
+
+            CompetitorSiteTemplateScrapeXpath::query()
+                ->where('competitor_site_template_id', $template->id)
+                ->whereIn('type', ['name', 'price'])
+                ->delete();
+
+            $rows = [];
+            foreach ($nameFallbacks as $i => $xp) {
+                $rows[] = [
+                    'competitor_site_template_id' => $template->id,
+                    'type' => 'name',
+                    'position' => $i,
+                    'xpath' => $xp,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+            foreach ($priceFallbacks as $i => $xp) {
+                $rows[] = [
+                    'competitor_site_template_id' => $template->id,
+                    'type' => 'price',
+                    'position' => $i,
+                    'xpath' => $xp,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+            if ($rows) {
+                CompetitorSiteTemplateScrapeXpath::query()->insert($rows);
+            }
+        });
+
+        return redirect()->route('admin.settings.edit', ['xpath_user_id' => (int) $user->id])->with('status', 'Đã duyệt và chuyển XPath vào thư viện');
+    }
 }

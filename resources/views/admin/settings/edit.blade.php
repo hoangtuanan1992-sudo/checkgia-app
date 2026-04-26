@@ -376,6 +376,17 @@
                                                             <div style="font-weight:800">{{ $s->name }} <span class="hint">(#{{ $s->id }})</span></div>
                                                             <div class="hint" style="margin-top:4px">{{ $s->domain ?: '-' }}</div>
                                                         </div>
+                                                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                                                            <button
+                                                                class="btn btn-secondary"
+                                                                type="submit"
+                                                                formmethod="POST"
+                                                                formaction="{{ route('admin.xpath-users.promote-site', [$xpathUser, $s]) }}"
+                                                                onclick="return confirm('Duyệt và chuyển XPath của site này vào Thư viện XPath theo domain? Template hiện tại (nếu có) sẽ bị cập nhật theo nội dung đang nhập.')"
+                                                            >
+                                                                Duyệt → Thư viện
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div class="card-body" style="padding:8px 12px 12px">
