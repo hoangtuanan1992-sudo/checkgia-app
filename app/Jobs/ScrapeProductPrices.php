@@ -117,7 +117,7 @@ class ScrapeProductPrices implements ShouldQueue
                         }
                     }
 
-                    if (is_null($price)) {
+                    if (is_null($price) || (int) $price <= 0) {
                         $tgdd = $scraper->scrapeTgddPriceAndName((string) $product->product_url);
                         if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
                             $price = $tgdd['price'];

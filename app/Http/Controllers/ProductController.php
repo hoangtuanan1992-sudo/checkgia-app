@@ -47,41 +47,55 @@ class ProductController extends Controller
         }
 
         $scraper = new PriceScraper;
-        $html = $scraper->fetchHtml($data['product_url']);
-        $nameXpaths = array_merge(
-            [(string) $settings->own_name_xpath],
-            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
-        );
-        $priceXpaths = array_merge(
-            [(string) $settings->own_price_xpath],
-            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
-        );
+        $nameDebug = ['tried' => []];
+        $priceDebug = ['tried' => []];
 
-        $nameDebug = $scraper->extractFirstByXPathsWithDebug($html, $nameXpaths);
-        $name = $nameDebug['value'] ?? null;
-        if (! $name) {
-            $name = $scraper->extractTitle($html);
-        }
-        $priceDebug = $scraper->extractFirstByXPathsWithDebug($html, $priceXpaths);
-        $priceRaw = $priceDebug['value'] ?? null;
-        $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
-
-        if (! $name || is_null($price)) {
-            $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
-            if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
-                $name = (string) $structured['name'];
+        $tgdd = $scraper->scrapeTgddPriceAndName((string) $data['product_url']);
+        if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+            $price = $tgdd['price'];
+            $name = isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '' ? trim($tgdd['name']) : null;
+            if (! $name) {
+                $html = $scraper->fetchHtml($data['product_url']);
+                $name = $scraper->extractTitle($html);
             }
-            if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
-                $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
-            }
-        }
+        } else {
+            $html = $scraper->fetchHtml($data['product_url']);
 
-        if (is_null($price)) {
-            $tgdd = $scraper->scrapeTgddPriceAndName((string) $data['product_url']);
-            if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
-                $price = $tgdd['price'];
-                if (! $name && isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '') {
-                    $name = trim($tgdd['name']);
+            $nameXpaths = array_merge(
+                [(string) $settings->own_name_xpath],
+                UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
+            );
+            $priceXpaths = array_merge(
+                [(string) $settings->own_price_xpath],
+                UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
+            );
+
+            $nameDebug = $scraper->extractFirstByXPathsWithDebug($html, $nameXpaths);
+            $name = $nameDebug['value'] ?? null;
+            if (! $name) {
+                $name = $scraper->extractTitle($html);
+            }
+            $priceDebug = $scraper->extractFirstByXPathsWithDebug($html, $priceXpaths);
+            $priceRaw = $priceDebug['value'] ?? null;
+            $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
+
+            if (! $name || is_null($price)) {
+                $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+                if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
+                    $name = (string) $structured['name'];
+                }
+                if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
+                }
+            }
+
+            if (is_null($price) || (int) $price <= 0) {
+                $tgdd = $scraper->scrapeTgddPriceAndName((string) $data['product_url']);
+                if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                    $price = $tgdd['price'];
+                    if (! $name && isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '') {
+                        $name = trim($tgdd['name']);
+                    }
                 }
             }
         }
@@ -310,36 +324,46 @@ class ProductController extends Controller
         }
 
         $scraper = new PriceScraper;
-        $html = $scraper->fetchHtml($url);
-        $nameXpaths = array_merge(
-            [(string) $settings->own_name_xpath],
-            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
-        );
-        $priceXpaths = array_merge(
-            [(string) $settings->own_price_xpath],
-            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
-        );
-
-        $name = $scraper->extractFirstByXPaths($html, $nameXpaths) ?? $scraper->extractTitle($html);
-        $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
-        $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
-
-        if (! $name || is_null($price)) {
-            $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
-            if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
-                $name = (string) $structured['name'];
+        $tgdd = $scraper->scrapeTgddPriceAndName($url);
+        if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+            $price = $tgdd['price'];
+            $name = isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '' ? trim($tgdd['name']) : null;
+            if (! $name) {
+                $html = $scraper->fetchHtml($url);
+                $name = $scraper->extractTitle($html);
             }
-            if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
-                $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
-            }
-        }
+        } else {
+            $html = $scraper->fetchHtml($url);
+            $nameXpaths = array_merge(
+                [(string) $settings->own_name_xpath],
+                UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
+            );
+            $priceXpaths = array_merge(
+                [(string) $settings->own_price_xpath],
+                UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
+            );
 
-        if (is_null($price)) {
-            $tgdd = $scraper->scrapeTgddPriceAndName($url);
-            if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
-                $price = $tgdd['price'];
-                if (! $name && isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '') {
-                    $name = trim($tgdd['name']);
+            $name = $scraper->extractFirstByXPaths($html, $nameXpaths) ?? $scraper->extractTitle($html);
+            $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
+            $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
+
+            if (! $name || is_null($price)) {
+                $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+                if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
+                    $name = (string) $structured['name'];
+                }
+                if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
+                }
+            }
+
+            if (is_null($price) || (int) $price <= 0) {
+                $tgdd = $scraper->scrapeTgddPriceAndName($url);
+                if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                    $price = $tgdd['price'];
+                    if (! $name && isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '') {
+                        $name = trim($tgdd['name']);
+                    }
                 }
             }
         }
