@@ -369,7 +369,7 @@
                                         @foreach($xpathUserSites as $s)
                                             @php($siteNameFallbacksText = $s->scrapeXpaths->where('type', 'name')->sortBy('position')->pluck('xpath')->implode("\n"))
                                             @php($sitePriceFallbacksText = $s->scrapeXpaths->where('type', 'price')->sortBy('position')->pluck('xpath')->implode("\n"))
-                                            <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0;border:1px solid var(--border)">
+                                            <div class="card" id="xpath-site-{{ $s->id }}" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0;border:1px solid var(--border)">
                                                 <div class="card-header" style="padding:12px 12px 6px">
                                                     <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
                                                         <div>
@@ -381,7 +381,7 @@
                                                                 class="btn btn-secondary"
                                                                 type="submit"
                                                                 formmethod="POST"
-                                                                formaction="{{ route('admin.xpath-users.promote-site', [$xpathUser, $s]) }}"
+                                                                formaction="{{ route('admin.xpath-users.promote-site', [$xpathUser, $s]) }}?anchor={{ urlencode('xpath-site-'.$s->id) }}"
                                                                 onclick="return confirm('Duyệt và chuyển XPath của site này vào Thư viện XPath theo domain? Template hiện tại (nếu có) sẽ bị cập nhật theo nội dung đang nhập.')"
                                                             >
                                                                 Duyệt → Thư viện

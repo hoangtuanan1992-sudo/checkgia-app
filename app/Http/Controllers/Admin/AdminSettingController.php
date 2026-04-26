@@ -395,8 +395,12 @@ class AdminSettingController extends Controller
             abort(404);
         }
 
+        $redirectBase = route('admin.settings.edit', ['xpath_user_id' => (int) $user->id]);
+        $anchor = trim((string) $request->query('anchor', ''));
+        $redirectUrl = (preg_match('/^[A-Za-z0-9\-_]+$/', $anchor) === 1) ? ($redirectBase.'#'.$anchor) : $redirectBase;
+
         if (! Schema::hasTable('competitor_site_templates')) {
-            return redirect()->route('admin.settings.edit', ['xpath_user_id' => (int) $user->id])
+            return redirect()->to($redirectUrl)
                 ->withErrors(['status' => 'Chưa có bảng thư viện XPath. Hãy chạy migrate.']);
         }
 
@@ -407,7 +411,7 @@ class AdminSettingController extends Controller
             $domain = CompetitorSite::normalizedDomainFromUserInput($competitorSite->name);
         }
         if (! $domain) {
-            return redirect()->route('admin.settings.edit', ['xpath_user_id' => (int) $user->id])
+            return redirect()->to($redirectUrl)
                 ->withErrors(['status' => 'Site chưa có domain hợp lệ.']);
         }
 
@@ -471,6 +475,6 @@ class AdminSettingController extends Controller
             }
         });
 
-        return redirect()->route('admin.settings.edit', ['xpath_user_id' => (int) $user->id])->with('status', 'Đã duyệt và chuyển XPath vào thư viện');
+        return redirect()->to($redirectUrl)->with('status', 'Đã duyệt và chuyển XPath vào thư viện');
     }
 }
