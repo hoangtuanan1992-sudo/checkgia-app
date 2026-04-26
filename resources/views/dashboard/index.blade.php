@@ -286,6 +286,7 @@
                                                                 <button
                                                                     type="button"
                                                                     class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                                    data-product-id="{{ $product->id }}"
                                                                     data-action="{{ route('competitors.adjustment.update', $c) }}"
                                                                     data-value="{{ $adj }}"
                                                                     data-span-id="adjDiff-{{ $c->id }}"
@@ -452,9 +453,34 @@
 
                             <div class="compare-card-own-row">
                                 <div class="compare-card-own-label">Giá bạn</div>
-                                <a href="{{ route('products.history', $product) }}" class="compare-card-own-price" data-tour="price-history-own">
-                                    {{ number_format($own, 0, ',', '.') }}đ
-                                </a>
+                                <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                                    <a href="{{ route('products.history', $product) }}" class="compare-card-own-price" data-tour="price-history-own">
+                                        {{ number_format($own, 0, ',', '.') }}đ
+                                    </a>
+                                    <div style="display:flex;gap:8px;align-items:center">
+                                        @if(!auth()->user()->isViewer())
+                                            <button
+                                                type="button"
+                                                class="icon-btn icon-btn-sm js-edit-url"
+                                                data-product-id="{{ $product->id }}"
+                                                data-action="{{ route('dashboard.products.url.update', $product) }}"
+                                                data-field="product_url"
+                                                data-value="{{ $product->product_url }}"
+                                                title="Sửa link sản phẩm của bạn"
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                    <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </button>
+                                        @endif
+                                        @if($product->product_url)
+                                            <a href="{{ $product->product_url }}" target="_blank" class="hint" style="margin-top:0;text-decoration:none">link sản phẩm</a>
+                                        @else
+                                            <span class="hint" style="margin-top:0">chưa có link</span>
+                                        @endif
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
@@ -467,23 +493,19 @@
 
                                 @foreach($competitorSites as $site)
                                     @php($c = $map->get($site->id))
-                                    @if(! $c)
-                                        @continue
-                                    @endif
-
                                     @php($latest = $c?->prices->first())
                                     @php($prev = $c?->prices->skip(1)->first())
                                     @php($cPrice = $latest?->price)
                                     @php($prevPrice = $prev?->price)
                                     @php($adj = (int) ($c?->price_adjustment ?? 0))
-                                    @php($adjDiff = is_null($cPrice) ? null : ((int) $cPrice + $adj - $own))
+                                    @php($adjDiff = (! $c || is_null($cPrice)) ? null : ((int) $cPrice + $adj - $own))
                                     @php($diffSign = is_null($adjDiff) ? 'na' : ($adjDiff > 0 ? 'pos' : ($adjDiff < 0 ? 'neg' : 'zero')))
                                     @php($diffArrow = is_null($adjDiff) ? '' : ($adjDiff > 0 ? '↑' : ($adjDiff < 0 ? '↓' : '←')))
 
                                     <div class="compare-card-table-row">
                                         <div class="compare-card-cell-site">{{ $site->name }}</div>
                                         <div class="compare-card-cell-price">
-                                            @if($cPrice)
+                                            @if($c && $cPrice)
                                                 <a href="{{ route('competitors.history', $c) }}" style="color:#6b7280" data-tour="price-history-competitor">
                                                     {{ number_format($cPrice, 0, ',', '.') }}
                                                 </a>
@@ -511,48 +533,37 @@
                                                     data-product-id="{{ $product->id }}"
                                                     data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
                                                     data-field="url"
-                                                    data-value="{{ $c->url }}"
-                                                    title="Sửa URL"
+                                                    data-value="{{ $c?->url ?? '' }}"
+                                                    title="{{ $c ? 'Sửa URL' : 'Thêm URL' }}"
                                                 >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                                         <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                                     </svg>
                                                 </button>
 
-                                                <button
-                                                    type="button"
-                                                    class="icon-btn icon-btn-sm js-edit-adjustment"
-                                                    data-action="{{ route('competitors.adjustment.update', $c) }}"
-                                                    data-value="{{ $adj }}"
-                                                    data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
-                                                    data-own="{{ $own }}"
-                                                    data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
-                                                    title="Điều chỉnh giá (+/-)"
-                                                >
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                                    </svg>
-                                                </button>
+                                                @if($c)
+                                                    <button
+                                                        type="button"
+                                                        class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                        data-product-id="{{ $product->id }}"
+                                                        data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                        data-value="{{ $adj }}"
+                                                        data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
+                                                        data-own="{{ $own }}"
+                                                        data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                        title="Điều chỉnh giá (+/-)"
+                                                    >
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                            <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                        </svg>
+                                                    </button>
+                                                @endif
                                             @endif
                                         </div>
                                     </div>
                                 @endforeach
-
-                                @if($missingSites->isNotEmpty() && !auth()->user()->isViewer())
-                                    <div style="padding:12px 16px 16px">
-                                        <button type="button" class="compare-card-addlink js-add-link" data-target="addLink-{{ $product->id }}">
-                                            + Thêm link
-                                        </button>
-                                    </div>
-                                    <div id="addLink-{{ $product->id }}" style="display:none;padding:0 16px 16px">
-                                        <select class="input js-add-link-select" data-target="addLink-{{ $product->id }}">
-                                            <option value="">Chọn đối thủ...</option>
-                                            @foreach($missingSites as $site)
-                                                <option value="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}">{{ $site->name }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                @endif
                             </div>
                         </div>
                     @empty
@@ -816,7 +827,13 @@
                     const data = JSON.parse(raw);
                     const productId = data && typeof data.productId === 'string' ? data.productId : null;
                     if (productId) {
-                        const el = document.querySelector(`[data-product-row="${productId}"]`) || document.querySelector(`[data-product-card="${productId}"]`);
+                        const table = document.getElementById('comparisonTableView');
+                        const cards = document.getElementById('comparisonCardView');
+                        const isCards = cards && cards.style.display !== 'none';
+                        const isTable = table && table.style.display !== 'none';
+                        const el = isCards
+                            ? (document.querySelector(`[data-product-card="${productId}"]`) || (isTable ? document.querySelector(`[data-product-row="${productId}"]`) : null))
+                            : (document.querySelector(`[data-product-row="${productId}"]`) || (isCards ? document.querySelector(`[data-product-card="${productId}"]`) : null));
                         if (el && typeof el.scrollIntoView === 'function') {
                             el.scrollIntoView({ block: 'center' });
                             return;
@@ -837,6 +854,17 @@
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
             const csrfToken = '{{ csrf_token() }}';
             let lastAdjustButton = null;
+            function saveScrollRestore(productId) {
+                try {
+                    const payload = {
+                        y: window.scrollY || 0,
+                        productId: productId ? String(productId) : null,
+                        at: Date.now(),
+                    };
+                    sessionStorage.setItem(scrollRestoreKey, JSON.stringify(payload));
+                } catch (e) {
+                }
+            }
 
             function openAdjust(action, value) {
                 adjustForm.action = action;
@@ -1003,9 +1031,11 @@
                                     span.style.color = effectiveDiff > 0 ? '#166534' : (effectiveDiff < 0 ? '#991b1b' : '#111827');
                                 });
                             } else {
+                                saveScrollRestore(lastAdjustButton ? lastAdjustButton.dataset.productId : null);
                                 window.location.reload();
                             }
                         } else {
+                            saveScrollRestore(null);
                             window.location.reload();
                         }
                     } catch (err) {
