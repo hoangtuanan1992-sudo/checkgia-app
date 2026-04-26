@@ -13,6 +13,22 @@ class CompetitorSite extends Model
 {
     use HasFactory;
 
+    public static function normalizedDomainFromUserInput(?string $input): ?string
+    {
+        $input = trim((string) ($input ?? ''));
+        if ($input === '') {
+            return null;
+        }
+
+        if (str_contains($input, '://') || str_contains($input, '/')) {
+            $url = str_contains($input, '://') ? $input : ('https://'.ltrim($input, '/'));
+
+            return self::normalizedDomainFromUrl($url);
+        }
+
+        return self::normalizedDomain($input);
+    }
+
     public static function normalizedDomainFromUrl(?string $url): ?string
     {
         $url = trim((string) ($url ?? ''));

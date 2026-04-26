@@ -55,15 +55,18 @@ class DashboardCompetitorSetupController extends Controller
     public function storeSite(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'sample_url' => ['nullable', 'url', 'max:2048'],
+            'name' => ['required', 'string', 'max:2048'],
         ]);
 
         $userId = $request->user()->effectiveUserId();
         $position = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
 
-        $name = trim((string) $validated['name']);
-        $domain = CompetitorSite::normalizedDomainFromUrl($validated['sample_url'] ?? null);
+        $input = trim((string) $validated['name']);
+        $domain = CompetitorSite::normalizedDomainFromUserInput($input);
+        if (! $domain) {
+            return back()->withErrors(['name' => 'Website đối thủ không hợp lệ.'])->withInput();
+        }
+        $name = $domain;
 
         DB::transaction(function () use ($userId, $position, $name, $domain) {
             $site = null;

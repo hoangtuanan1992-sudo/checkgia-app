@@ -48,18 +48,25 @@ class AdminSettingController extends Controller
             'last_job_error' => Cache::get('checkgia:scrape-due:last_job_error'),
         ];
 
-        $templates = CompetitorSiteTemplate::query()
-            ->orderBy('domain')
-            ->with(['scrapeXpaths' => function ($q) {
-                $q->orderBy('type')->orderBy('position');
-            }])
-            ->get();
+        $templates = collect();
+        if (Schema::hasTable('competitor_site_templates')) {
+            $templatesQuery = CompetitorSiteTemplate::query()->orderBy('domain');
+            if (Schema::hasTable('competitor_site_template_scrape_xpaths')) {
+                $templatesQuery->with(['scrapeXpaths' => function ($q) {
+                    $q->orderBy('type')->orderBy('position');
+                }]);
+            }
+            $templates = $templatesQuery->get();
+        }
 
-        $templateUsage = CompetitorSite::query()
-            ->whereNotNull('domain')
-            ->selectRaw('domain, COUNT(*) as c')
-            ->groupBy('domain')
-            ->pluck('c', 'domain');
+        $templateUsage = collect();
+        if (Schema::hasTable('competitor_sites') && Schema::hasColumn('competitor_sites', 'domain')) {
+            $templateUsage = CompetitorSite::query()
+                ->whereNotNull('domain')
+                ->selectRaw('domain, COUNT(*) as c')
+                ->groupBy('domain')
+                ->pluck('c', 'domain');
+        }
 
         $xpathUserId = trim((string) $request->query('xpath_user_id', ''));
         $xpathUser = null;
@@ -72,25 +79,33 @@ class AdminSettingController extends Controller
             $xpathUser = User::query()->where('id', (int) $xpathUserId)->first();
             if ($xpathUser) {
                 $uid = (int) $xpathUser->id;
-                $xpathUserSetting = UserScrapeSetting::query()->firstOrCreate(['user_id' => $uid]);
-                $xpathOwnNameFallbacks = UserScrapeXpath::query()
-                    ->where('user_id', $uid)
-                    ->where('type', 'name')
-                    ->orderBy('position')
-                    ->pluck('xpath');
-                $xpathOwnPriceFallbacks = UserScrapeXpath::query()
-                    ->where('user_id', $uid)
-                    ->where('type', 'price')
-                    ->orderBy('position')
-                    ->pluck('xpath');
-                $xpathUserSites = CompetitorSite::query()
-                    ->where('user_id', $uid)
-                    ->orderBy('position')
-                    ->orderBy('name')
-                    ->with(['scrapeXpaths' => function ($q) {
-                        $q->orderBy('type')->orderBy('position');
-                    }])
-                    ->get();
+                if (Schema::hasTable('user_scrape_settings')) {
+                    $xpathUserSetting = UserScrapeSetting::query()->firstOrCreate(['user_id' => $uid]);
+                }
+                if (Schema::hasTable('user_scrape_xpaths')) {
+                    $xpathOwnNameFallbacks = UserScrapeXpath::query()
+                        ->where('user_id', $uid)
+                        ->where('type', 'name')
+                        ->orderBy('position')
+                        ->pluck('xpath');
+                    $xpathOwnPriceFallbacks = UserScrapeXpath::query()
+                        ->where('user_id', $uid)
+                        ->where('type', 'price')
+                        ->orderBy('position')
+                        ->pluck('xpath');
+                }
+                if (Schema::hasTable('competitor_sites')) {
+                    $sitesQuery = CompetitorSite::query()
+                        ->where('user_id', $uid)
+                        ->orderBy('position')
+                        ->orderBy('name');
+                    if (Schema::hasTable('competitor_site_scrape_xpaths')) {
+                        $sitesQuery->with(['scrapeXpaths' => function ($q) {
+                            $q->orderBy('type')->orderBy('position');
+                        }]);
+                    }
+                    $xpathUserSites = $sitesQuery->get();
+                }
             }
         }
 

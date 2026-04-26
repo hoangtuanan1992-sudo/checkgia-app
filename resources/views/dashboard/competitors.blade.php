@@ -21,16 +21,11 @@
                     <div class="card-body" style="padding:8px 16px 16px">
                         <form method="POST" action="{{ route('dashboard.competitors.sites.store') }}">
                             @csrf
-                            <div style="display:grid;grid-template-columns:1fr 1.2fr auto;gap:12px;align-items:end">
+                            <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end">
                                 <div class="field" style="margin-top:0">
-                                    <label class="label" for="site_name">Tên website đối thủ</label>
-                                    <input class="input" id="site_name" name="name" type="text" value="{{ old('name') }}" placeholder="VD: LaptopAZ" required>
+                                    <label class="label" for="site_name">website đối thủ</label>
+                                    <input class="input" id="site_name" name="name" type="text" value="{{ old('name') }}" placeholder="VD: laptopaz.com hoặc https://laptopaz.vn/" required>
                                     @error('name')<div class="error">{{ $message }}</div>@enderror
-                                </div>
-                                <div class="field" style="margin-top:0">
-                                    <label class="label" for="site_sample_url">Link mẫu (để tự nhận domain & XPath)</label>
-                                    <input class="input" id="site_sample_url" name="sample_url" type="url" value="{{ old('sample_url') }}" placeholder="VD: https://www.thegioididong.com/dtdd/...">
-                                    @error('sample_url')<div class="error">{{ $message }}</div>@enderror
                                 </div>
                                 <button class="btn" type="submit" style="height:44px">Thêm đối thủ</button>
                             </div>
