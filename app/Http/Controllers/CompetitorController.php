@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Competitor;
 use App\Models\CompetitorPrice;
 use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteTemplate;
 use App\Models\Product;
 use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
@@ -21,10 +22,27 @@ class CompetitorController extends Controller
             'url' => ['required', 'url', 'max:2048'],
         ]);
 
-        $site = CompetitorSite::firstOrCreate(
-            ['user_id' => $request->user()->effectiveUserId(), 'name' => $data['name']],
-            ['name' => $data['name']]
-        );
+        $userId = $request->user()->effectiveUserId();
+        $domain = CompetitorSite::normalizedDomainFromUrl($data['url'] ?? null);
+        if ($domain) {
+            $site = CompetitorSite::query()->firstOrCreate(
+                ['user_id' => $userId, 'domain' => $domain],
+                ['name' => $data['name'], 'domain' => $domain]
+            );
+            if (! $site->name) {
+                $site->name = $data['name'];
+                $site->save();
+            }
+            $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+            if ($template) {
+                $template->applyToCompetitorSite($site);
+            }
+        } else {
+            $site = CompetitorSite::query()->firstOrCreate(
+                ['user_id' => $userId, 'name' => $data['name']],
+                ['name' => $data['name']]
+            );
+        }
 
         $product->competitors()->create([
             'competitor_site_id' => $site->id,
@@ -44,10 +62,27 @@ class CompetitorController extends Controller
             'url' => ['required', 'url', 'max:2048'],
         ]);
 
-        $site = CompetitorSite::firstOrCreate(
-            ['user_id' => $request->user()->effectiveUserId(), 'name' => $data['name']],
-            ['name' => $data['name']]
-        );
+        $userId = $request->user()->effectiveUserId();
+        $domain = CompetitorSite::normalizedDomainFromUrl($data['url'] ?? null);
+        if ($domain) {
+            $site = CompetitorSite::query()->firstOrCreate(
+                ['user_id' => $userId, 'domain' => $domain],
+                ['name' => $data['name'], 'domain' => $domain]
+            );
+            if (! $site->name) {
+                $site->name = $data['name'];
+                $site->save();
+            }
+            $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+            if ($template) {
+                $template->applyToCompetitorSite($site);
+            }
+        } else {
+            $site = CompetitorSite::query()->firstOrCreate(
+                ['user_id' => $userId, 'name' => $data['name']],
+                ['name' => $data['name']]
+            );
+        }
 
         $competitor->update([
             'competitor_site_id' => $site->id,
@@ -90,6 +125,17 @@ class CompetitorController extends Controller
         ]);
 
         $site = $competitor->competitorSite;
+        if ($site && ! $site->domain) {
+            $domain = CompetitorSite::normalizedDomainFromUrl($url);
+            if ($domain) {
+                $site->domain = $domain;
+                $site->save();
+                $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+                if ($template) {
+                    $template->applyToCompetitorSite($site);
+                }
+            }
+        }
         if ($site && $site->price_xpath) {
             try {
                 $scraper = new PriceScraper;
@@ -134,6 +180,18 @@ class CompetitorController extends Controller
 
         $clear = (bool) ($data['clear'] ?? false);
         $url = trim((string) ($data['url'] ?? ''));
+
+        if (! $competitorSite->domain) {
+            $domain = CompetitorSite::normalizedDomainFromUrl($url);
+            if ($domain) {
+                $competitorSite->domain = $domain;
+                $competitorSite->save();
+                $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+                if ($template) {
+                    $template->applyToCompetitorSite($competitorSite);
+                }
+            }
+        }
 
         if ($clear || $url === '') {
             $existing = $product->competitors()->where('competitor_site_id', $competitorSite->id)->first();

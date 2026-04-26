@@ -89,6 +89,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/impersonate/stop', [AdminUserController::class, 'stopImpersonate'])->name('impersonate.stop.get');
         Route::get('/settings', [AdminSettingController::class, 'edit'])->name('settings.edit');
         Route::put('/settings', [AdminSettingController::class, 'update'])->name('settings.update');
+        Route::post('/xpath-templates', [AdminSettingController::class, 'upsertXpathTemplate'])->name('xpath-templates.upsert');
+        Route::delete('/xpath-templates/{competitorSiteTemplate}', [AdminSettingController::class, 'destroyXpathTemplate'])->name('xpath-templates.destroy');
+        Route::post('/xpath-users/{user}', [AdminSettingController::class, 'updateUserXPaths'])->name('xpath-users.update');
     });
 
     Route::post('/dashboard/products', [DashboardProductController::class, 'store'])->name('dashboard.products.store');

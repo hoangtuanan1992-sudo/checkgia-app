@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CompetitorSite;
 use App\Models\CompetitorSiteScrapeXpath;
+use App\Models\CompetitorSiteTemplate;
 use App\Models\UserNotificationSetting;
 use App\Models\UserScrapeSetting;
 use App\Models\UserScrapeXpath;
@@ -55,17 +56,55 @@ class DashboardCompetitorSetupController extends Controller
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'sample_url' => ['nullable', 'url', 'max:2048'],
         ]);
 
         $userId = $request->user()->effectiveUserId();
         $position = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
 
-        CompetitorSite::firstOrCreate([
-            'user_id' => $request->user()->effectiveUserId(),
-            'name' => trim($validated['name']),
-        ], [
-            'position' => $position,
-        ]);
+        $name = trim((string) $validated['name']);
+        $domain = CompetitorSite::normalizedDomainFromUrl($validated['sample_url'] ?? null);
+
+        DB::transaction(function () use ($userId, $position, $name, $domain) {
+            $site = null;
+            if ($domain) {
+                $site = CompetitorSite::query()
+                    ->where('user_id', $userId)
+                    ->where('domain', $domain)
+                    ->first();
+            }
+
+            if (! $site) {
+                $site = CompetitorSite::firstOrCreate([
+                    'user_id' => $userId,
+                    'name' => $name,
+                ], [
+                    'position' => $position,
+                    'domain' => $domain,
+                ]);
+            }
+
+            if ($site->name !== $name) {
+                $site->name = $name;
+            }
+            if ($domain && $site->domain !== $domain) {
+                $site->domain = $domain;
+            }
+            if ($site->isDirty()) {
+                $site->save();
+            }
+
+            if ($domain) {
+                $template = CompetitorSiteTemplate::query()
+                    ->where('domain', $domain)
+                    ->where('is_approved', true)
+                    ->first();
+
+                if ($template) {
+                    $template->applyToCompetitorSite($site);
+                }
+            }
+        });
 
         $this->normalizeSitePositions($userId);
 

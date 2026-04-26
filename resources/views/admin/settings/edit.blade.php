@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
-    <div style="width:100%;max-width:820px">
+    <div style="width:100%;max-width:1500px">
         <div class="card" style="max-width:none">
             <div class="card-header" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
                 <div>
@@ -158,6 +158,273 @@
                         <button class="btn" type="submit">Lưu</button>
                     </div>
                 </form>
+
+                <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px">
+                    <div class="card-header" style="padding:16px 16px 6px">
+                        <h2 class="card-title" style="font-size:18px">Thư viện XPath theo domain</h2>
+                        <p class="card-sub">Template dùng chung toàn hệ thống (copy-once khi shop tạo đối thủ theo domain)</p>
+                    </div>
+                    <div class="card-body" style="padding:8px 16px 16px">
+                        <div class="hint" style="margin-top:0">Nhập 1 XPath mỗi dòng ở phần dự phòng.</div>
+
+                        <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px">
+                            <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0">
+                                <div class="card-header" style="padding:14px 14px 6px">
+                                    <h3 class="card-title" style="font-size:16px">Thêm / cập nhật template</h3>
+                                </div>
+                                <div class="card-body" style="padding:8px 14px 14px">
+                                    <form method="POST" action="{{ route('admin.xpath-templates.upsert') }}">
+                                        @csrf
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label" for="tpl_domain">Domain</label>
+                                                <input class="input" id="tpl_domain" name="domain" type="text" placeholder="thegioididong.com" required>
+                                                @error('domain')<div class="error">{{ $message }}</div>@enderror
+                                            </div>
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label" for="tpl_name">Tên hiển thị</label>
+                                                <input class="input" id="tpl_name" name="name" type="text" placeholder="Thế Giới Di Động">
+                                            </div>
+                                        </div>
+
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label" for="tpl_name_xpath">XPath tên (primary)</label>
+                                                <textarea class="input" id="tpl_name_xpath" name="name_xpath" rows="2" style="min-height:44px"></textarea>
+                                            </div>
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label" for="tpl_price_xpath">XPath giá (primary)</label>
+                                                <textarea class="input" id="tpl_price_xpath" name="price_xpath" rows="2" style="min-height:44px"></textarea>
+                                            </div>
+                                        </div>
+
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label" for="tpl_price_regex">Regex lọc giá</label>
+                                                <textarea class="input" id="tpl_price_regex" name="price_regex" rows="2" style="min-height:44px"></textarea>
+                                            </div>
+                                            <div class="field" style="margin-top:0;display:flex;align-items:flex-end;gap:10px">
+                                                <label style="display:flex;align-items:center;gap:8px">
+                                                    <input type="checkbox" name="is_approved" value="1">
+                                                    <span class="label" style="margin:0">Đã duyệt</span>
+                                                </label>
+                                                <div class="hint" style="margin-top:0">Chỉ template đã duyệt mới tự áp dụng cho shop.</div>
+                                            </div>
+                                        </div>
+
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label" for="tpl_name_fallbacks">XPath tên dự phòng</label>
+                                                <textarea class="input" id="tpl_name_fallbacks" name="name_fallbacks" rows="5"></textarea>
+                                            </div>
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label" for="tpl_price_fallbacks">XPath giá dự phòng</label>
+                                                <textarea class="input" id="tpl_price_fallbacks" name="price_fallbacks" rows="5"></textarea>
+                                            </div>
+                                        </div>
+
+                                        <div class="actions" style="justify-content:flex-end">
+                                            <button class="btn" type="submit">Lưu template</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+
+                            @forelse($templates as $t)
+                                @php($nameFallbacksText = $t->scrapeXpaths->where('type', 'name')->sortBy('position')->pluck('xpath')->implode("\n"))
+                                @php($priceFallbacksText = $t->scrapeXpaths->where('type', 'price')->sortBy('position')->pluck('xpath')->implode("\n"))
+                                <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0">
+                                    <div class="card-header" style="padding:14px 14px 6px;display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+                                        <div>
+                                            <h3 class="card-title" style="font-size:16px;margin:0">{{ $t->domain }}</h3>
+                                            <div class="hint" style="margin-top:4px">
+                                                Dùng bởi {{ (int) ($templateUsage[$t->domain] ?? 0) }} shop • Duyệt: {{ $t->is_approved ? 'có' : 'không' }}
+                                            </div>
+                                        </div>
+                                        <form method="POST" action="{{ route('admin.xpath-templates.destroy', $t) }}" onsubmit="return confirm('Xoá template này?')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button class="btn btn-secondary" type="submit">Xoá</button>
+                                        </form>
+                                    </div>
+                                    <div class="card-body" style="padding:8px 14px 14px">
+                                        <form method="POST" action="{{ route('admin.xpath-templates.upsert') }}">
+                                            @csrf
+                                            <input type="hidden" name="domain" value="{{ $t->domain }}">
+                                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                                                <div class="field" style="margin-top:0">
+                                                    <label class="label">Tên hiển thị</label>
+                                                    <input class="input" name="name" type="text" value="{{ $t->name }}">
+                                                </div>
+                                                <div class="field" style="margin-top:0;display:flex;align-items:flex-end;gap:10px">
+                                                    <label style="display:flex;align-items:center;gap:8px">
+                                                        <input type="checkbox" name="is_approved" value="1" @checked($t->is_approved)>
+                                                        <span class="label" style="margin:0">Đã duyệt</span>
+                                                    </label>
+                                                    <div class="hint" style="margin-top:0">{{ $t->approved_at ? 'Từ '.$t->approved_at->format('d/m/Y H:i') : '' }}</div>
+                                                </div>
+                                            </div>
+
+                                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                                <div class="field" style="margin-top:0">
+                                                    <label class="label">XPath tên (primary)</label>
+                                                    <textarea class="input" name="name_xpath" rows="2" style="min-height:44px">{{ $t->name_xpath }}</textarea>
+                                                </div>
+                                                <div class="field" style="margin-top:0">
+                                                    <label class="label">XPath giá (primary)</label>
+                                                    <textarea class="input" name="price_xpath" rows="2" style="min-height:44px">{{ $t->price_xpath }}</textarea>
+                                                </div>
+                                            </div>
+
+                                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                                <div class="field" style="margin-top:0">
+                                                    <label class="label">Regex lọc giá</label>
+                                                    <textarea class="input" name="price_regex" rows="2" style="min-height:44px">{{ $t->price_regex }}</textarea>
+                                                </div>
+                                                <div></div>
+                                            </div>
+
+                                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                                <div class="field" style="margin-top:0">
+                                                    <label class="label">XPath tên dự phòng</label>
+                                                    <textarea class="input" name="name_fallbacks" rows="5">{{ $nameFallbacksText }}</textarea>
+                                                </div>
+                                                <div class="field" style="margin-top:0">
+                                                    <label class="label">XPath giá dự phòng</label>
+                                                    <textarea class="input" name="price_fallbacks" rows="5">{{ $priceFallbacksText }}</textarea>
+                                                </div>
+                                            </div>
+
+                                            <div class="actions" style="justify-content:flex-end">
+                                                <button class="btn" type="submit">Lưu</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="hint">Chưa có template nào.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px">
+                    <div class="card-header" style="padding:16px 16px 6px">
+                        <h2 class="card-title" style="font-size:18px">XPath của shop</h2>
+                        <p class="card-sub">Tổng hợp XPath mà shop đang dùng, và cho phép sửa trực tiếp</p>
+                    </div>
+                    <div class="card-body" style="padding:8px 16px 16px">
+                        <form method="GET" action="{{ route('admin.settings.edit') }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+                            <div class="field" style="margin-top:0;min-width:220px">
+                                <label class="label" for="xpath_user_id">User ID</label>
+                                <input class="input" id="xpath_user_id" name="xpath_user_id" type="number" min="1" value="{{ $xpathUserId }}" placeholder="VD: 12">
+                            </div>
+                            <button class="btn btn-secondary" type="submit" style="height:44px">Xem</button>
+                        </form>
+
+                        @if($xpathUser)
+                            <div class="pill" style="margin-top:12px">Shop: #{{ $xpathUser->id }} - {{ $xpathUser->name }} ({{ $xpathUser->email }})</div>
+
+                            <form method="POST" action="{{ route('admin.xpath-users.update', $xpathUser) }}" style="margin-top:12px">
+                                @csrf
+
+                                <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0">
+                                    <div class="card-header" style="padding:14px 14px 6px">
+                                        <h3 class="card-title" style="font-size:16px">XPath của shop (website của bạn)</h3>
+                                    </div>
+                                    <div class="card-body" style="padding:8px 14px 14px">
+                                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label">XPath tên (primary)</label>
+                                                <textarea class="input" name="own_name_xpath" rows="2" style="min-height:44px">{{ $xpathUserSetting?->own_name_xpath }}</textarea>
+                                            </div>
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label">XPath giá (primary)</label>
+                                                <textarea class="input" name="own_price_xpath" rows="2" style="min-height:44px">{{ $xpathUserSetting?->own_price_xpath }}</textarea>
+                                            </div>
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label">Regex lọc giá</label>
+                                                <textarea class="input" name="own_price_regex" rows="2" style="min-height:44px">{{ $xpathUserSetting?->price_regex }}</textarea>
+                                            </div>
+                                        </div>
+
+                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label">XPath tên dự phòng</label>
+                                                <textarea class="input" name="own_name_fallbacks" rows="5">{{ $xpathOwnNameFallbacks->implode("\n") }}</textarea>
+                                            </div>
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label">XPath giá dự phòng</label>
+                                                <textarea class="input" name="own_price_fallbacks" rows="5">{{ $xpathOwnPriceFallbacks->implode("\n") }}</textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:12px">
+                                    <div class="card-header" style="padding:14px 14px 6px">
+                                        <h3 class="card-title" style="font-size:16px">XPath đối thủ ({{ $xpathUserSites->count() }})</h3>
+                                    </div>
+                                    <div class="card-body" style="padding:8px 14px 14px;display:flex;flex-direction:column;gap:12px">
+                                        @foreach($xpathUserSites as $s)
+                                            @php($siteNameFallbacksText = $s->scrapeXpaths->where('type', 'name')->sortBy('position')->pluck('xpath')->implode("\n"))
+                                            @php($sitePriceFallbacksText = $s->scrapeXpaths->where('type', 'price')->sortBy('position')->pluck('xpath')->implode("\n"))
+                                            <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0;border:1px solid var(--border)">
+                                                <div class="card-header" style="padding:12px 12px 6px">
+                                                    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+                                                        <div>
+                                                            <div style="font-weight:800">{{ $s->name }} <span class="hint">(#{{ $s->id }})</span></div>
+                                                            <div class="hint" style="margin-top:4px">{{ $s->domain ?: '-' }}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="card-body" style="padding:8px 12px 12px">
+                                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                                                        <div class="field" style="margin-top:0">
+                                                            <label class="label">Domain</label>
+                                                            <input class="input" name="site_domain[{{ $s->id }}]" type="text" value="{{ $s->domain }}" placeholder="cellphones.com.vn">
+                                                        </div>
+                                                        <div class="hint" style="margin-top:0;display:flex;align-items:flex-end">Domain dùng để tự map template.</div>
+                                                    </div>
+                                                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+                                                        <div class="field" style="margin-top:0">
+                                                            <label class="label">XPath tên (primary)</label>
+                                                            <textarea class="input" name="site_name_xpath[{{ $s->id }}]" rows="2" style="min-height:44px">{{ $s->name_xpath }}</textarea>
+                                                        </div>
+                                                        <div class="field" style="margin-top:0">
+                                                            <label class="label">XPath giá (primary)</label>
+                                                            <textarea class="input" name="site_price_xpath[{{ $s->id }}]" rows="2" style="min-height:44px">{{ $s->price_xpath }}</textarea>
+                                                        </div>
+                                                        <div class="field" style="margin-top:0">
+                                                            <label class="label">Regex lọc giá</label>
+                                                            <textarea class="input" name="site_price_regex[{{ $s->id }}]" rows="2" style="min-height:44px">{{ $s->price_regex }}</textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                                        <div class="field" style="margin-top:0">
+                                                            <label class="label">XPath tên dự phòng</label>
+                                                            <textarea class="input" name="site_name_fallbacks[{{ $s->id }}]" rows="5">{{ $siteNameFallbacksText }}</textarea>
+                                                        </div>
+                                                        <div class="field" style="margin-top:0">
+                                                            <label class="label">XPath giá dự phòng</label>
+                                                            <textarea class="input" name="site_price_fallbacks[{{ $s->id }}]" rows="5">{{ $sitePriceFallbacksText }}</textarea>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                </div>
+
+                                <div class="actions" style="justify-content:flex-end">
+                                    <button class="btn" type="submit">Lưu XPath shop</button>
+                                </div>
+                            </form>
+                        @elseif($xpathUserId)
+                            <div class="error" style="margin-top:12px">Không tìm thấy user: #{{ $xpathUserId }}</div>
+                        @endif
+                    </div>
+                </div>
             </div>
         </div>
     </div>
