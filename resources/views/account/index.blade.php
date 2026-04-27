@@ -145,6 +145,97 @@
                                 @endif
                             </div>
                         </div>
+
+                        <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0">
+                            <div class="card-header" style="padding:16px 16px 6px">
+                                <h2 class="card-title" style="font-size:18px">Nhóm đối thủ</h2>
+                                <p class="card-sub">Dùng để lọc nhanh cột đối thủ trên Dashboard</p>
+                            </div>
+                            <div class="card-body" style="padding:8px 16px 16px">
+                                @if($user->isViewer())
+                                    <div class="hint">Tài khoản con chỉ được xem.</div>
+                                @else
+                                    <form method="POST" action="{{ route('account.competitor-site-groups.store') }}" style="display:flex;flex-direction:column;gap:10px">
+                                        @csrf
+                                        <div class="field" style="margin-top:0">
+                                            <label class="label" for="competitor_group_name">Tên nhóm đối thủ</label>
+                                            <input class="input" id="competitor_group_name" name="competitor_group_name" type="text" required autocomplete="off" value="{{ old('competitor_group_name') }}">
+                                            @error('competitor_group_name')<div class="error">{{ $message }}</div>@enderror
+                                        </div>
+
+                                        <div class="field" style="margin-top:0">
+                                            <div class="label">Chọn đối thủ trong nhóm</div>
+                                            @if(($competitorSites ?? collect())->isEmpty())
+                                                <div class="hint">Bạn chưa có đối thủ.</div>
+                                            @else
+                                                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+                                                    @foreach($competitorSites as $s)
+                                                        <label style="display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#fff">
+                                                            <input type="checkbox" name="competitor_site_ids[]" value="{{ $s->id }}" @checked(in_array((string) $s->id, array_map('strval', old('competitor_site_ids', [])), true))>
+                                                            <span style="font-weight:600">{{ $s->name }}</span>
+                                                        </label>
+                                                    @endforeach
+                                                </div>
+                                                @error('competitor_site_ids')<div class="error">{{ $message }}</div>@enderror
+                                            @endif
+                                        </div>
+
+                                        <div class="actions" style="margin-top:0;justify-content:flex-end">
+                                            <button class="btn" type="submit">Thêm nhóm</button>
+                                        </div>
+                                    </form>
+
+                                    @if(($competitorSiteGroups ?? collect())->isNotEmpty())
+                                        <div class="table-wrap" style="margin-top:12px">
+                                            <table class="table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Tên nhóm</th>
+                                                        <th style="width:120px;text-align:right">Số đối thủ</th>
+                                                        <th style="width:80px">Sửa</th>
+                                                        <th style="width:100px">Xoá</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($competitorSiteGroups as $g)
+                                                        @php($siteIds = $g->competitorSites?->pluck('id')->all() ?? [])
+                                                        <tr>
+                                                            <td style="font-weight:600">{{ $g->name }}</td>
+                                                            <td style="text-align:right">{{ number_format(count($siteIds), 0, ',', '.') }}</td>
+                                                            <td style="text-align:right">
+                                                                <button
+                                                                    type="button"
+                                                                    class="icon-btn icon-btn-sm js-edit-competitor-group"
+                                                                    data-action="{{ route('account.competitor-site-groups.update', $g) }}"
+                                                                    data-group-id="{{ $g->id }}"
+                                                                    data-name="{{ $g->name }}"
+                                                                    data-site-ids="{{ implode(',', $siteIds) }}"
+                                                                    title="Sửa nhóm đối thủ"
+                                                                >
+                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                    </svg>
+                                                                </button>
+                                                            </td>
+                                                            <td style="text-align:right">
+                                                                <form method="POST" action="{{ route('account.competitor-site-groups.destroy', $g) }}" onsubmit="return confirm('Xoá nhóm đối thủ này?')">
+                                                                    @csrf
+                                                                    @method('DELETE')
+                                                                    <button class="btn" type="submit">Xoá</button>
+                                                                </form>
+                                                            </td>
+                                                        </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    @else
+                                        <div class="hint">Chưa có nhóm đối thủ.</div>
+                                    @endif
+                                @endif
+                            </div>
+                        </div>
                     </div>
 
                     <div style="display:flex;flex-direction:column;gap:14px">
@@ -248,6 +339,47 @@
         </div>
     </dialog>
 
+    @php($editCompetitorGroupId = session('edit_competitor_site_group_id'))
+    @php($competitorGroupHasErrors = $errors->has('competitor_group_name') || $errors->has('competitor_site_ids') || $errors->has('competitor_site_ids.*'))
+    <dialog class="dialog" id="competitorGroupDialog" data-edit-id="{{ $editCompetitorGroupId }}">
+        <div class="dialog-header">
+            <div style="font-weight:700">Sửa nhóm đối thủ</div>
+        </div>
+        <div class="dialog-body">
+            <form id="competitorGroupDialogForm" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="field" style="margin-top:0">
+                    <label class="label" for="competitorGroupDialogName">Tên nhóm</label>
+                    <input class="input" id="competitorGroupDialogName" name="competitor_group_name" type="text" value="{{ old('competitor_group_name') }}" required autocomplete="off">
+                    @error('competitor_group_name')<div class="error">{{ $message }}</div>@enderror
+                </div>
+
+                <div class="field" style="margin-top:12px">
+                    <div class="label">Chọn đối thủ trong nhóm</div>
+                    @if(($competitorSites ?? collect())->isEmpty())
+                        <div class="hint">Bạn chưa có đối thủ.</div>
+                    @else
+                        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">
+                            @foreach($competitorSites as $s)
+                                <label style="display:flex;gap:10px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:#fff">
+                                    <input type="checkbox" class="js-competitor-group-site" name="competitor_site_ids[]" value="{{ $s->id }}" @checked(in_array((string) $s->id, array_map('strval', old('competitor_site_ids', [])), true))>
+                                    <span style="font-weight:600">{{ $s->name }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+                        @error('competitor_site_ids')<div class="error">{{ $message }}</div>@enderror
+                    @endif
+                </div>
+
+                <div class="actions" style="justify-content:flex-end;margin-top:16px">
+                    <button type="button" class="btn btn-secondary" id="competitorGroupDialogCancel">Huỷ</button>
+                    <button type="submit" class="btn">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
     <script>
         (function () {
             const dialog = document.getElementById('groupDialog');
@@ -281,6 +413,63 @@
                 const btn = document.querySelector(`.js-edit-group[data-group-id="${editId}"]`);
                 if (btn) {
                     openDialog(btn.dataset.action || '', btn.dataset.name || '');
+                }
+            }
+        })();
+    </script>
+
+    <script>
+        (function () {
+            const dialog = document.getElementById('competitorGroupDialog');
+            const form = document.getElementById('competitorGroupDialogForm');
+            const nameInput = document.getElementById('competitorGroupDialogName');
+            const cancel = document.getElementById('competitorGroupDialogCancel');
+            if (!dialog || !form || !nameInput) return;
+
+            function setCheckedSiteIds(siteIds) {
+                document.querySelectorAll('.js-competitor-group-site').forEach((el) => {
+                    const id = el.value;
+                    el.checked = siteIds.includes(String(id));
+                });
+            }
+
+            function openDialog(action, name, siteIds) {
+                form.setAttribute('action', action || '');
+                if (!nameInput.value) {
+                    nameInput.value = name || '';
+                }
+                if (!{{ $competitorGroupHasErrors ? 'true' : 'false' }}) {
+                    setCheckedSiteIds(siteIds);
+                }
+                dialog.showModal();
+                nameInput.focus();
+            }
+
+            document.querySelectorAll('.js-edit-competitor-group').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    nameInput.value = '';
+                    const siteIds = String(btn.dataset.siteIds || '')
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                    setCheckedSiteIds(siteIds);
+                    openDialog(btn.dataset.action || '', btn.dataset.name || '', siteIds);
+                });
+            });
+
+            if (cancel) {
+                cancel.addEventListener('click', () => dialog.close());
+            }
+
+            const editId = dialog.dataset.editId;
+            if (editId) {
+                const btn = document.querySelector(`.js-edit-competitor-group[data-group-id="${editId}"]`);
+                if (btn) {
+                    const siteIds = String(btn.dataset.siteIds || '')
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                    openDialog(btn.dataset.action || '', btn.dataset.name || '', siteIds);
                 }
             }
         })();

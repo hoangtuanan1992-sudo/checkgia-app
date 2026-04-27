@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteGroup;
 use App\Models\ProductGroup;
 use App\Models\User;
 use App\Models\UserNotificationSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -43,6 +46,22 @@ class AccountController extends Controller
                 ->get(['id', 'name', 'created_at']);
         }
 
+        $competitorSites = collect();
+        $competitorSiteGroups = collect();
+        if (! $user->isViewer()) {
+            $competitorSites = CompetitorSite::query()
+                ->where('user_id', $ownerId)
+                ->orderBy('position')
+                ->orderBy('name')
+                ->get(['id', 'name', 'position']);
+
+            $competitorSiteGroups = CompetitorSiteGroup::query()
+                ->where('user_id', $ownerId)
+                ->with(['competitorSites:id'])
+                ->orderBy('name')
+                ->get(['id', 'name', 'created_at']);
+        }
+
         return view('account.index', [
             'user' => $user,
             'authUser' => $authUser,
@@ -51,6 +70,8 @@ class AccountController extends Controller
             'notification' => $notification,
             'subUsers' => $subUsers,
             'groups' => $groups,
+            'competitorSites' => $competitorSites,
+            'competitorSiteGroups' => $competitorSiteGroups,
         ]);
     }
 
@@ -229,5 +250,103 @@ class AccountController extends Controller
         $productGroup->delete();
 
         return redirect()->route('account')->with('status', 'Đã xoá nhóm sản phẩm');
+    }
+
+    public function createCompetitorSiteGroup(Request $request): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+
+        $ownerId = $owner->effectiveUserId();
+
+        $data = $request->validate([
+            'competitor_group_name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('competitor_site_groups', 'name')->where(fn ($q) => $q->where('user_id', $ownerId)),
+            ],
+            'competitor_site_ids' => ['nullable', 'array'],
+            'competitor_site_ids.*' => [
+                'integer',
+                Rule::exists('competitor_sites', 'id')->where(fn ($q) => $q->where('user_id', $ownerId)),
+            ],
+        ]);
+
+        $siteIds = array_values(array_unique(array_map('intval', $data['competitor_site_ids'] ?? [])));
+        $name = trim((string) $data['competitor_group_name']);
+
+        DB::transaction(function () use ($ownerId, $name, $siteIds) {
+            $group = CompetitorSiteGroup::create([
+                'user_id' => $ownerId,
+                'name' => $name,
+            ]);
+
+            if (! empty($siteIds)) {
+                $group->competitorSites()->sync($siteIds);
+            }
+        });
+
+        return redirect()->route('account')->with('status', 'Đã thêm nhóm đối thủ');
+    }
+
+    public function updateCompetitorSiteGroup(Request $request, CompetitorSiteGroup $competitorSiteGroup): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+
+        $ownerId = $owner->effectiveUserId();
+        $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
+        abort_unless(in_array((int) $competitorSiteGroup->user_id, $allowedUserIds, true), 404);
+        $groupOwnerId = (int) $competitorSiteGroup->user_id;
+
+        $validator = Validator::make($request->all(), [
+            'competitor_group_name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('competitor_site_groups', 'name')
+                    ->where(fn ($q) => $q->where('user_id', $groupOwnerId))
+                    ->ignore($competitorSiteGroup->id),
+            ],
+            'competitor_site_ids' => ['nullable', 'array'],
+            'competitor_site_ids.*' => [
+                'integer',
+                Rule::exists('competitor_sites', 'id')->where(fn ($q) => $q->where('user_id', $groupOwnerId)),
+            ],
+        ]);
+
+        if ($validator->fails()) {
+            return back()
+                ->withErrors($validator)
+                ->withInput()
+                ->with('edit_competitor_site_group_id', $competitorSiteGroup->id);
+        }
+
+        $validated = $validator->validated();
+        $siteIds = array_values(array_unique(array_map('intval', $validated['competitor_site_ids'] ?? [])));
+        $name = trim((string) $validated['competitor_group_name']);
+
+        DB::transaction(function () use ($competitorSiteGroup, $name, $siteIds) {
+            $competitorSiteGroup->name = $name;
+            $competitorSiteGroup->save();
+            $competitorSiteGroup->competitorSites()->sync($siteIds);
+        });
+
+        return redirect()->route('account')->with('status', 'Đã cập nhật nhóm đối thủ');
+    }
+
+    public function destroyCompetitorSiteGroup(Request $request, CompetitorSiteGroup $competitorSiteGroup): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+
+        $ownerId = $owner->effectiveUserId();
+        $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
+        abort_unless(in_array((int) $competitorSiteGroup->user_id, $allowedUserIds, true), 404);
+
+        $competitorSiteGroup->delete();
+
+        return redirect()->route('account')->with('status', 'Đã xoá nhóm đối thủ');
     }
 }

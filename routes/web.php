@@ -114,6 +114,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/account/product-groups', [AccountController::class, 'createGroup'])->name('account.product-groups.store');
         Route::put('/account/product-groups/{productGroup}', [AccountController::class, 'updateGroup'])->name('account.product-groups.update');
         Route::delete('/account/product-groups/{productGroup}', [AccountController::class, 'destroyGroup'])->name('account.product-groups.destroy');
+        Route::post('/account/competitor-site-groups', [AccountController::class, 'createCompetitorSiteGroup'])->name('account.competitor-site-groups.store');
+        Route::put('/account/competitor-site-groups/{competitorSiteGroup}', [AccountController::class, 'updateCompetitorSiteGroup'])->name('account.competitor-site-groups.update');
+        Route::delete('/account/competitor-site-groups/{competitorSiteGroup}', [AccountController::class, 'destroyCompetitorSiteGroup'])->name('account.competitor-site-groups.destroy');
         Route::resource('products', ProductController::class)->except(['show', 'index'])->names('products');
         Route::post('/products/{product}/competitors', [CompetitorController::class, 'store'])->name('products.competitors.store');
         Route::put('/products/{product}/competitors/{competitor}', [CompetitorController::class, 'update'])->name('products.competitors.update');

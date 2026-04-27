@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['user_id', 'name', 'domain', 'position', 'name_xpath', 'price_xpath', 'price_regex'])]
@@ -93,5 +94,12 @@ class CompetitorSite extends Model
     public function scrapeXpaths(): HasMany
     {
         return $this->hasMany(CompetitorSiteScrapeXpath::class);
+    }
+
+    public function groups(): BelongsToMany
+    {
+        return $this->belongsToMany(CompetitorSiteGroup::class, 'competitor_site_group_sites')
+            ->withTimestamps()
+            ->orderBy('competitor_site_groups.name');
     }
 }

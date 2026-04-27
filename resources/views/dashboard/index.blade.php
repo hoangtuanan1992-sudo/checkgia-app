@@ -143,6 +143,17 @@
                             @endforeach
                         </select>
                     </div>
+                    @if($competitorSites->count() >= 6 && ($competitorSiteGroups ?? collect())->isNotEmpty())
+                        <div class="field" style="margin-top:0;min-width:220px">
+                            <label class="label" for="filterCompetitorGroup">Nhóm đối thủ</label>
+                            <select class="input" id="filterCompetitorGroup">
+                                <option value="">Tất cả</option>
+                                @foreach($competitorSiteGroups as $g)
+                                    <option value="{{ $g->id }}">{{ $g->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endif
                     <div class="field" style="margin-top:0;min-width:240px">
                         <label class="label" for="sortSelect">Sắp xếp</label>
                         <select class="input" id="sortSelect">
@@ -179,7 +190,7 @@
                                 <th class="sticky-col sticky-name" style="min-width:340px">Tên sản phẩm</th>
                                 <th style="min-width:150px">Giá của bạn</th>
                                 @foreach($competitorSites as $site)
-                                    <th style="min-width:160px">{{ $site->name }}</th>
+                                    <th style="min-width:160px" data-competitor-site-id="{{ $site->id }}">{{ $site->name }}</th>
                                 @endforeach
                                 <th style="min-width:160px">Thời gian</th>
                                 <th style="width:110px">Hành động</th>
@@ -266,7 +277,7 @@
                                         @php($adj = (int) ($c?->price_adjustment ?? 0))
                                         @php($adjDiff = is_null($cPrice) ? null : ((int) $cPrice + $adj - $own))
                                         @php($delta = (! is_null($cPrice) && ! is_null($prevPrice)) ? ((int) $cPrice - (int) $prevPrice) : null)
-                                        <td>
+                                        <td data-competitor-site-id="{{ $site->id }}">
                                             @if($c)
                                                 <div style="display:flex;flex-direction:column;gap:4px;padding-top:6px">
                                                     <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
@@ -514,7 +525,7 @@
                                     @php($diffSign = is_null($adjDiff) ? 'na' : ($adjDiff > 0 ? 'pos' : ($adjDiff < 0 ? 'neg' : 'zero')))
                                     @php($diffArrow = is_null($adjDiff) ? '' : ($adjDiff > 0 ? '↑' : ($adjDiff < 0 ? '↓' : '←')))
 
-                                    <div class="compare-card-table-row">
+                                    <div class="compare-card-table-row" data-competitor-site-id="{{ $site->id }}">
                                         <div class="compare-card-cell-site">{{ $site->name }}</div>
                                         <div class="compare-card-cell-price">
                                             @if($cPrice)
@@ -1306,12 +1317,15 @@
 
             const filterSearch = document.getElementById('filterSearch');
             const filterGroup = document.getElementById('filterGroup');
+            const filterCompetitorGroup = document.getElementById('filterCompetitorGroup');
             const sortSelect = document.getElementById('sortSelect');
             const filterReset = document.getElementById('filterReset');
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
             const tbody = document.querySelector('table.table tbody');
             const filterSearchKey = 'checkgia_compare_search';
+            const filterCompetitorGroupKey = 'checkgia_compare_competitor_group';
+            const competitorGroupMap = @json(($competitorSiteGroups ?? collect())->mapWithKeys(fn($g) => [(string) $g->id => $g->competitorSites->pluck('id')->values()])->all());
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1386,6 +1400,21 @@
                 }
             }
 
+            function applyCompetitorGroupFilter() {
+                if (!filterCompetitorGroup) return;
+                const groupId = filterCompetitorGroup.value || '';
+                const ids = competitorGroupMap[groupId] || null;
+                const allowed = Array.isArray(ids) ? ids.map(String) : null;
+                const scopes = [comparisonTableView, comparisonCardView].filter(Boolean);
+                scopes.forEach((root) => {
+                    root.querySelectorAll('[data-competitor-site-id]').forEach((el) => {
+                        const id = String(el.dataset.competitorSiteId || '');
+                        const show = !allowed || allowed.includes(id);
+                        el.style.display = show ? '' : 'none';
+                    });
+                });
+            }
+
             if (filterSearch) {
                 try {
                     const saved = localStorage.getItem(filterSearchKey);
@@ -1409,17 +1438,42 @@
                 });
             }
             if (filterGroup) filterGroup.addEventListener('change', applyFiltersAndSort);
+            if (filterCompetitorGroup) {
+                try {
+                    const saved = localStorage.getItem(filterCompetitorGroupKey);
+                    if (saved && filterCompetitorGroup.querySelector(`option[value="${saved}"]`)) {
+                        filterCompetitorGroup.value = saved;
+                    }
+                } catch (e) {
+                }
+
+                filterCompetitorGroup.addEventListener('change', () => {
+                    try {
+                        const v = filterCompetitorGroup.value || '';
+                        if (v) {
+                            localStorage.setItem(filterCompetitorGroupKey, v);
+                        } else {
+                            localStorage.removeItem(filterCompetitorGroupKey);
+                        }
+                    } catch (e) {
+                    }
+                    applyCompetitorGroupFilter();
+                });
+            }
             if (sortSelect) sortSelect.addEventListener('change', applyFiltersAndSort);
             if (filterReset) {
                 filterReset.addEventListener('click', () => {
                     if (filterSearch) filterSearch.value = '';
                     if (filterGroup) filterGroup.value = '';
+                    if (filterCompetitorGroup) filterCompetitorGroup.value = '';
                     if (sortSelect) sortSelect.value = 'row_asc';
                     try {
                         localStorage.removeItem(filterSearchKey);
+                        localStorage.removeItem(filterCompetitorGroupKey);
                     } catch (e) {
                     }
                     applyFiltersAndSort();
+                    applyCompetitorGroupFilter();
                 });
             }
 
@@ -1438,6 +1492,7 @@
             if (filterGroup) filterGroup.addEventListener('change', syncExportLinks);
             syncExportLinks();
             applyFiltersAndSort();
+            applyCompetitorGroupFilter();
         })();
 
         (function () {

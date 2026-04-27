@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Competitor;
 use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteGroup;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use Illuminate\Http\Request;
@@ -24,6 +25,12 @@ class DashboardController extends Controller
 
         $productGroups = ProductGroup::query()
             ->where('user_id', $userId)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        $competitorSiteGroups = CompetitorSiteGroup::query()
+            ->where('user_id', $userId)
+            ->with(['competitorSites:id'])
             ->orderBy('name')
             ->get(['id', 'name']);
 
@@ -96,6 +103,7 @@ class DashboardController extends Controller
             'products' => $products,
             'competitorSites' => $competitorSites,
             'productGroups' => $productGroups,
+            'competitorSiteGroups' => $competitorSiteGroups,
             'priceEvents' => $priceEvents,
         ]);
     }
