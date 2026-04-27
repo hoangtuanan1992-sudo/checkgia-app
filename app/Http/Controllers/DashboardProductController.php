@@ -63,8 +63,57 @@ class DashboardProductController extends Controller
                 $product->save();
             }
 
+            $scraper = new PriceScraper;
+            $scrapeCompetitorPrice = function ($competitor, CompetitorSite $site, string $url) use ($scraper) {
+                try {
+                    $tgdd = $scraper->scrapeTgddPriceAndName($url);
+                    if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                        $cPrice = $tgdd['price'];
+                        $latest = $competitor->prices()->latest('fetched_at')->first();
+                        if (! $latest || (int) $latest->price !== (int) $cPrice) {
+                            CompetitorPrice::create([
+                                'competitor_id' => $competitor->id,
+                                'price' => $cPrice,
+                                'fetched_at' => now(),
+                            ]);
+                        }
+
+                        return;
+                    }
+                } catch (\Throwable $e) {
+                }
+
+                try {
+                    $cHtml = $scraper->fetchHtml($url);
+                    $fallbacks = $site->scrapeXpaths?->where('type', 'price')->sortBy('position')->pluck('xpath')->all() ?? [];
+                    $primary = $site->price_xpath ? [(string) $site->price_xpath] : [];
+                    $cPriceRaw = $scraper->extractFirstByXPaths($cHtml, array_merge($primary, $fallbacks));
+                    $cPrice = $scraper->parsePriceToInt($cPriceRaw, $site->price_regex);
+                    if (is_null($cPrice)) {
+                        $structured = $scraper->extractProductNameAndPriceFromStructuredData($cHtml);
+                        if (is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                            $cPrice = $scraper->parsePriceToInt((string) $structured['price_raw'], $site->price_regex);
+                        }
+                    }
+                    if (! is_null($cPrice)) {
+                        $latest = $competitor->prices()->latest('fetched_at')->first();
+                        if (! $latest || (int) $latest->price !== (int) $cPrice) {
+                            CompetitorPrice::create([
+                                'competitor_id' => $competitor->id,
+                                'price' => $cPrice,
+                                'fetched_at' => now(),
+                            ]);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                }
+            };
+
             $sites = CompetitorSite::query()
                 ->where('user_id', $userId)
+                ->with(['scrapeXpaths' => function ($q) {
+                    $q->orderBy('type')->orderBy('position');
+                }])
                 ->get(['id', 'name', 'domain', 'position', 'price_xpath', 'price_regex'])
                 ->keyBy('id');
             $sitesByDomain = $sites
@@ -121,7 +170,9 @@ class DashboardProductController extends Controller
                             $template->applyToCompetitorSite($site);
                         }
 
-                        $site = $site->fresh();
+                        $site = $site->fresh(['scrapeXpaths' => function ($q) {
+                            $q->orderBy('type')->orderBy('position');
+                        }]);
 
                         $sites->put($site->id, $site);
                         $sitesByDomain->put($domain, $site);
@@ -134,6 +185,8 @@ class DashboardProductController extends Controller
                 $competitor->name = $site->name;
                 $competitor->url = $url;
                 $competitor->save();
+
+                $scrapeCompetitorPrice($competitor, $site, $url);
             }
 
             ScrapeProductPrices::dispatch($product->id);
@@ -158,6 +211,50 @@ class DashboardProductController extends Controller
         }
 
         $scraper = new PriceScraper;
+        $scrapeCompetitorPrice = function ($competitor, CompetitorSite $site, string $url) use ($scraper) {
+            try {
+                $tgdd = $scraper->scrapeTgddPriceAndName($url);
+                if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
+                    $cPrice = $tgdd['price'];
+                    $latest = $competitor->prices()->latest('fetched_at')->first();
+                    if (! $latest || (int) $latest->price !== (int) $cPrice) {
+                        CompetitorPrice::create([
+                            'competitor_id' => $competitor->id,
+                            'price' => $cPrice,
+                            'fetched_at' => now(),
+                        ]);
+                    }
+
+                    return;
+                }
+            } catch (\Throwable $e) {
+            }
+
+            try {
+                $cHtml = $scraper->fetchHtml($url);
+                $fallbacks = $site->scrapeXpaths?->where('type', 'price')->sortBy('position')->pluck('xpath')->all() ?? [];
+                $primary = $site->price_xpath ? [(string) $site->price_xpath] : [];
+                $cPriceRaw = $scraper->extractFirstByXPaths($cHtml, array_merge($primary, $fallbacks));
+                $cPrice = $scraper->parsePriceToInt($cPriceRaw, $site->price_regex);
+                if (is_null($cPrice)) {
+                    $structured = $scraper->extractProductNameAndPriceFromStructuredData($cHtml);
+                    if (is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                        $cPrice = $scraper->parsePriceToInt((string) $structured['price_raw'], $site->price_regex);
+                    }
+                }
+                if (! is_null($cPrice)) {
+                    $latest = $competitor->prices()->latest('fetched_at')->first();
+                    if (! $latest || (int) $latest->price !== (int) $cPrice) {
+                        CompetitorPrice::create([
+                            'competitor_id' => $competitor->id,
+                            'price' => $cPrice,
+                            'fetched_at' => now(),
+                        ]);
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
+        };
         $nameDebug = ['tried' => []];
         $priceDebug = ['tried' => []];
         $tgdd = $scraper->scrapeTgddPriceAndName((string) $validated['product_url']);
@@ -333,46 +430,14 @@ class DashboardProductController extends Controller
             try {
                 $tgdd = $scraper->scrapeTgddPriceAndName($url);
                 if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
-                    $cPrice = $tgdd['price'];
-                    $latest = $competitor->prices()->latest('fetched_at')->first();
-                    if (! $latest || (int) $latest->price !== (int) $cPrice) {
-                        CompetitorPrice::create([
-                            'competitor_id' => $competitor->id,
-                            'price' => $cPrice,
-                            'fetched_at' => now(),
-                        ]);
-                    }
+                    $scrapeCompetitorPrice($competitor, $site, $url);
 
                     continue;
                 }
             } catch (\Throwable $e) {
             }
 
-            if ($site->price_xpath) {
-                try {
-                    $cHtml = $scraper->fetchHtml($url);
-                    $fallbacks = $site->scrapeXpaths->where('type', 'price')->sortBy('position')->pluck('xpath')->all();
-                    $cPriceRaw = $scraper->extractFirstByXPaths($cHtml, array_merge([(string) $site->price_xpath], $fallbacks));
-                    $cPrice = $scraper->parsePriceToInt($cPriceRaw, $site->price_regex);
-                    if (is_null($cPrice)) {
-                        $structured = $scraper->extractProductNameAndPriceFromStructuredData($cHtml);
-                        if (is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
-                            $cPrice = $scraper->parsePriceToInt((string) $structured['price_raw'], $site->price_regex);
-                        }
-                    }
-                    if (! is_null($cPrice)) {
-                        $latest = $competitor->prices()->latest('fetched_at')->first();
-                        if (! $latest || (int) $latest->price !== (int) $cPrice) {
-                            CompetitorPrice::create([
-                                'competitor_id' => $competitor->id,
-                                'price' => $cPrice,
-                                'fetched_at' => now(),
-                            ]);
-                        }
-                    }
-                } catch (\Throwable $e) {
-                }
-            }
+            $scrapeCompetitorPrice($competitor, $site, $url);
         }
 
         return redirect()->route('dashboard')->with('status', 'Đã thêm sản phẩm');

@@ -86,6 +86,7 @@ class DashboardTgddAddProductTest extends TestCase
             'url' => 'https://doithu.com/old',
         ]);
 
+        Http::fake(['*' => Http::response('<html></html>', 200)]);
         Bus::fake();
 
         $this->post('/dashboard/products', [
