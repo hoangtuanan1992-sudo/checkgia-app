@@ -202,16 +202,25 @@ class PriceScraper
 
         $dom = new \DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
-        $dom->loadHTML($html);
+        $dom->loadHTML('<?xml encoding="UTF-8">'.$html);
         libxml_clear_errors();
 
         $xp = new \DOMXPath($dom);
-        $nodes = $xp->query($xpath);
-        if (! $nodes || $nodes->length === 0) {
-            return null;
+        $result = $xp->evaluate($xpath);
+        $value = null;
+
+        if ($result instanceof \DOMNodeList) {
+            if ($result->length === 0) {
+                return null;
+            }
+            $value = (string) $result->item(0)?->textContent;
+        } elseif (is_string($result) || is_int($result) || is_float($result)) {
+            $value = (string) $result;
+        } elseif (is_bool($result)) {
+            $value = $result ? '1' : '0';
         }
 
-        $value = trim((string) $nodes->item(0)?->textContent);
+        $value = trim((string) $value);
 
         return $value === '' ? null : $value;
     }

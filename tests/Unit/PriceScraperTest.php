@@ -19,4 +19,14 @@ class PriceScraperTest extends TestCase
 
         $this->assertSame(37790000, $scraper->parsePriceToInt($value));
     }
+
+    public function test_extract_first_by_xpath_supports_normalize_space_and_utf8(): void
+    {
+        $html = '<html><head><meta charset="utf-8"></head><body><div class="box-product-name"><h1>Giá Samsung Galaxy Z Flip 7 tốt, Ưu đãi đến 12 triệu</h1></div></body></html>';
+        $scraper = new PriceScraper;
+
+        $value = $scraper->extractFirstByXPath($html, "normalize-space(//div[contains(@class, 'box-product-name')]/h1)");
+
+        $this->assertSame('Giá Samsung Galaxy Z Flip 7 tốt, Ưu đãi đến 12 triệu', $value);
+    }
 }
