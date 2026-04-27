@@ -35,6 +35,112 @@ class DashboardProductController extends Controller
         ]);
 
         $userId = $request->user()->effectiveUserId();
+        $groupId = $validated['product_group_id'] ?? null;
+        if ($groupId) {
+            $exists = ProductGroup::query()->where('user_id', $userId)->where('id', $groupId)->exists();
+            if (! $exists) {
+                $groupId = null;
+            }
+        }
+
+        $groupName = trim((string) ($validated['product_group_name'] ?? ''));
+        if (! $groupId && $groupName !== '') {
+            $group = ProductGroup::firstOrCreate([
+                'user_id' => $userId,
+                'name' => $groupName,
+            ]);
+            $groupId = $group->id;
+        }
+
+        $product = Product::query()
+            ->where('user_id', $userId)
+            ->where('product_url', $validated['product_url'])
+            ->first();
+
+        if ($product) {
+            if ($groupId && (int) $product->product_group_id !== (int) $groupId) {
+                $product->product_group_id = $groupId;
+                $product->save();
+            }
+
+            $sites = CompetitorSite::query()
+                ->where('user_id', $userId)
+                ->get(['id', 'name', 'domain', 'position', 'price_xpath', 'price_regex'])
+                ->keyBy('id');
+            $sitesByDomain = $sites
+                ->filter(fn ($s) => is_string($s->domain) && trim((string) $s->domain) !== '')
+                ->keyBy('domain');
+
+            $urls = $validated['competitor_urls'] ?? [];
+            foreach ($urls as $key => $url) {
+                $url = is_string($url) ? trim($url) : null;
+
+                if ($url === null || $url === '') {
+                    continue;
+                }
+
+                $site = null;
+                $keyInt = is_string($key) && preg_match('/^\d+$/', $key) ? (int) $key : (is_int($key) ? (int) $key : null);
+                if (! is_null($keyInt) && $sites->has($keyInt)) {
+                    $site = $sites->get($keyInt);
+                } else {
+                    $domain = CompetitorSite::normalizedDomainFromUrl($url);
+                    if (! $domain) {
+                        continue;
+                    }
+
+                    $site = $sitesByDomain->get($domain);
+                    if (! $site) {
+                        $site = $sites->first(fn ($s) => (string) $s->name === (string) $domain);
+                        if (! $site) {
+                            $site = CompetitorSite::query()
+                                ->where('user_id', $userId)
+                                ->where(function ($q) use ($domain) {
+                                    $q->where('domain', $domain)->orWhere('name', $domain);
+                                })
+                                ->first();
+                        }
+
+                        if ($site) {
+                            if (! $site->domain) {
+                                $site->domain = $domain;
+                                $site->save();
+                            }
+                        } else {
+                            $nextPos = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
+                            $site = CompetitorSite::create([
+                                'user_id' => $userId,
+                                'name' => $domain,
+                                'domain' => $domain,
+                                'position' => $nextPos,
+                            ]);
+                        }
+
+                        $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+                        if ($template) {
+                            $template->applyToCompetitorSite($site);
+                        }
+
+                        $site = $site->fresh();
+
+                        $sites->put($site->id, $site);
+                        $sitesByDomain->put($domain, $site);
+                    }
+                }
+
+                $competitor = $product->competitors()->firstOrNew([
+                    'competitor_site_id' => $site->id,
+                ]);
+                $competitor->name = $site->name;
+                $competitor->url = $url;
+                $competitor->save();
+            }
+
+            ScrapeProductPrices::dispatch($product->id);
+
+            return redirect()->route('dashboard')->with('status', 'Đã cập nhật sản phẩm');
+        }
+
         $limit = User::resolveProductLimitById($userId);
         $used = (int) Product::query()->where('user_id', $userId)->count()
             + (int) ShopeeProduct::query()->where('user_id', $userId)->count();
@@ -131,23 +237,6 @@ class DashboardProductController extends Controller
             return back()
                 ->withInput()
                 ->withErrors(['product_url' => implode("\n\n", $parts)]);
-        }
-
-        $groupId = $validated['product_group_id'] ?? null;
-        if ($groupId) {
-            $exists = ProductGroup::query()->where('user_id', $userId)->where('id', $groupId)->exists();
-            if (! $exists) {
-                $groupId = null;
-            }
-        }
-
-        $groupName = trim((string) ($validated['product_group_name'] ?? ''));
-        if (! $groupId && $groupName !== '') {
-            $group = ProductGroup::firstOrCreate([
-                'user_id' => $userId,
-                'name' => $groupName,
-            ]);
-            $groupId = $group->id;
         }
 
         $product = Product::create([
