@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ScrapeProductPrices;
 use App\Models\CompetitorSite;
 use App\Models\CompetitorSiteScrapeXpath;
 use App\Models\CompetitorSiteTemplate;
+use App\Models\Product;
 use App\Models\UserNotificationSetting;
 use App\Models\UserScrapeSetting;
 use App\Models\UserScrapeXpath;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -298,6 +301,23 @@ class DashboardCompetitorSetupController extends Controller
             }
         });
 
-        return back()->with('status', 'Đã lưu cài đặt lấy dữ liệu');
+        $lockKey = 'scrape_now:user:'.$userId;
+        $locked = ! Cache::add($lockKey, 1, now()->addSeconds(30));
+        if ($locked) {
+            return back()->with('status', 'Đã lưu cài đặt lấy dữ liệu. Đang cập nhật, vui lòng chờ một chút rồi kiểm tra lại.');
+        }
+
+        $productIds = Product::query()
+            ->where('user_id', $userId)
+            ->whereNotNull('product_url')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        foreach ($productIds as $id) {
+            ScrapeProductPrices::dispatch($id);
+        }
+
+        return back()->with('status', 'Đã lưu cài đặt lấy dữ liệu. Đã bắt đầu cập nhật '.$productIds->count().' sản phẩm.');
     }
 }

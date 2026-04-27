@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ScrapeProductPrices;
 use App\Models\CompetitorPrice;
 use App\Models\CompetitorSite;
 use App\Models\CompetitorSiteTemplate;
@@ -15,6 +16,11 @@ use App\Models\UserScrapeXpath;
 use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\RichText\RichText;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DashboardProductController extends Controller
 {
@@ -281,5 +287,252 @@ class DashboardProductController extends Controller
         }
 
         return redirect()->route('dashboard')->with('status', 'Đã thêm sản phẩm');
+    }
+
+    public function downloadImportTemplate(Request $request): StreamedResponse
+    {
+        $sheet = new Spreadsheet;
+        $ws = $sheet->getActiveSheet();
+        $ws->setTitle('Import');
+
+        $ws->setCellValue('A1', 'Link sản phẩm của bạn');
+        $ws->setCellValue('B1', 'Link đối thủ 1');
+        $ws->setCellValue('C1', 'Link đối thủ 2');
+        $ws->setCellValue('D1', 'Link đối thủ 3');
+
+        $ws->setCellValue('A2', 'https://example.com/san-pham-cua-ban');
+        $ws->setCellValue('B2', 'https://doithu1.com/san-pham');
+        $ws->setCellValue('C2', 'https://doithu2.com/san-pham');
+        $ws->setCellValue('D2', 'https://doithu3.com/san-pham');
+
+        return response()->streamDownload(function () use ($sheet) {
+            $writer = IOFactory::createWriter($sheet, 'Xlsx');
+            $writer->save('php://output');
+        }, 'mau-import-san-pham.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    public function importExcel(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        abort_if(! $user || $user->isViewer(), 403);
+
+        $userId = $user->effectiveUserId();
+        $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
+        if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
+            return redirect()
+                ->route('dashboard.competitors')
+                ->with('status', 'Vui lòng cài đặt XPath lấy tên và giá của bạn trước.');
+        }
+
+        $data = $request->validate([
+            'file' => ['required', 'file', 'max:10240', 'mimes:xlsx,xls,csv'],
+        ]);
+
+        $limit = User::resolveProductLimitById($userId);
+        $used = (int) Product::query()->where('user_id', $userId)->count()
+            + (int) ShopeeProduct::query()->where('user_id', $userId)->count();
+        $remaining = max(0, $limit - $used);
+        if ($remaining <= 0) {
+            return back()->with('status', 'Bạn đã đến giới hạn so sánh '.$limit.' sản phẩm, để dùng tiếp hãy xóa bớt sản phẩm so sánh hoặc liên hệ admin để nâng cấp tài khoản');
+        }
+
+        $file = $data['file'];
+        $path = $file->getRealPath();
+        if (! is_string($path) || $path === '') {
+            return back()->withErrors(['file' => 'Không đọc được file.']);
+        }
+
+        $sheet = IOFactory::load($path);
+        $ws = $sheet->getActiveSheet();
+        $highestRow = max(1, (int) $ws->getHighestDataRow());
+        $highestCol = (string) $ws->getHighestDataColumn();
+        $highestColIndex = max(1, (int) Coordinate::columnIndexFromString($highestCol));
+
+        $first = trim($this->cellToString($ws->getCell([1, 1])->getValue()));
+        $startRow = filter_var($first, FILTER_VALIDATE_URL) ? 1 : 2;
+
+        $sitesByDomain = [];
+        $productIdsToScrape = [];
+        $createdProducts = 0;
+        $updatedProducts = 0;
+        $addedCompetitors = 0;
+        $skippedRows = 0;
+        $reachedLimit = false;
+
+        for ($row = $startRow; $row <= $highestRow; $row++) {
+            if ($createdProducts >= 1000) {
+                break;
+            }
+
+            $ownUrl = trim($this->cellToString($ws->getCell([1, $row])->getValue()));
+            if ($ownUrl === '') {
+                continue;
+            }
+            if (! filter_var($ownUrl, FILTER_VALIDATE_URL)) {
+                $skippedRows++;
+
+                continue;
+            }
+
+            $product = Product::query()
+                ->where('user_id', $userId)
+                ->where('product_url', $ownUrl)
+                ->first();
+
+            $productTouched = false;
+            if (! $product) {
+                if ($remaining <= 0) {
+                    $reachedLimit = true;
+                    break;
+                }
+
+                $product = Product::create([
+                    'user_id' => $userId,
+                    'name' => $this->guessProductNameFromUrl($ownUrl),
+                    'price' => 0,
+                    'product_url' => $ownUrl,
+                ]);
+
+                $createdProducts++;
+                $remaining--;
+                $productTouched = true;
+            }
+
+            $competitorUrls = [];
+            for ($col = 2; $col <= $highestColIndex; $col++) {
+                $val = trim($this->cellToString($ws->getCell([$col, $row])->getValue()));
+                if ($val === '') {
+                    continue;
+                }
+                if (! filter_var($val, FILTER_VALIDATE_URL)) {
+                    continue;
+                }
+                $competitorUrls[$val] = true;
+            }
+
+            foreach (array_keys($competitorUrls) as $competitorUrl) {
+                $domain = CompetitorSite::normalizedDomainFromUrl($competitorUrl);
+                if (! $domain) {
+                    continue;
+                }
+
+                $site = $sitesByDomain[$domain] ?? null;
+                if (! $site) {
+                    $site = $this->resolveCompetitorSite($userId, $domain);
+                    $sitesByDomain[$domain] = $site;
+                }
+
+                $competitor = $product->competitors()->firstOrNew([
+                    'competitor_site_id' => $site->id,
+                ]);
+                $beforeUrl = (string) ($competitor->url ?? '');
+
+                $competitor->name = $site->name ?: $domain;
+                $competitor->url = $competitorUrl;
+                $competitor->save();
+
+                if (! $competitor->wasRecentlyCreated && $beforeUrl === $competitorUrl) {
+                    continue;
+                }
+
+                $addedCompetitors++;
+                $productTouched = true;
+            }
+
+            if ($productTouched) {
+                $productIdsToScrape[] = (int) $product->id;
+                if ($createdProducts === 0) {
+                    $updatedProducts++;
+                }
+            }
+        }
+
+        $productIdsToScrape = array_values(array_unique($productIdsToScrape));
+        foreach ($productIdsToScrape as $id) {
+            ScrapeProductPrices::dispatch($id);
+        }
+
+        $msg = 'Đã nhập '.$createdProducts.' sản phẩm';
+        if ($addedCompetitors > 0) {
+            $msg .= ', '.$addedCompetitors.' link đối thủ';
+        }
+        if ($skippedRows > 0) {
+            $msg .= '. Bỏ qua '.$skippedRows.' dòng không hợp lệ';
+        }
+        if ($reachedLimit) {
+            $msg .= '. Bạn đã đến giới hạn so sánh '.$limit.' sản phẩm, để dùng tiếp hãy xóa bớt sản phẩm so sánh hoặc liên hệ admin để nâng cấp tài khoản';
+        }
+
+        return redirect()->route('dashboard')->with('status', $msg);
+    }
+
+    private function cellToString(mixed $v): string
+    {
+        if ($v instanceof RichText) {
+            return $v->getPlainText();
+        }
+
+        if (is_bool($v)) {
+            return $v ? '1' : '0';
+        }
+
+        if (is_scalar($v)) {
+            return (string) $v;
+        }
+
+        return '';
+    }
+
+    private function guessProductNameFromUrl(string $url): string
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        $host = is_string($host) ? trim($host) : '';
+        $host = preg_replace('/:\d+$/', '', $host) ?? $host;
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+        $host = $host !== '' ? $host : 'Sản phẩm import';
+
+        $path = parse_url($url, PHP_URL_PATH);
+        $path = is_string($path) ? trim($path) : '';
+        $tail = $path !== '' ? trim(basename($path), " \t\n\r\0\x0B/") : '';
+        if ($tail !== '') {
+            $tail = mb_substr($tail, 0, 60);
+            $host .= ' - '.$tail;
+        }
+
+        return mb_substr($host, 0, 255);
+    }
+
+    private function resolveCompetitorSite(int $userId, string $domain): CompetitorSite
+    {
+        $site = CompetitorSite::query()
+            ->where('user_id', $userId)
+            ->where(function ($q) use ($domain) {
+                $q->where('domain', $domain)->orWhere('name', $domain);
+            })
+            ->first();
+
+        if ($site) {
+            if (! $site->domain) {
+                $site->domain = $domain;
+                $site->save();
+            }
+        } else {
+            $nextPos = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
+            $site = CompetitorSite::create([
+                'user_id' => $userId,
+                'name' => $domain,
+                'domain' => $domain,
+                'position' => $nextPos,
+            ]);
+        }
+
+        $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+        if ($template) {
+            $template->applyToCompetitorSite($site);
+        }
+
+        return $site;
     }
 }

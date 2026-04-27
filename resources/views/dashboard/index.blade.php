@@ -80,6 +80,32 @@
         </div>
 
         <div class="card" style="max-width:none;margin-bottom:16px">
+            <div class="card-header" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+                <div>
+                    <h2 class="card-title" style="margin:0">Nhập Excel</h2>
+                    <p class="card-sub" style="margin:6px 0 0">Cột A là link sản phẩm của bạn, các cột tiếp theo là link đối thủ</p>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+                    <a class="btn btn-secondary" href="{{ route('dashboard.products.import-template') }}">Tải file mẫu</a>
+                </div>
+            </div>
+            <div class="card-body" style="padding-top:10px">
+                <form method="POST" action="{{ route('dashboard.products.import') }}" enctype="multipart/form-data">
+                    @csrf
+                    <div class="field" style="margin-top:0">
+                        <label class="label" for="import_file">File Excel</label>
+                        <input class="input" id="import_file" name="file" type="file" accept=".xlsx,.xls,.csv" required>
+                        @error('file')<div class="error">{{ $message }}</div>@enderror
+                        <div class="hint" style="margin-top:6px">Import xong hệ thống sẽ tự chạy cập nhật giá cho các sản phẩm vừa thêm.</div>
+                    </div>
+                    <div class="actions">
+                        <button class="btn" type="submit">Nhập từ Excel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" style="max-width:none;margin-bottom:16px">
             <div id="priceFeedHeader" style="display:flex;justify-content:space-between;gap:12px;align-items:center;cursor:pointer;user-select:none;padding:16px 16px 6px">
                 <div>
                     <h2 class="card-title" style="margin:0">Biến động giá mới nhất</h2>
