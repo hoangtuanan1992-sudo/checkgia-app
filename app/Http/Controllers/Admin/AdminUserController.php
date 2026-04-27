@@ -196,6 +196,7 @@ class AdminUserController extends Controller
             'password' => ['nullable', 'string', 'min:8'],
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
+            'product_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
         ]);
 
@@ -225,6 +226,10 @@ class AdminUserController extends Controller
             $updates['parent_user_id'] = $parentUserId;
         } else {
             $updates['parent_user_id'] = null;
+        }
+
+        if ($updates['role'] === 'owner') {
+            $updates['product_limit'] = (int) ($data['product_limit'] ?? 100);
         }
 
         if (! empty($data['password'])) {

@@ -12,7 +12,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {

@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Shopee;
 
 use App\Http\Controllers\Controller;
+use App\Models\Product;
 use App\Models\ShopeeCompetitor;
 use App\Models\ShopeeProduct;
 use App\Models\ShopeeShop;
+use App\Models\User;
 use App\Models\UserNotificationSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -132,6 +134,15 @@ class ShopeeSettingsController extends Controller
             'competitor_price_picks' => ['nullable', 'array'],
             'competitor_price_picks.*' => ['nullable', 'string', 'in:low,high'],
         ]);
+
+        $limit = (int) (User::query()->whereKey($ownerId)->value('product_limit') ?? 100);
+        $used = (int) Product::query()->where('user_id', $ownerId)->count()
+            + (int) ShopeeProduct::query()->where('user_id', $ownerId)->count();
+        if ($used >= $limit) {
+            return back()
+                ->withInput()
+                ->with('status', 'Bạn đã đến giới hạn so sánh '.$limit.' sản phẩm, để dùng tiếp hãy xóa bớt sản phẩm so sánh hoặc liên hệ admin để nâng cấp tài khoản');
+        }
 
         $product = ShopeeProduct::create([
             'user_id' => $ownerId,

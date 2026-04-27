@@ -75,6 +75,11 @@
                                     @error('service_end_date')<div class="error">{{ $message }}</div>@enderror
                                 </div>
                             </div>
+                            <div class="field" style="margin-top:12px">
+                                <label class="label" for="product_limit">Giới hạn sản phẩm so sánh</label>
+                                <input class="input" id="product_limit" name="product_limit" type="number" min="1" max="1000000" value="{{ old('product_limit', (int) ($user->product_limit ?? 100)) }}">
+                                @error('product_limit')<div class="error">{{ $message }}</div>@enderror
+                            </div>
                             <div class="hint" style="margin-top:10px">
                                 {{ $user->serviceRemainingText() ?: '---' }}
                             </div>

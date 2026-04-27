@@ -8,6 +8,8 @@ use App\Models\CompetitorSiteTemplate;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\ProductPriceHistory;
+use App\Models\ShopeeProduct;
+use App\Models\User;
 use App\Models\UserScrapeSetting;
 use App\Models\UserScrapeXpath;
 use App\Services\PriceScraper;
@@ -27,6 +29,15 @@ class DashboardProductController extends Controller
         ]);
 
         $userId = $request->user()->effectiveUserId();
+        $limit = (int) (User::query()->whereKey($userId)->value('product_limit') ?? 100);
+        $used = (int) Product::query()->where('user_id', $userId)->count()
+            + (int) ShopeeProduct::query()->where('user_id', $userId)->count();
+        if ($used >= $limit) {
+            return back()
+                ->withInput()
+                ->with('status', 'Bạn đã đến giới hạn so sánh '.$limit.' sản phẩm, để dùng tiếp hãy xóa bớt sản phẩm so sánh hoặc liên hệ admin để nâng cấp tài khoản');
+        }
+
         $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
         if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
             return redirect()
