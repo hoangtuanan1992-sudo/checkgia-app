@@ -224,6 +224,6 @@ class AccountController extends Controller
 
         $productGroup->delete();
 
-        return back()->with('status', 'Đã xoá nhóm sản phẩm');
+        return redirect()->route('account')->with('status', 'Đã xoá nhóm sản phẩm');
     }
 }
