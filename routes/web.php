@@ -112,6 +112,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/account/subusers', [AccountController::class, 'createSubUser'])->name('account.subusers.store');
         Route::delete('/account/subusers/{user}', [AccountController::class, 'destroySubUser'])->name('account.subusers.destroy');
         Route::post('/account/product-groups', [AccountController::class, 'createGroup'])->name('account.product-groups.store');
+        Route::put('/account/product-groups/{productGroup}', [AccountController::class, 'updateGroup'])->name('account.product-groups.update');
         Route::delete('/account/product-groups/{productGroup}', [AccountController::class, 'destroyGroup'])->name('account.product-groups.destroy');
         Route::resource('products', ProductController::class)->except(['show', 'index'])->names('products');
         Route::post('/products/{product}/competitors', [CompetitorController::class, 'store'])->name('products.competitors.store');

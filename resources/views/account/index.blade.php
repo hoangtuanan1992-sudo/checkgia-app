@@ -104,6 +104,7 @@
                                                 <thead>
                                                     <tr>
                                                         <th>Tên nhóm</th>
+                                                        <th style="width:80px">Sửa</th>
                                                         <th style="width:100px">Xoá</th>
                                                     </tr>
                                                 </thead>
@@ -111,6 +112,21 @@
                                                     @foreach($groups as $g)
                                                         <tr>
                                                             <td style="font-weight:600">{{ $g->name }}</td>
+                                                            <td style="text-align:right">
+                                                                <button
+                                                                    type="button"
+                                                                    class="icon-btn icon-btn-sm js-edit-group"
+                                                                    data-action="{{ route('account.product-groups.update', $g) }}"
+                                                                    data-group-id="{{ $g->id }}"
+                                                                    data-name="{{ $g->name }}"
+                                                                    title="Sửa tên nhóm"
+                                                                >
+                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                    </svg>
+                                                                </button>
+                                                            </td>
                                                             <td style="text-align:right">
                                                                 <form method="POST" action="{{ route('account.product-groups.destroy', $g) }}" onsubmit="return confirm('Xoá nhóm này?')">
                                                                     @csrf
@@ -209,4 +225,64 @@
             </div>
         </div>
     </div>
+
+    @php($editGroupId = session('edit_group_id'))
+    <dialog class="dialog" id="groupDialog" data-edit-id="{{ $editGroupId }}">
+        <div class="dialog-header">
+            <div style="font-weight:700">Sửa tên nhóm</div>
+        </div>
+        <div class="dialog-body">
+            <form id="groupDialogForm" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="field" style="margin-top:0">
+                    <label class="label" for="groupDialogInput">Tên nhóm</label>
+                    <input class="input" id="groupDialogInput" name="group_name" type="text" value="{{ old('group_name') }}" required autocomplete="off">
+                    @error('group_name')<div class="error">{{ $message }}</div>@enderror
+                </div>
+                <div class="actions" style="justify-content:flex-end;margin-top:16px">
+                    <button type="button" class="btn btn-secondary" id="groupDialogCancel">Huỷ</button>
+                    <button type="submit" class="btn">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <script>
+        (function () {
+            const dialog = document.getElementById('groupDialog');
+            const form = document.getElementById('groupDialogForm');
+            const input = document.getElementById('groupDialogInput');
+            const cancel = document.getElementById('groupDialogCancel');
+            if (!dialog || !form || !input) return;
+
+            function openDialog(action, name) {
+                form.setAttribute('action', action || '');
+                if (!input.value) {
+                    input.value = name || '';
+                }
+                dialog.showModal();
+                input.focus();
+            }
+
+            document.querySelectorAll('.js-edit-group').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    input.value = '';
+                    openDialog(btn.dataset.action || '', btn.dataset.name || '');
+                });
+            });
+
+            if (cancel) {
+                cancel.addEventListener('click', () => dialog.close());
+            }
+
+            const editId = dialog.dataset.editId;
+            if (editId) {
+                const btn = document.querySelector(`.js-edit-group[data-group-id="${editId}"]`);
+                if (btn) {
+                    openDialog(btn.dataset.action || '', btn.dataset.name || '');
+                }
+            }
+        })();
+    </script>
 @endsection

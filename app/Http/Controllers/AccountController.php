@@ -8,6 +8,7 @@ use App\Models\UserNotificationSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -180,6 +181,38 @@ class AccountController extends Controller
         ]);
 
         return back()->with('status', 'Đã thêm nhóm sản phẩm');
+    }
+
+    public function updateGroup(Request $request, ProductGroup $productGroup): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+
+        $ownerId = $owner->effectiveUserId();
+        abort_if($productGroup->user_id !== $ownerId, 404);
+
+        $validator = Validator::make($request->all(), [
+            'group_name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('product_groups', 'name')
+                    ->where(fn ($q) => $q->where('user_id', $ownerId))
+                    ->ignore($productGroup->id),
+            ],
+        ]);
+
+        if ($validator->fails()) {
+            return back()
+                ->withErrors($validator)
+                ->withInput()
+                ->with('edit_group_id', $productGroup->id);
+        }
+
+        $productGroup->name = trim((string) $validator->validated()['group_name']);
+        $productGroup->save();
+
+        return back()->with('status', 'Đã cập nhật tên nhóm');
     }
 
     public function destroyGroup(Request $request, ProductGroup $productGroup): RedirectResponse
