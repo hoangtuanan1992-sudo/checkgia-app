@@ -291,6 +291,28 @@ class DashboardProductController extends Controller
 
     public function downloadImportTemplate(Request $request): StreamedResponse
     {
+        if (! class_exists(Spreadsheet::class) || ! class_exists(IOFactory::class)) {
+            $rows = [
+                ['Link sản phẩm của bạn', 'Link đối thủ 1', 'Link đối thủ 2', 'Link đối thủ 3'],
+                ['https://example.com/san-pham-cua-ban', 'https://doithu1.com/san-pham', 'https://doithu2.com/san-pham', 'https://doithu3.com/san-pham'],
+            ];
+
+            return response()->streamDownload(function () use ($rows) {
+                echo "\xEF\xBB\xBF";
+                foreach ($rows as $row) {
+                    $escaped = array_map(function ($v) {
+                        $v = (string) $v;
+                        $v = str_replace('"', '""', $v);
+
+                        return '"'.$v.'"';
+                    }, $row);
+                    echo implode(',', $escaped)."\r\n";
+                }
+            }, 'mau-import-san-pham.csv', [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+            ]);
+        }
+
         $sheet = new Spreadsheet;
         $ws = $sheet->getActiveSheet();
         $ws->setTitle('Import');
@@ -344,13 +366,43 @@ class DashboardProductController extends Controller
             return back()->withErrors(['file' => 'Không đọc được file.']);
         }
 
-        $sheet = IOFactory::load($path);
-        $ws = $sheet->getActiveSheet();
-        $highestRow = max(1, (int) $ws->getHighestDataRow());
-        $highestCol = (string) $ws->getHighestDataColumn();
-        $highestColIndex = max(1, (int) Coordinate::columnIndexFromString($highestCol));
+        $getCellValue = null;
+        $highestRow = 1;
+        $highestColIndex = 1;
 
-        $first = trim($this->cellToString($ws->getCell([1, 1])->getValue()));
+        if (class_exists(IOFactory::class) && class_exists(Coordinate::class)) {
+            $sheet = IOFactory::load($path);
+            $ws = $sheet->getActiveSheet();
+            $highestRow = max(1, (int) $ws->getHighestDataRow());
+            $highestCol = (string) $ws->getHighestDataColumn();
+            $highestColIndex = max(1, (int) Coordinate::columnIndexFromString($highestCol));
+            $getCellValue = fn (int $col, int $row) => $ws->getCell([$col, $row])->getValue();
+        } else {
+            $ext = mb_strtolower((string) $file->getClientOriginalExtension());
+            if ($ext !== 'csv') {
+                return back()->withErrors(['file' => 'Hệ thống chưa cài thư viện đọc Excel. Vui lòng chạy composer install/update trên server hoặc upload file .csv.']);
+            }
+
+            $rows = [];
+            $fp = fopen($path, 'r');
+            if (! $fp) {
+                return back()->withErrors(['file' => 'Không đọc được file.']);
+            }
+
+            while (($row = fgetcsv($fp)) !== false) {
+                $rows[] = $row;
+                if (count($rows) >= 2000) {
+                    break;
+                }
+            }
+            fclose($fp);
+
+            $highestRow = max(1, count($rows));
+            $highestColIndex = max(1, (int) collect($rows)->map(fn ($r) => is_array($r) ? count($r) : 0)->max());
+            $getCellValue = fn (int $col, int $row) => $rows[$row - 1][$col - 1] ?? null;
+        }
+
+        $first = trim($this->cellToString($getCellValue(1, 1)));
         $startRow = filter_var($first, FILTER_VALIDATE_URL) ? 1 : 2;
 
         $sitesByDomain = [];
@@ -366,7 +418,7 @@ class DashboardProductController extends Controller
                 break;
             }
 
-            $ownUrl = trim($this->cellToString($ws->getCell([1, $row])->getValue()));
+            $ownUrl = trim($this->cellToString($getCellValue(1, $row)));
             if ($ownUrl === '') {
                 continue;
             }
@@ -402,7 +454,7 @@ class DashboardProductController extends Controller
 
             $competitorUrls = [];
             for ($col = 2; $col <= $highestColIndex; $col++) {
-                $val = trim($this->cellToString($ws->getCell([$col, $row])->getValue()));
+                $val = trim($this->cellToString($getCellValue($col, $row)));
                 if ($val === '') {
                     continue;
                 }
