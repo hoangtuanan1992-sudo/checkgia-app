@@ -704,7 +704,6 @@
         .sticky-col{position:sticky;left:0;z-index:4;background:#fff}
         .table thead .sticky-col{z-index:6}
         .table tbody .sticky-col{z-index:5}
-        .sticky-name{box-shadow:2px 0 0 var(--border)}
         .cg-tour-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:2147483646 !important;display:none}
         .cg-tour-tooltip{position:fixed;z-index:2147483647 !important;max-width:min(380px,calc(100% - 24px));background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.25);padding:12px}
         .cg-tour-title{font-weight:900;font-size:14px;margin:0}
