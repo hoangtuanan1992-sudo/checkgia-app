@@ -20,8 +20,6 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    protected static ?bool $hasProductLimitColumnCache = null;
-
     protected function casts(): array
     {
         return [
@@ -87,17 +85,11 @@ class User extends Authenticatable
 
     public static function hasProductLimitColumn(): bool
     {
-        if (static::$hasProductLimitColumnCache !== null) {
-            return static::$hasProductLimitColumnCache;
-        }
-
         try {
-            static::$hasProductLimitColumnCache = Schema::hasColumn('users', 'product_limit');
+            return Schema::hasColumn('users', 'product_limit');
         } catch (\Throwable) {
-            static::$hasProductLimitColumnCache = false;
+            return false;
         }
-
-        return static::$hasProductLimitColumnCache;
     }
 
     public static function resolveProductLimitById(int $userId): int

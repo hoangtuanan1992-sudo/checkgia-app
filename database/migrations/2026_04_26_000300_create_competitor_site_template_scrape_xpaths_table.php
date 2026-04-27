@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('competitor_site_template_scrape_xpaths')) {
+            return;
+        }
+
         Schema::create('competitor_site_template_scrape_xpaths', function (Blueprint $table) {
             $table->id();
             $table->foreignId('competitor_site_template_id')->constrained('competitor_site_templates')->cascadeOnDelete();

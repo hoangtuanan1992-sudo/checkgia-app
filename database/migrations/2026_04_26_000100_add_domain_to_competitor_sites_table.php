@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasColumn('competitor_sites', 'domain')) {
+            return;
+        }
+
         Schema::table('competitor_sites', function (Blueprint $table) {
             $table->string('domain')->nullable()->after('name');
             $table->unique(['user_id', 'domain']);
