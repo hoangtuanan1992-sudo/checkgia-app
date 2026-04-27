@@ -189,7 +189,9 @@ class AccountController extends Controller
         abort_if($owner->isViewer(), 403);
 
         $ownerId = $owner->effectiveUserId();
-        abort_if($productGroup->user_id !== $ownerId, 404);
+        $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
+        abort_unless(in_array((int) $productGroup->user_id, $allowedUserIds, true), 404);
+        $groupOwnerId = (int) $productGroup->user_id;
 
         $validator = Validator::make($request->all(), [
             'group_name' => [
@@ -197,7 +199,7 @@ class AccountController extends Controller
                 'string',
                 'max:255',
                 Rule::unique('product_groups', 'name')
-                    ->where(fn ($q) => $q->where('user_id', $ownerId))
+                    ->where(fn ($q) => $q->where('user_id', $groupOwnerId))
                     ->ignore($productGroup->id),
             ],
         ]);
@@ -220,7 +222,9 @@ class AccountController extends Controller
         $owner = $request->user();
         abort_if($owner->isViewer(), 403);
 
-        abort_unless($productGroup->user_id === $owner->effectiveUserId(), 404);
+        $ownerId = $owner->effectiveUserId();
+        $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
+        abort_unless(in_array((int) $productGroup->user_id, $allowedUserIds, true), 404);
 
         $productGroup->delete();
 
