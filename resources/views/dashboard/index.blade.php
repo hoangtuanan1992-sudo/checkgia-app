@@ -1311,6 +1311,7 @@
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
             const tbody = document.querySelector('table.table tbody');
+            const filterSearchKey = 'checkgia_compare_search';
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1385,7 +1386,28 @@
                 }
             }
 
-            if (filterSearch) filterSearch.addEventListener('input', applyFiltersAndSort);
+            if (filterSearch) {
+                try {
+                    const saved = localStorage.getItem(filterSearchKey);
+                    if (saved) {
+                        filterSearch.value = saved;
+                    }
+                } catch (e) {
+                }
+
+                filterSearch.addEventListener('input', () => {
+                    try {
+                        const v = filterSearch.value || '';
+                        if (v) {
+                            localStorage.setItem(filterSearchKey, v);
+                        } else {
+                            localStorage.removeItem(filterSearchKey);
+                        }
+                    } catch (e) {
+                    }
+                    applyFiltersAndSort();
+                });
+            }
             if (filterGroup) filterGroup.addEventListener('change', applyFiltersAndSort);
             if (sortSelect) sortSelect.addEventListener('change', applyFiltersAndSort);
             if (filterReset) {
@@ -1393,6 +1415,10 @@
                     if (filterSearch) filterSearch.value = '';
                     if (filterGroup) filterGroup.value = '';
                     if (sortSelect) sortSelect.value = 'row_asc';
+                    try {
+                        localStorage.removeItem(filterSearchKey);
+                    } catch (e) {
+                    }
                     applyFiltersAndSort();
                 });
             }
