@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -55,11 +56,13 @@ class AccountController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'position']);
 
-            $competitorSiteGroups = CompetitorSiteGroup::query()
-                ->where('user_id', $ownerId)
-                ->with(['competitorSites:id'])
-                ->orderBy('name')
-                ->get(['id', 'name', 'created_at']);
+            if (Schema::hasTable('competitor_site_groups') && Schema::hasTable('competitor_site_group_sites')) {
+                $competitorSiteGroups = CompetitorSiteGroup::query()
+                    ->where('user_id', $ownerId)
+                    ->with(['competitorSites:id'])
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'created_at']);
+            }
         }
 
         return view('account.index', [
@@ -257,6 +260,10 @@ class AccountController extends Controller
         $owner = $request->user();
         abort_if($owner->isViewer(), 403);
 
+        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
+            return redirect()->route('account')->with('status', 'Hệ thống chưa cập nhật tính năng Nhóm đối thủ. Vui lòng chạy migrate trên server.');
+        }
+
         $ownerId = $owner->effectiveUserId();
 
         $data = $request->validate([
@@ -294,6 +301,10 @@ class AccountController extends Controller
     {
         $owner = $request->user();
         abort_if($owner->isViewer(), 403);
+
+        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
+            return redirect()->route('account')->with('status', 'Hệ thống chưa cập nhật tính năng Nhóm đối thủ. Vui lòng chạy migrate trên server.');
+        }
 
         $ownerId = $owner->effectiveUserId();
         $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
@@ -340,6 +351,10 @@ class AccountController extends Controller
     {
         $owner = $request->user();
         abort_if($owner->isViewer(), 403);
+
+        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
+            return redirect()->route('account')->with('status', 'Hệ thống chưa cập nhật tính năng Nhóm đối thủ. Vui lòng chạy migrate trên server.');
+        }
 
         $ownerId = $owner->effectiveUserId();
         $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));

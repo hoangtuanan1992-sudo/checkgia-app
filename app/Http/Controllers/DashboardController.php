@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductGroup;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -28,11 +29,14 @@ class DashboardController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $competitorSiteGroups = CompetitorSiteGroup::query()
-            ->where('user_id', $userId)
-            ->with(['competitorSites:id'])
-            ->orderBy('name')
-            ->get(['id', 'name']);
+        $competitorSiteGroups = collect();
+        if (Schema::hasTable('competitor_site_groups') && Schema::hasTable('competitor_site_group_sites')) {
+            $competitorSiteGroups = CompetitorSiteGroup::query()
+                ->where('user_id', $userId)
+                ->with(['competitorSites:id'])
+                ->orderBy('name')
+                ->get(['id', 'name']);
+        }
 
         $products = Product::query()
             ->with(['group:id,name', 'competitors' => function ($q) {
