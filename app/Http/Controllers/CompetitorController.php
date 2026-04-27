@@ -205,18 +205,6 @@ class CompetitorController extends Controller
         $clear = (bool) ($data['clear'] ?? false);
         $url = trim((string) ($data['url'] ?? ''));
 
-        if (! $competitorSite->domain) {
-            $domain = CompetitorSite::normalizedDomainFromUrl($url);
-            if ($domain) {
-                $competitorSite->domain = $domain;
-                $competitorSite->save();
-                $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
-                if ($template) {
-                    $template->applyToCompetitorSite($competitorSite);
-                }
-            }
-        }
-
         if ($clear || $url === '') {
             $existing = $product->competitors()->where('competitor_site_id', $competitorSite->id)->first();
             if ($existing) {
@@ -226,14 +214,70 @@ class CompetitorController extends Controller
             return back()->with('status', 'Đã xoá URL');
         }
 
+        $domain = CompetitorSite::normalizedDomainFromUrl($url);
+        if (! $domain) {
+            return back()->withErrors(['url' => 'Không nhận diện được domain từ URL này.']);
+        }
+
+        $userId = $user->effectiveUserId();
+        $siteNameDomain = CompetitorSite::normalizedDomainFromUserInput($competitorSite->name);
+
+        $resolveSite = function (string $domain) use ($userId): CompetitorSite {
+            $site = CompetitorSite::query()
+                ->where('user_id', $userId)
+                ->where(function ($q) use ($domain) {
+                    $q->where('domain', $domain)->orWhere('name', $domain);
+                })
+                ->first();
+
+            if ($site) {
+                if (! $site->domain) {
+                    $site->domain = $domain;
+                    $site->save();
+                }
+            } else {
+                $nextPos = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
+                $site = CompetitorSite::create([
+                    'user_id' => $userId,
+                    'name' => $domain,
+                    'domain' => $domain,
+                    'position' => $nextPos,
+                ]);
+            }
+
+            $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+            if ($template) {
+                $template->applyToCompetitorSite($site);
+            }
+
+            return $site;
+        };
+
+        if ($competitorSite->domain) {
+            $site = $competitorSite->domain === $domain ? $competitorSite : $resolveSite($domain);
+        } else {
+            if ($siteNameDomain && $siteNameDomain === $domain) {
+                $competitorSite->domain = $domain;
+                $competitorSite->save();
+                $template = CompetitorSiteTemplate::query()->where('domain', $domain)->where('is_approved', true)->first();
+                if ($template) {
+                    $template->applyToCompetitorSite($competitorSite);
+                }
+
+                $site = $competitorSite;
+            } else {
+                $site = $resolveSite($domain);
+            }
+        }
+
         $competitor = $product->competitors()->firstOrNew([
-            'competitor_site_id' => $competitorSite->id,
+            'competitor_site_id' => $site->id,
         ]);
-        $competitor->name = $competitorSite->name;
+        $competitor->name = $site->name ?: $domain;
         $competitor->url = $url;
         $competitor->save();
 
-        $fallbacks = $competitorSite->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
+        $fallbacks = $site->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
 
         try {
             $scraper = new PriceScraper;
@@ -248,14 +292,14 @@ class CompetitorController extends Controller
                 return back()->with('status', 'Đã cập nhật URL');
             }
             $html = $scraper->fetchHtml($competitor->url);
-            $primary = $competitorSite->price_xpath ? [(string) $competitorSite->price_xpath] : [];
+            $primary = $site->price_xpath ? [(string) $site->price_xpath] : [];
             $raw = $scraper->extractFirstByXPaths($html, array_merge($primary, $fallbacks));
-            $price = $scraper->parsePriceToInt($raw, $competitorSite->price_regex);
+            $price = $scraper->parsePriceToInt($raw, $site->price_regex);
 
             if (is_null($price)) {
                 $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
                 if (is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
-                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $competitorSite->price_regex);
+                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $site->price_regex);
                 }
             }
 

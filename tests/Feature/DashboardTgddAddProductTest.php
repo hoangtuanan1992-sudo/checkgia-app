@@ -106,4 +106,52 @@ class DashboardTgddAddProductTest extends TestCase
 
         Bus::assertDispatched(ScrapeProductPrices::class);
     }
+
+    public function test_edit_competitor_url_will_save_into_correct_column_by_domain(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $product = Product::create([
+            'user_id' => $user->id,
+            'name' => 'SP',
+            'price' => 0,
+            'product_url' => 'https://example.com/p1',
+        ]);
+
+        $fpt = CompetitorSite::create([
+            'user_id' => $user->id,
+            'name' => 'fptshop.com.vn',
+            'domain' => 'fptshop.com.vn',
+            'position' => 1,
+        ]);
+        $tgdd = CompetitorSite::create([
+            'user_id' => $user->id,
+            'name' => 'thegioididong.com',
+            'domain' => 'thegioididong.com',
+            'position' => 2,
+        ]);
+
+        $fptCompetitor = Competitor::create([
+            'product_id' => $product->id,
+            'competitor_site_id' => $fpt->id,
+            'name' => $fpt->name,
+            'url' => 'https://fptshop.com.vn/old',
+        ]);
+
+        Http::fake(['*' => Http::response('<html></html>', 200)]);
+
+        $this->post(route('dashboard.products.competitors.upsert', [$product, $fpt]), [
+            'url' => 'https://www.thegioididong.com/dtdd/iphone-17e',
+        ])->assertRedirect();
+
+        $fptCompetitor->refresh();
+        $this->assertSame('https://fptshop.com.vn/old', (string) $fptCompetitor->url);
+
+        $this->assertDatabaseHas('competitors', [
+            'product_id' => $product->id,
+            'competitor_site_id' => $tgdd->id,
+            'url' => 'https://www.thegioididong.com/dtdd/iphone-17e',
+        ]);
+    }
 }
