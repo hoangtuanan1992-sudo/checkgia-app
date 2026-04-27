@@ -228,7 +228,7 @@ class AdminUserController extends Controller
             $updates['parent_user_id'] = null;
         }
 
-        if ($updates['role'] === 'owner') {
+        if ($updates['role'] === 'owner' && User::hasProductLimitColumn()) {
             $updates['product_limit'] = (int) ($data['product_limit'] ?? 100);
         }
 

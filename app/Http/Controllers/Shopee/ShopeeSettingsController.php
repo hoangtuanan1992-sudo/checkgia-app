@@ -135,7 +135,7 @@ class ShopeeSettingsController extends Controller
             'competitor_price_picks.*' => ['nullable', 'string', 'in:low,high'],
         ]);
 
-        $limit = (int) (User::query()->whereKey($ownerId)->value('product_limit') ?? 100);
+        $limit = User::resolveProductLimitById($ownerId);
         $used = (int) Product::query()->where('user_id', $ownerId)->count()
             + (int) ShopeeProduct::query()->where('user_id', $ownerId)->count();
         if ($used >= $limit) {

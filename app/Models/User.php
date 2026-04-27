@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 #[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit'])]
 #[Hidden(['password', 'remember_token'])]
@@ -18,6 +19,8 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    protected static ?bool $hasProductLimitColumnCache = null;
 
     protected function casts(): array
     {
@@ -80,6 +83,32 @@ class User extends Authenticatable
         }
 
         return (int) ($this->parent_user_id ?: $this->id);
+    }
+
+    public static function hasProductLimitColumn(): bool
+    {
+        if (static::$hasProductLimitColumnCache !== null) {
+            return static::$hasProductLimitColumnCache;
+        }
+
+        try {
+            static::$hasProductLimitColumnCache = Schema::hasColumn('users', 'product_limit');
+        } catch (\Throwable) {
+            static::$hasProductLimitColumnCache = false;
+        }
+
+        return static::$hasProductLimitColumnCache;
+    }
+
+    public static function resolveProductLimitById(int $userId): int
+    {
+        if (! static::hasProductLimitColumn()) {
+            return 100;
+        }
+
+        $limit = (int) (static::query()->whereKey($userId)->value('product_limit') ?? 100);
+
+        return $limit > 0 ? $limit : 100;
     }
 
     public function isViewer(): bool

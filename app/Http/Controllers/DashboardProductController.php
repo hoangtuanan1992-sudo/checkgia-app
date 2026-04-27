@@ -29,7 +29,7 @@ class DashboardProductController extends Controller
         ]);
 
         $userId = $request->user()->effectiveUserId();
-        $limit = (int) (User::query()->whereKey($userId)->value('product_limit') ?? 100);
+        $limit = User::resolveProductLimitById($userId);
         $used = (int) Product::query()->where('user_id', $userId)->count()
             + (int) ShopeeProduct::query()->where('user_id', $userId)->count();
         if ($used >= $limit) {
