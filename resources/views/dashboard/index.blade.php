@@ -1461,7 +1461,16 @@
                 let timer = null;
                 filterSearch.addEventListener('input', () => {
                     if (timer) clearTimeout(timer);
-                    timer = setTimeout(applyServerSearch, 350);
+                    const v = (filterSearch.value || '').trim();
+                    if (!v) {
+                        timer = setTimeout(applyServerSearch, 0);
+
+                        return;
+                    }
+                    if (v.length < 2) {
+                        return;
+                    }
+                    timer = setTimeout(applyServerSearch, 900);
                 });
                 filterSearch.addEventListener('keydown', (e) => {
                     if (e && e.key === 'Enter') {
