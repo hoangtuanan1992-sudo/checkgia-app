@@ -1439,6 +1439,10 @@
                     url.searchParams.delete('q');
                 }
                 url.searchParams.delete('page');
+                try {
+                    sessionStorage.setItem('checkgia_focus_search', '1');
+                } catch (e) {
+                }
                 window.location.assign(url.toString());
             }
 
@@ -1458,6 +1462,16 @@
             }
 
             if (filterSearch) {
+                try {
+                    if (sessionStorage.getItem('checkgia_focus_search') === '1') {
+                        sessionStorage.removeItem('checkgia_focus_search');
+                        filterSearch.focus();
+                        const v = filterSearch.value || '';
+                        filterSearch.setSelectionRange(v.length, v.length);
+                    }
+                } catch (e) {
+                }
+
                 let timer = null;
                 filterSearch.addEventListener('input', () => {
                     if (timer) clearTimeout(timer);
