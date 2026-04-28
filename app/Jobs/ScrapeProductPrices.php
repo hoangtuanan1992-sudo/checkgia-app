@@ -93,6 +93,14 @@ class ScrapeProductPrices implements ShouldQueue
 
             try {
                 $html = $htmlByKey['p'] ?? null;
+                if (! is_string($html) || $html === '') {
+                    try {
+                        $html = $scraper->fetchHtml((string) $product->product_url);
+                    } catch (\Throwable $e) {
+                        $html = null;
+                    }
+                }
+
                 if (is_string($html) && $html !== '') {
                     $nameXpaths = array_merge(
                         [(string) $settings->own_name_xpath],
@@ -206,6 +214,13 @@ class ScrapeProductPrices implements ShouldQueue
                     }
 
                     $cHtml = $htmlByKey['c:'.$competitor->id] ?? null;
+                    if (! is_string($cHtml) || $cHtml === '') {
+                        try {
+                            $cHtml = $scraper->fetchHtml((string) $competitor->url);
+                        } catch (\Throwable $e) {
+                            $cHtml = null;
+                        }
+                    }
                     if (! is_string($cHtml) || $cHtml === '') {
                         continue;
                     }
