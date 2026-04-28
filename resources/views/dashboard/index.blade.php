@@ -1441,6 +1441,7 @@
                 url.searchParams.delete('page');
                 try {
                     sessionStorage.setItem('checkgia_focus_search', '1');
+                    sessionStorage.setItem('checkgia_scroll_y', String(window.scrollY || 0));
                 } catch (e) {
                 }
                 window.location.assign(url.toString());
@@ -1463,9 +1464,29 @@
 
             if (filterSearch) {
                 try {
+                    const syRaw = sessionStorage.getItem('checkgia_scroll_y');
+                    const sy = syRaw === null ? null : Number(syRaw);
+                    if (syRaw !== null) {
+                        sessionStorage.removeItem('checkgia_scroll_y');
+                        if (Number.isFinite(sy) && sy >= 0) {
+                            if ('scrollRestoration' in history) {
+                                history.scrollRestoration = 'manual';
+                            }
+                            requestAnimationFrame(() => {
+                                requestAnimationFrame(() => {
+                                    window.scrollTo(0, sy);
+                                });
+                            });
+                        }
+                    }
+
                     if (sessionStorage.getItem('checkgia_focus_search') === '1') {
                         sessionStorage.removeItem('checkgia_focus_search');
-                        filterSearch.focus();
+                        try {
+                            filterSearch.focus({ preventScroll: true });
+                        } catch (e) {
+                            filterSearch.focus();
+                        }
                         const v = filterSearch.value || '';
                         filterSearch.setSelectionRange(v.length, v.length);
                     }
@@ -1484,7 +1505,7 @@
                     if (v.length < 2) {
                         return;
                     }
-                    timer = setTimeout(applyServerSearch, 900);
+                    timer = setTimeout(applyServerSearch, 1500);
                 });
                 filterSearch.addEventListener('keydown', (e) => {
                     if (e && e.key === 'Enter') {
