@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Product;
 use App\Models\User;
 use App\Models\UserScrapeSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -33,5 +34,29 @@ class ProductCrudTest extends TestCase
         ])->assertRedirect('/dashboard');
 
         $this->get('/dashboard')->assertSee('iPhone 15');
+    }
+
+    public function test_dashboard_search_filters_products_across_pages(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        Product::create([
+            'user_id' => $user->id,
+            'name' => 'Máy lạnh Daikin FTKM25AVMV',
+            'price' => 10900000,
+            'product_url' => 'https://example.com/p1',
+        ]);
+        Product::create([
+            'user_id' => $user->id,
+            'name' => 'Tủ lạnh Panasonic',
+            'price' => 12000000,
+            'product_url' => 'https://example.com/p2',
+        ]);
+
+        $this->get('/dashboard?q=Daikin')
+            ->assertOk()
+            ->assertSee('Máy lạnh Daikin FTKM25AVMV')
+            ->assertDontSee('Tủ lạnh Panasonic');
     }
 }

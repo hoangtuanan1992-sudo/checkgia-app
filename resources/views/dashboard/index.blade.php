@@ -131,7 +131,7 @@
                 <div id="dashboardToolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
                     <div class="field" style="margin-top:0;min-width:240px;flex:1">
                         <label class="label" for="filterSearch">Tìm kiếm</label>
-                        <input class="input" id="filterSearch" type="text" placeholder="Nhập tên sản phẩm hoặc ID...">
+                        <input class="input" id="filterSearch" type="text" value="{{ request('q') }}" placeholder="Nhập tên sản phẩm hoặc ID...">
                     </div>
                     <div class="field" style="margin-top:0;min-width:220px">
                         <label class="label" for="filterGroup">Nhóm</label>
@@ -1323,7 +1323,6 @@
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
             const tbody = document.querySelector('table.table tbody');
-            const filterSearchKey = 'checkgia_compare_search';
             const filterCompetitorGroupKey = 'checkgia_compare_competitor_group';
             const competitorGroupMap = @json(($competitorSiteGroups ?? collect())->mapWithKeys(fn($g) => [(string) $g->id => $g->competitorSites->pluck('id')->values()])->all());
 
@@ -1336,20 +1335,14 @@
             }
 
             function applyFiltersAndSort() {
-                const q = (filterSearch?.value || '').trim().toLowerCase();
                 const group = filterGroup?.value || '';
                 const sort = sortSelect?.value || 'row_asc';
 
                 function applyToItems(items, appendTo) {
                     items.forEach((el) => {
-                        const name = (el.dataset.productName || '').toLowerCase();
-                        const id = String(el.dataset.productId || '');
                         const groupId = String(el.dataset.groupId || '');
 
                         let visible = true;
-                        if (q) {
-                            visible = name.includes(q) || id.includes(q);
-                        }
                         if (visible && group) {
                             if (group === '__none__') {
                                 visible = !groupId;
@@ -1400,6 +1393,22 @@
                 }
             }
 
+            function applyServerSearch() {
+                if (!filterSearch) return;
+                const v = (filterSearch.value || '').trim();
+                const url = new URL(window.location.href);
+                const current = (url.searchParams.get('q') || '').trim();
+                if (v === current) return;
+
+                if (v) {
+                    url.searchParams.set('q', v);
+                } else {
+                    url.searchParams.delete('q');
+                }
+                url.searchParams.delete('page');
+                window.location.assign(url.toString());
+            }
+
             function applyCompetitorGroupFilter() {
                 if (!filterCompetitorGroup) return;
                 const groupId = filterCompetitorGroup.value || '';
@@ -1416,25 +1425,17 @@
             }
 
             if (filterSearch) {
-                try {
-                    const saved = localStorage.getItem(filterSearchKey);
-                    if (saved) {
-                        filterSearch.value = saved;
-                    }
-                } catch (e) {
-                }
-
+                let timer = null;
                 filterSearch.addEventListener('input', () => {
-                    try {
-                        const v = filterSearch.value || '';
-                        if (v) {
-                            localStorage.setItem(filterSearchKey, v);
-                        } else {
-                            localStorage.removeItem(filterSearchKey);
-                        }
-                    } catch (e) {
+                    if (timer) clearTimeout(timer);
+                    timer = setTimeout(applyServerSearch, 350);
+                });
+                filterSearch.addEventListener('keydown', (e) => {
+                    if (e && e.key === 'Enter') {
+                        e.preventDefault();
+                        if (timer) clearTimeout(timer);
+                        applyServerSearch();
                     }
-                    applyFiltersAndSort();
                 });
             }
             if (filterGroup) filterGroup.addEventListener('change', applyFiltersAndSort);
@@ -1468,10 +1469,18 @@
                     if (filterCompetitorGroup) filterCompetitorGroup.value = '';
                     if (sortSelect) sortSelect.value = 'row_asc';
                     try {
-                        localStorage.removeItem(filterSearchKey);
                         localStorage.removeItem(filterCompetitorGroupKey);
                     } catch (e) {
                     }
+                    const url = new URL(window.location.href);
+                    if (url.searchParams.has('q') || url.searchParams.has('page')) {
+                        url.searchParams.delete('q');
+                        url.searchParams.delete('page');
+                        window.location.assign(url.toString());
+
+                        return;
+                    }
+
                     applyFiltersAndSort();
                     applyCompetitorGroupFilter();
                 });

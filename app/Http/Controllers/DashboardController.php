@@ -17,6 +17,8 @@ class DashboardController extends Controller
     public function index(Request $request): View
     {
         $userId = $request->user()->effectiveUserId();
+        $q = trim((string) $request->query('q', ''));
+        $qId = ($q !== '' && ctype_digit($q)) ? (int) $q : null;
 
         $competitorSites = CompetitorSite::query()
             ->where('user_id', $userId)
@@ -45,6 +47,14 @@ class DashboardController extends Controller
                 }, 'competitorSite']);
             }])
             ->where('user_id', $userId)
+            ->when($q !== '', function ($qq) use ($q, $qId) {
+                $qq->where(function ($inner) use ($q, $qId) {
+                    if (! is_null($qId)) {
+                        $inner->where('id', $qId);
+                    }
+                    $inner->orWhere('name', 'like', '%'.$q.'%');
+                });
+            })
             ->latest()
             ->paginate(50, ['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at'])
             ->withQueryString();
