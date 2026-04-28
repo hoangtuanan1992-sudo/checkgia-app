@@ -16,9 +16,18 @@ class DashboardController extends Controller
 {
     public function index(Request $request): View
     {
-        $userId = $request->user()->effectiveUserId();
+        $authUser = $request->user();
+        $userId = $authUser->effectiveUserId();
         $q = trim((string) $request->query('q', ''));
         $qId = ($q !== '' && ctype_digit($q)) ? (int) $q : null;
+        $perPage = 50;
+        if (! $authUser->isViewer()) {
+            $perPageRaw = trim((string) $request->query('per_page', ''));
+            $perPageInt = ($perPageRaw !== '' && ctype_digit($perPageRaw)) ? (int) $perPageRaw : null;
+            if (in_array($perPageInt, [25, 50, 100, 200], true)) {
+                $perPage = $perPageInt;
+            }
+        }
 
         $competitorSites = CompetitorSite::query()
             ->where('user_id', $userId)
@@ -56,7 +65,7 @@ class DashboardController extends Controller
                 });
             })
             ->latest()
-            ->paginate(50, ['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at'])
+            ->paginate($perPage, ['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at'])
             ->withQueryString();
 
         $competitorsForEvents = Competitor::query()

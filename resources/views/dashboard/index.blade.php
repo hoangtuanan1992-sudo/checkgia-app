@@ -604,22 +604,51 @@
                         <div class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm trước.</div>
                     @endforelse
                 </div>
-                @if($products->lastPage() > 1)
+                @if($products->total() > 0)
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px">
-                        <div class="hint" style="margin-top:0">
-                            Trang {{ $products->currentPage() }}/{{ $products->lastPage() }} • Hiển thị {{ $products->count() }}/{{ $products->total() }}
+                        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+                            <div class="hint" style="margin-top:0">
+                                Trang {{ $products->currentPage() }}/{{ $products->lastPage() }} • Hiển thị {{ $products->count() }}/{{ $products->total() }}
+                            </div>
+                            @if(!auth()->user()->isViewer())
+                                <div class="field" style="margin-top:0;min-width:150px">
+                                    <label class="label" for="perPageSelect">Số dòng</label>
+                                    <select class="input" id="perPageSelect">
+                                        @foreach([25, 50, 100, 200] as $pp)
+                                            <option value="{{ $pp }}" @selected(((int) request('per_page', 50)) === $pp)>{{ $pp }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            @endif
                         </div>
-                        <div style="display:flex;gap:8px;align-items:center">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                            @if($products->lastPage() <= 1)
+                                @php($pageUrls = [])
+                            @endif
+
+                            @if($products->lastPage() > 1)
                             @if($products->onFirstPage())
                                 <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Trước</span>
                             @else
                                 <a class="btn btn-secondary" href="{{ $products->previousPageUrl() }}">Trước</a>
                             @endif
 
+                            @php($pageUrls = $products->getUrlRange(1, $products->lastPage()))
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:100%">
+                                @foreach($pageUrls as $p => $url)
+                                    @if((int) $p === (int) $products->currentPage())
+                                        <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $p }}</span>
+                                    @else
+                                        <a class="btn btn-secondary" href="{{ $url }}">{{ $p }}</a>
+                                    @endif
+                                @endforeach
+                            </div>
+
                             @if($products->hasMorePages())
                                 <a class="btn btn-secondary" href="{{ $products->nextPageUrl() }}">Sau</a>
                             @else
                                 <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Sau</span>
+                            @endif
                             @endif
                         </div>
                     </div>
@@ -1322,6 +1351,7 @@
             const filterReset = document.getElementById('filterReset');
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
+            const perPageSelect = document.getElementById('perPageSelect');
             const tbody = document.querySelector('table.table tbody');
             const filterCompetitorGroupKey = 'checkgia_compare_competitor_group';
             const competitorGroupMap = @json(($competitorSiteGroups ?? collect())->mapWithKeys(fn($g) => [(string) $g->id => $g->competitorSites->pluck('id')->values()])->all());
@@ -1439,6 +1469,19 @@
                 });
             }
             if (filterGroup) filterGroup.addEventListener('change', applyFiltersAndSort);
+            if (perPageSelect) {
+                perPageSelect.addEventListener('change', () => {
+                    const v = String(perPageSelect.value || '').trim();
+                    const url = new URL(window.location.href);
+                    if (v) {
+                        url.searchParams.set('per_page', v);
+                    } else {
+                        url.searchParams.delete('per_page');
+                    }
+                    url.searchParams.delete('page');
+                    window.location.assign(url.toString());
+                });
+            }
             if (filterCompetitorGroup) {
                 try {
                     const saved = localStorage.getItem(filterCompetitorGroupKey);
