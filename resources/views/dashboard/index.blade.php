@@ -187,8 +187,8 @@
                         <thead>
                             <tr>
                                 <th style="width:52px">#</th>
-                                <th class="sticky-col sticky-name" style="min-width:340px">Tên sản phẩm</th>
-                                <th style="min-width:150px">Giá của bạn</th>
+                                <th class="sticky-col sticky-name" style="width:340px;min-width:340px;max-width:340px">Tên sản phẩm</th>
+                                <th class="sticky-own" style="min-width:150px">Giá của bạn</th>
                                 @foreach($competitorSites as $site)
                                     <th style="min-width:160px" data-competitor-site-id="{{ $site->id }}">{{ $site->name }}</th>
                                 @endforeach
@@ -234,7 +234,7 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td>
+                                    <td class="sticky-own">
                                         <div style="display:flex;flex-direction:column;gap:4px;padding-top:0px">
                                             <div style="display:flex;align-items:center;gap:8px">
                                                     @if(!auth()->user()->isViewer())
@@ -605,15 +605,15 @@
                     @endforelse
                 </div>
                 @if($products->total() > 0)
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px">
-                        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-                            <div class="hint" style="margin-top:0">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:nowrap;overflow-x:auto;margin-top:12px">
+                        <div style="display:flex;gap:12px;align-items:center;flex-wrap:nowrap">
+                            <div class="hint" style="margin-top:0;white-space:nowrap">
                                 Trang {{ $products->currentPage() }}/{{ $products->lastPage() }} • Hiển thị {{ $products->count() }}/{{ $products->total() }}
                             </div>
                             @if(!auth()->user()->isViewer())
-                                <div class="field" style="margin-top:0;min-width:150px">
-                                    <label class="label" for="perPageSelect">Số dòng</label>
-                                    <select class="input" id="perPageSelect">
+                                <div style="display:flex;align-items:center;gap:8px;white-space:nowrap">
+                                    <span class="hint" style="margin:0">Số dòng</span>
+                                    <select class="input" id="perPageSelect" style="width:90px">
                                         @foreach([25, 50, 100, 200] as $pp)
                                             <option value="{{ $pp }}" @selected(((int) request('per_page', 50)) === $pp)>{{ $pp }}</option>
                                         @endforeach
@@ -621,7 +621,7 @@
                                 </div>
                             @endif
                         </div>
-                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap;justify-content:flex-end;white-space:nowrap">
                             @if($products->lastPage() <= 1)
                                 @php($pageUrls = [])
                             @endif
@@ -634,7 +634,7 @@
                             @endif
 
                             @php($pageUrls = $products->getUrlRange(1, $products->lastPage()))
-                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:100%">
+                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;max-width:100%">
                                 @foreach($pageUrls as $p => $url)
                                     @if((int) $p === (int) $products->currentPage())
                                         <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $p }}</span>
@@ -742,8 +742,11 @@
 
     <style>
         .sticky-col{position:sticky;left:0;z-index:4;background:#fff}
+        .sticky-own{position:sticky;left:340px;z-index:4;background:#fff}
         .table thead .sticky-col{z-index:6}
         .table tbody .sticky-col{z-index:5}
+        .table thead .sticky-own{z-index:6}
+        .table tbody .sticky-own{z-index:5}
         .cg-tour-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:2147483646 !important;display:none}
         .cg-tour-tooltip{position:fixed;z-index:2147483647 !important;max-width:min(380px,calc(100% - 24px));background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.25);padding:12px}
         .cg-tour-title{font-weight:900;font-size:14px;margin:0}
