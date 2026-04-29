@@ -7,9 +7,11 @@ use App\Models\CompetitorSite;
 use App\Models\CompetitorSiteGroup;
 use App\Models\Product;
 use App\Models\ProductGroup;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -122,13 +124,72 @@ class DashboardController extends Controller
         });
         $priceEvents = array_slice($priceEvents, 0, 6);
 
+        $compareColumnWidths = [];
+        if (Schema::hasColumn('users', 'dashboard_compare_column_widths')) {
+            $raw = (string) (User::query()->whereKey($authUser->id)->value('dashboard_compare_column_widths') ?? '');
+            if ($raw !== '') {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $k => $v) {
+                        if (! is_string($k) || $k === '') {
+                            continue;
+                        }
+                        if (! is_int($v) && ! is_float($v) && ! (is_string($v) && is_numeric($v))) {
+                            continue;
+                        }
+                        $n = (int) round((float) $v);
+                        if ($n < 40 || $n > 2000) {
+                            continue;
+                        }
+                        $compareColumnWidths[$k] = $n;
+                    }
+                }
+            }
+        }
+
         return view('dashboard.index', [
             'products' => $products,
             'competitorSites' => $competitorSites,
             'productGroups' => $productGroups,
             'competitorSiteGroups' => $competitorSiteGroups,
             'priceEvents' => $priceEvents,
+            'compareColumnWidths' => $compareColumnWidths,
         ]);
+    }
+
+    public function updateCompareColumnWidths(Request $request): Response
+    {
+        $authUser = $request->user();
+        if (! Schema::hasColumn('users', 'dashboard_compare_column_widths')) {
+            return response()->noContent();
+        }
+
+        $validated = $request->validate([
+            'widths' => ['required', 'array'],
+            'widths.*' => ['nullable', 'numeric', 'min:40', 'max:2000'],
+        ]);
+
+        $widths = [];
+        foreach (($validated['widths'] ?? []) as $k => $v) {
+            if (! is_string($k) || $k === '') {
+                continue;
+            }
+            if (is_null($v)) {
+                continue;
+            }
+            $n = (int) round((float) $v);
+            if ($n < 40 || $n > 2000) {
+                continue;
+            }
+            $widths[$k] = $n;
+        }
+
+        $payload = $widths ? json_encode($widths, JSON_UNESCAPED_UNICODE) : null;
+        User::query()->whereKey($authUser->id)->update([
+            'dashboard_compare_column_widths' => $payload,
+        ]);
+
+        return response()->noContent();
     }
 
     private function agoText(Carbon $at, Carbon $now): string

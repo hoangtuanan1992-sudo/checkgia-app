@@ -186,14 +186,14 @@
                     <table class="table">
                         <thead>
                             <tr>
-                                <th style="width:52px">#</th>
-                                <th class="sticky-col sticky-name" style="width:340px;min-width:340px;max-width:340px">Tên sản phẩm</th>
-                                <th class="sticky-own" style="min-width:150px">Giá của bạn</th>
+                                <th data-col-key="row" data-default-width="52" style="width:52px">#</th>
+                                <th data-col-key="product_name" data-default-width="340" class="sticky-col sticky-name">Tên sản phẩm</th>
+                                <th data-col-key="own_price" data-default-width="150" class="sticky-own">Giá của bạn</th>
                                 @foreach($competitorSites as $site)
-                                    <th style="min-width:160px" data-competitor-site-id="{{ $site->id }}">{{ $site->name }}</th>
+                                    <th data-col-key="site:{{ $site->id }}" data-default-width="160" data-competitor-site-id="{{ $site->id }}">{{ $site->name }}</th>
                                 @endforeach
-                                <th style="min-width:160px">Thời gian</th>
-                                <th style="width:110px">Hành động</th>
+                                <th data-col-key="updated_at" data-default-width="160">Thời gian</th>
+                                <th data-col-key="actions" data-default-width="110" style="width:110px">Hành động</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -742,11 +742,14 @@
 
     <style>
         .sticky-col{position:sticky;left:0;z-index:4;background:#fff}
-        .sticky-own{position:sticky;left:340px;z-index:4;background:#fff}
+        .sticky-own{position:sticky;left:var(--sticky-own-left, 340px);z-index:4;background:#fff}
         .table thead .sticky-col{z-index:6}
         .table tbody .sticky-col{z-index:5}
         .table thead .sticky-own{z-index:6}
         .table tbody .sticky-own{z-index:5}
+        .cg-resize-handle{position:absolute;top:0;right:-4px;height:100%;width:10px;cursor:col-resize;z-index:20}
+        .cg-resize-handle::after{content:'';position:absolute;top:20%;bottom:20%;left:4px;width:2px;border-radius:2px;background:rgba(255,255,255,.55);opacity:.65}
+        .table thead th.cg-resizing{user-select:none}
         .cg-tour-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);z-index:2147483646 !important;display:none}
         .cg-tour-tooltip{position:fixed;z-index:2147483647 !important;max-width:min(380px,calc(100% - 24px));background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:0 18px 40px rgba(17,24,39,.25);padding:12px}
         .cg-tour-title{font-weight:900;font-size:14px;margin:0}
@@ -994,7 +997,9 @@
             const adjustInput = document.getElementById('adjustDialogInput');
             const adjustCancel = document.getElementById('adjustDialogCancel');
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
-            const csrfToken = '{{ csrf_token() }}';
+            const csrfToken = @json(csrf_token());
+            const compareColumnWidthsSaveUrl = @json(route('dashboard.compare-table.column-widths.update'));
+            const initialCompareColumnWidths = @json($compareColumnWidths ?? []);
             let lastAdjustButton = null;
             function saveScrollRestore(productId) {
                 try {
@@ -1334,6 +1339,121 @@
                     lastMobile = nowMobile;
                 }
             });
+
+            function normalizeColWidth(v, fallback) {
+                const n = Number(v);
+                if (!Number.isFinite(n)) return fallback;
+                const rounded = Math.round(n);
+                if (rounded < 40) return 40;
+                if (rounded > 2000) return 2000;
+                return rounded;
+            }
+
+            function setColumnWidthByIndex(table, colIndex, widthPx) {
+                const rows = Array.from(table.querySelectorAll('tr'));
+                rows.forEach((tr) => {
+                    const cell = tr.children[colIndex];
+                    if (!cell) return;
+                    cell.style.width = `${widthPx}px`;
+                    cell.style.minWidth = `${widthPx}px`;
+                    cell.style.maxWidth = `${widthPx}px`;
+                });
+            }
+
+            function updateStickyOwnOffset() {
+                const table = comparisonTableView ? comparisonTableView.querySelector('table.table') : null;
+                if (!table) return;
+                const nameTh = table.querySelector('thead th.sticky-name');
+                if (!nameTh) return;
+                const w = Math.round(nameTh.getBoundingClientRect().width);
+                table.style.setProperty('--sticky-own-left', `${w}px`);
+            }
+
+            async function saveCompareColumnWidths(widths) {
+                if (!compareColumnWidthsSaveUrl) return;
+                try {
+                    await fetch(compareColumnWidthsSaveUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ widths }),
+                    });
+                } catch (e) {
+                }
+            }
+
+            function initResizableCompareTable() {
+                const table = comparisonTableView ? comparisonTableView.querySelector('table.table') : null;
+                if (!table) return;
+                const headRow = table.querySelector('thead tr');
+                if (!headRow) return;
+
+                const ths = Array.from(headRow.children).filter((n) => n && n.tagName === 'TH');
+                if (ths.length === 0) return;
+
+                const stored = initialCompareColumnWidths && typeof initialCompareColumnWidths === 'object' ? initialCompareColumnWidths : {};
+                const widths = {};
+
+                ths.forEach((th, idx) => {
+                    const key = String(th.dataset.colKey || '');
+                    const defaultWidth = normalizeColWidth(th.dataset.defaultWidth, 160);
+                    const w = normalizeColWidth(stored[key], defaultWidth);
+                    if (key) widths[key] = w;
+                    setColumnWidthByIndex(table, idx, w);
+
+                    if (th.querySelector('.cg-resize-handle')) return;
+
+                    const handle = document.createElement('span');
+                    handle.className = 'cg-resize-handle';
+                    handle.setAttribute('role', 'separator');
+                    handle.setAttribute('aria-orientation', 'vertical');
+                    th.appendChild(handle);
+
+                    handle.addEventListener('mousedown', (e) => {
+                        if (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+                        const startX = e.clientX;
+                        const startWidth = Math.round(th.getBoundingClientRect().width);
+                        const minWidth = normalizeColWidth(th.dataset.minWidth, 60);
+                        const maxWidth = normalizeColWidth(th.dataset.maxWidth, 2000);
+
+                        th.classList.add('cg-resizing');
+                        document.body.style.cursor = 'col-resize';
+                        document.body.style.userSelect = 'none';
+
+                        const onMove = (ev) => {
+                            const dx = ev.clientX - startX;
+                            const next = Math.max(minWidth, Math.min(maxWidth, startWidth + dx));
+                            setColumnWidthByIndex(table, idx, next);
+                            if (key) widths[key] = next;
+                            if (th.classList.contains('sticky-name')) updateStickyOwnOffset();
+                        };
+                        const onUp = () => {
+                            th.classList.remove('cg-resizing');
+                            document.body.style.cursor = '';
+                            document.body.style.userSelect = '';
+                            window.removeEventListener('mousemove', onMove);
+                            window.removeEventListener('mouseup', onUp);
+                            if (key) saveCompareColumnWidths(widths);
+                        };
+
+                        window.addEventListener('mousemove', onMove);
+                        window.addEventListener('mouseup', onUp);
+                    });
+                });
+
+                updateStickyOwnOffset();
+                window.addEventListener('resize', updateStickyOwnOffset);
+            }
+
+            initResizableCompareTable();
 
             document.querySelectorAll('.js-add-link').forEach((btn) => {
                 btn.addEventListener('click', (e) => {
