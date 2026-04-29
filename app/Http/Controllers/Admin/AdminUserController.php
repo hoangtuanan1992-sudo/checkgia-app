@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\UserScrapeSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -183,7 +185,14 @@ class AdminUserController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
 
-        return view('admin.users.edit', compact('user', 'owners'));
+        $shopUserId = (int) ($user->parent_user_id ?: $user->id);
+        $shopUser = User::query()->find($shopUserId);
+        $scrapeSetting = null;
+        if ($shopUser && Schema::hasTable('user_scrape_settings')) {
+            $scrapeSetting = UserScrapeSetting::query()->firstOrCreate(['user_id' => $shopUserId]);
+        }
+
+        return view('admin.users.edit', compact('user', 'owners', 'shopUser', 'scrapeSetting'));
     }
 
     public function update(Request $request, User $user): RedirectResponse
@@ -198,6 +207,7 @@ class AdminUserController extends Controller
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'product_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
+            'scrape_schedule_times' => ['nullable', 'string', 'max:10000'],
         ]);
 
         $canonical = User::canonicalEmail($data['email']);
@@ -237,6 +247,48 @@ class AdminUserController extends Controller
         }
 
         $user->update($updates);
+
+        $shopUserId = (int) ($updates['parent_user_id'] ?? $user->id);
+        if (in_array($updates['role'], ['owner', 'viewer'], true) && Schema::hasTable('user_scrape_settings')) {
+            $setting = UserScrapeSetting::query()->firstOrCreate(['user_id' => $shopUserId]);
+            if (Schema::hasColumn($setting->getTable(), 'scrape_schedule_times')) {
+                $raw = trim((string) ($data['scrape_schedule_times'] ?? ''));
+                $lines = $raw === '' ? [] : preg_split('/\R+/', $raw, -1, PREG_SPLIT_NO_EMPTY);
+                $times = [];
+                foreach ($lines ?: [] as $line) {
+                    $s = trim((string) $line);
+                    if ($s === '') {
+                        continue;
+                    }
+
+                    $h = null;
+                    $m = null;
+
+                    if (preg_match('/^(\d{1,2})\s*:\s*(\d{1,2})$/', $s, $mm) === 1) {
+                        $h = (int) $mm[1];
+                        $m = (int) $mm[2];
+                    } elseif (preg_match('/^(\d{1,2})\s*h(?:\s*(\d{1,2}))?$/iu', $s, $mm) === 1) {
+                        $h = (int) $mm[1];
+                        $m = isset($mm[2]) && $mm[2] !== '' ? (int) $mm[2] : 0;
+                    } elseif (preg_match('/^(\d{1,2})$/', $s, $mm) === 1) {
+                        $h = (int) $mm[1];
+                        $m = 0;
+                    }
+
+                    if (is_null($h) || is_null($m) || $h < 0 || $h > 23 || $m < 0 || $m > 59) {
+                        continue;
+                    }
+
+                    $times[] = sprintf('%02d:%02d', $h, $m);
+                }
+
+                $times = array_values(array_unique($times));
+                sort($times);
+
+                $setting->scrape_schedule_times = $times ? json_encode($times, JSON_UNESCAPED_UNICODE) : null;
+                $setting->save();
+            }
+        }
 
         return redirect()->route('admin.users.index')->with('status', 'Đã cập nhật người dùng');
     }

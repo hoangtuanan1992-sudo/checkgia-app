@@ -99,6 +99,34 @@
                         </div>
                     </div>
 
+                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px" id="scrapeScheduleCard">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Cài đặt thời gian check sản phẩm</h2>
+                            <p class="card-sub">
+                                @if(($shopUser ?? null))
+                                    Áp dụng cho shop: {{ $shopUser->email }}
+                                @else
+                                    Áp dụng cho shop
+                                @endif
+                            </p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            @php($rawTimes = old('scrape_schedule_times'))
+                            @php($rawTimes = is_null($rawTimes) ? (string) (optional($scrapeSetting)->scrape_schedule_times ?? '') : (string) $rawTimes)
+                            @php($decodedTimes = $rawTimes !== '' ? json_decode($rawTimes, true) : null)
+                            @php($displayTimes = is_array($decodedTimes) ? implode("\n", array_values(array_filter(array_map(fn($v) => trim((string) $v), $decodedTimes)))) : $rawTimes)
+
+                            <div class="field" style="margin-top:0">
+                                <label class="label" for="scrape_schedule_times">Giờ chạy mỗi ngày (mỗi dòng 1 giờ)</label>
+                                <textarea class="input" id="scrape_schedule_times" name="scrape_schedule_times" rows="4" placeholder="05:00&#10;12:00&#10;20:00">{{ $displayTimes }}</textarea>
+                                @error('scrape_schedule_times')<div class="error">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="hint" style="margin-top:10px">
+                                Nhập định dạng: 05:00 hoặc 5h hoặc 5. Mỗi dòng là 1 lần cập nhật trong ngày. Để trống để dùng chế độ cập nhật theo phút như hiện tại.
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="actions" style="justify-content:flex-end">
                         <button class="btn" type="submit">Lưu</button>
                     </div>
@@ -113,6 +141,7 @@
             const parentField = document.getElementById('parentField');
             const serviceCard = document.getElementById('serviceCard');
             const noteCard = document.getElementById('noteCard');
+            const scrapeScheduleCard = document.getElementById('scrapeScheduleCard');
 
             function sync() {
                 if (!role || !parentField) return;
@@ -120,6 +149,7 @@
                 const showForShop = role.value === 'owner';
                 if (serviceCard) serviceCard.style.display = showForShop ? '' : 'none';
                 if (noteCard) noteCard.style.display = showForShop ? '' : 'none';
+                if (scrapeScheduleCard) scrapeScheduleCard.style.display = (role.value === 'owner' || role.value === 'viewer') ? '' : 'none';
             }
 
             if (role) role.addEventListener('change', sync);
