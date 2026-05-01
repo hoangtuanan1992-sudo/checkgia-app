@@ -24,7 +24,7 @@ class DashboardQuickScanController extends Controller
         ]);
     }
 
-    public function scan(Request $request): View
+    public function scan(Request $request): View|RedirectResponse
     {
         $validated = $request->validate([
             'base_url' => ['required', 'url', 'max:2048'],
@@ -36,20 +36,13 @@ class DashboardQuickScanController extends Controller
         $sitemapUrl = trim((string) ($validated['sitemap_url'] ?? ''));
         $limit = (int) $validated['limit'];
 
-        $baseHost = parse_url($baseUrl, PHP_URL_HOST);
-        $baseHost = is_string($baseHost) ? strtolower($baseHost) : '';
-
-        $candidates = [];
-        if ($sitemapUrl !== '') {
-            $candidates[] = $sitemapUrl;
-        } else {
-            $base = rtrim($baseUrl, '/');
-            $candidates = [
-                $base.'/sitemap.xml',
-                $base.'/sitemap_index.xml',
-                $base.'/sitemap.xml.gz',
-            ];
-        }
+        $parsedScheme = parse_url($baseUrl, PHP_URL_SCHEME);
+        $parsedHost = parse_url($baseUrl, PHP_URL_HOST);
+        $parsedPort = parse_url($baseUrl, PHP_URL_PORT);
+        $scheme = is_string($parsedScheme) && $parsedScheme !== '' ? strtolower($parsedScheme) : 'https';
+        $baseHost = is_string($parsedHost) ? strtolower($parsedHost) : '';
+        $port = is_int($parsedPort) ? $parsedPort : null;
+        $origin = $baseHost ? ($scheme.'://'.$baseHost.($port ? ':'.$port : '')) : rtrim($baseUrl, '/');
 
         $timeoutSeconds = 7;
         if (Schema::hasTable('app_settings') && Schema::hasColumn('app_settings', 'website_scrape_timeout_seconds')) {
@@ -65,6 +58,72 @@ class DashboardQuickScanController extends Controller
             'Accept-Language' => 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
         ])->connectTimeout($timeoutSeconds)->timeout($timeoutSeconds)->retry(1, 100);
 
+        $candidates = [];
+        if ($sitemapUrl !== '') {
+            $candidates[] = $sitemapUrl;
+        } else {
+            $robotsUrl = rtrim($origin, '/').'/robots.txt';
+            try {
+                $res = $req->get($robotsUrl);
+                if ($res->successful()) {
+                    $robots = (string) $res->body();
+                    $lines = preg_split('/\R+/', $robots) ?: [];
+                    foreach ($lines as $line) {
+                        $line = trim((string) $line);
+                        if ($line === '' || str_starts_with($line, '#')) {
+                            continue;
+                        }
+                        if (preg_match('/^sitemap\s*:\s*(\S+)/i', $line, $m) === 1) {
+                            $u = trim((string) $m[1]);
+                            if ($u === '') {
+                                continue;
+                            }
+                            if (! str_starts_with($u, 'http://') && ! str_starts_with($u, 'https://')) {
+                                continue;
+                            }
+                            $host = parse_url($u, PHP_URL_HOST);
+                            $host = is_string($host) ? strtolower($host) : '';
+                            if ($baseHost !== '' && $host !== '' && $host !== $baseHost) {
+                                continue;
+                            }
+                            $candidates[] = $u;
+                        }
+                    }
+                }
+            } catch (\Throwable) {
+            }
+
+            $originBase = rtrim($origin, '/');
+            $candidates[] = $originBase.'/sitemap.xml';
+            $candidates[] = $originBase.'/sitemap_index.xml';
+            $candidates[] = $originBase.'/sitemap.xml.gz';
+        }
+
+        $candidates = array_values(array_unique(array_values(array_filter(array_map(fn ($v) => trim((string) $v), $candidates)))));
+
+        $decodeSitemapBody = function (string $url, string $body): ?string {
+            $body = (string) $body;
+            if ($body === '') {
+                return null;
+            }
+            if (strlen($body) > 10 * 1024 * 1024) {
+                return null;
+            }
+            if (str_ends_with(strtolower($url), '.gz')) {
+                $decoded = @gzdecode($body);
+                if (! is_string($decoded) || $decoded === '') {
+                    return null;
+                }
+                if (strlen($decoded) > 10 * 1024 * 1024) {
+                    return null;
+                }
+
+                return $decoded;
+            }
+
+            return $body;
+        };
+
         $scanMessage = null;
         $rawXml = null;
         $usedSitemap = null;
@@ -74,8 +133,8 @@ class DashboardQuickScanController extends Controller
                 if (! $res->successful()) {
                     continue;
                 }
-                $body = (string) $res->body();
-                if (trim($body) === '') {
+                $body = $decodeSitemapBody($u, (string) $res->body());
+                if (! is_string($body) || trim($body) === '') {
                     continue;
                 }
                 $rawXml = $body;
@@ -113,16 +172,20 @@ class DashboardQuickScanController extends Controller
                 return;
             }
             $visited['__sitemap:'.$url] = true;
-            if (str_ends_with(strtolower($url), '.gz')) {
-                return;
-            }
             try {
                 $res = $req->get($url);
                 if (! $res->successful()) {
                     return;
                 }
-                $body = (string) $res->body();
-                if (trim($body) === '') {
+                $bodyRaw = (string) $res->body();
+                if (trim($bodyRaw) === '') {
+                    return;
+                }
+                $body = str_ends_with(strtolower($url), '.gz') ? (@gzdecode($bodyRaw) ?: '') : $bodyRaw;
+                if (! is_string($body) || trim($body) === '') {
+                    return;
+                }
+                if (strlen($body) > 10 * 1024 * 1024) {
                     return;
                 }
                 $sx = $parseXml($body);
@@ -189,6 +252,13 @@ class DashboardQuickScanController extends Controller
             }
         } else {
             $scanMessage = 'Không tìm thấy sitemap hoặc không truy cập được.';
+        }
+
+        if (($sitemapUrl === '') && $usedSitemap === null && $urls === []) {
+            return redirect()
+                ->route('dashboard.quick-scan')
+                ->withInput()
+                ->withErrors(['sitemap_url' => 'Không tự tìm thấy sitemap. Vui lòng nhập link sitemap (xem robots.txt hoặc thử /sitemap.xml).']);
         }
 
         return view('dashboard.quick-scan', [
@@ -299,4 +369,3 @@ class DashboardQuickScanController extends Controller
         return mb_substr($host, 0, 255);
     }
 }
-

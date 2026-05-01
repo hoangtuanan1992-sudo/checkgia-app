@@ -15,6 +15,8 @@
             <div class="card-body">
                 <form method="POST" action="{{ route('dashboard.quick-scan.scan') }}">
                     @csrf
+                    @php($sitemapVal = old('sitemap_url', $sitemapUrl ?? ''))
+                    @php($showSitemap = trim((string) $sitemapVal) !== '' || $errors->has('sitemap_url'))
                     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
                         <div class="field" style="margin-top:0">
                             <label class="label" for="base_url">Website shop</label>
@@ -22,9 +24,17 @@
                             @error('base_url')<div class="error">{{ $message }}</div>@enderror
                         </div>
                         <div class="field" style="margin-top:0">
-                            <label class="label" for="sitemap_url">Sitemap (tuỳ chọn)</label>
-                            <input class="input" id="sitemap_url" name="sitemap_url" type="url" value="{{ old('sitemap_url', $sitemapUrl ?? '') }}" placeholder="https://tenmiencuaban.com/sitemap.xml">
-                            @error('sitemap_url')<div class="error">{{ $message }}</div>@enderror
+                            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-end">
+                                <label class="label" for="sitemap_url">Sitemap</label>
+                                <button class="btn btn-secondary" type="button" id="showSitemapBtn" style="height:32px;padding:0 10px;display:{{ $showSitemap ? 'none' : '' }}">Nhập sitemap</button>
+                            </div>
+                            <div id="sitemapField" style="display:{{ $showSitemap ? '' : 'none' }}">
+                                <input class="input" id="sitemap_url" name="sitemap_url" type="url" value="{{ $sitemapVal }}" placeholder="https://tenmiencuaban.com/sitemap.xml">
+                                @error('sitemap_url')<div class="error">{{ $message }}</div>@enderror
+                                <div class="hint" style="margin-top:10px">
+                                    Nếu để trống, hệ thống sẽ tự tìm sitemap qua robots.txt và các đường dẫn phổ biến. Chỉ nhập khi không tự tìm được.
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:12px">
@@ -107,6 +117,8 @@
             const selectAllBtn = document.getElementById('scanSelectAll');
             const unselectAllBtn = document.getElementById('scanUnselectAll');
             const checks = Array.from(document.querySelectorAll('.scan-check'));
+            const showSitemapBtn = document.getElementById('showSitemapBtn');
+            const sitemapField = document.getElementById('sitemapField');
 
             function normalize(s) {
                 return String(s || '').toLowerCase().trim();
@@ -136,7 +148,14 @@
 
             if (selectAllBtn) selectAllBtn.addEventListener('click', () => setAll(true));
             if (unselectAllBtn) unselectAllBtn.addEventListener('click', () => setAll(false));
+            if (showSitemapBtn && sitemapField) {
+                showSitemapBtn.addEventListener('click', () => {
+                    sitemapField.style.display = '';
+                    showSitemapBtn.style.display = 'none';
+                    const input = document.getElementById('sitemap_url');
+                    if (input) input.focus();
+                });
+            }
         })();
     </script>
 @endsection
-
