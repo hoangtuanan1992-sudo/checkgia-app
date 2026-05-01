@@ -61,7 +61,12 @@
                             <div>
                                 <h2 class="card-title" style="font-size:18px">Kết quả quét</h2>
                                 <p class="card-sub">
-                                    Run #{{ $run->id }} • Tìm thấy {{ number_format((int) ($run->found_urls ?? 0), 0, ',', '.') }} link • Hiển thị {{ $items->count() }}/{{ $items->total() }}
+                                    Run #{{ $run->id }}
+                                    • Trạng thái: {{ (string) ($run->status ?? 'idle') }}
+                                    • Đã xử lý: {{ number_format((int) ($run->processed_count ?? 0), 0, ',', '.') }}/{{ number_format((int) ($run->found_urls ?? 0), 0, ',', '.') }}
+                                    • Có tên: {{ number_format((int) ($run->product_count ?? 0), 0, ',', '.') }}
+                                    • Có giá: {{ number_format((int) ($run->priced_count ?? 0), 0, ',', '.') }}
+                                    • Hiển thị {{ $items->count() }}/{{ $items->total() }}
                                 </p>
                             </div>
                             <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
@@ -70,6 +75,13 @@
                                     <div class="field" style="margin-top:0;min-width:260px">
                                         <label class="label" for="q">Tìm kiếm</label>
                                         <input class="input" id="q" name="q" type="text" value="{{ $q ?? '' }}" placeholder="Tên hoặc link...">
+                                    </div>
+                                    <div class="field" style="margin-top:0;min-width:160px">
+                                        <label class="label" for="has_price">Lọc</label>
+                                        <select class="input" id="has_price" name="has_price">
+                                            <option value="" @selected(!($hasPrice ?? false))>Tất cả</option>
+                                            <option value="1" @selected(($hasPrice ?? false))>Chỉ có giá</option>
+                                        </select>
                                     </div>
                                     <div class="field" style="margin-top:0;min-width:160px">
                                         <label class="label" for="per_page">Số dòng</label>
@@ -83,6 +95,22 @@
                                         <button class="btn btn-secondary" type="submit">Lọc</button>
                                     </div>
                                 </form>
+
+                                <div class="actions" style="margin-top:0">
+                                    @php($status = (string) ($run->status ?? 'idle'))
+                                    @php($stopRequested = (int) ($run->stop_requested ?? 0) === 1)
+                                    @if(in_array($status, ['running', 'idle', 'pausing'], true) && ! $stopRequested)
+                                        <form method="POST" action="{{ route('dashboard.quick-scan.pause', (int) $run->id) }}" style="display:inline">
+                                            @csrf
+                                            <button class="btn btn-secondary" type="submit">Dừng quét</button>
+                                        </form>
+                                    @elseif(in_array($status, ['paused', 'pausing'], true) || $stopRequested)
+                                        <form method="POST" action="{{ route('dashboard.quick-scan.resume', (int) $run->id) }}" style="display:inline">
+                                            @csrf
+                                            <button class="btn btn-secondary" type="submit">Tiếp tục quét</button>
+                                        </form>
+                                    @endif
+                                </div>
                             </div>
                         </div>
                         <div class="card-body" style="padding:8px 16px 16px">

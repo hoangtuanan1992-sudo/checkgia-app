@@ -3,12 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ScrapeProductPrices;
-use App\Models\AppSetting;
+use App\Jobs\QuickScanScrapeRun;
 use App\Models\Product;
 use App\Models\UserScrapeSetting;
-use App\Models\UserScrapeXpath;
 use App\Models\User;
-use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -59,12 +57,17 @@ class DashboardQuickScanController extends Controller
         }
 
         $q = trim((string) $request->query('q', ''));
+        $hasPrice = (string) $request->query('has_price', '') === '1';
         $items = null;
 
         if ($run) {
             $itemsQuery = DB::table('quick_scan_items')
                 ->where('run_id', (int) $run->id)
                 ->where('is_product', 1);
+
+            if ($hasPrice) {
+                $itemsQuery->whereNotNull('price')->where('price', '>', 0);
+            }
 
             if ($q !== '') {
                 $itemsQuery->where(function ($qq) use ($q) {
@@ -79,8 +82,6 @@ class DashboardQuickScanController extends Controller
                 ->orderByDesc('id')
                 ->paginate($perPage)
                 ->withQueryString();
-
-            $this->hydratePageItemData($userId, $items->items());
         }
 
         return view('dashboard.quick-scan', [
@@ -92,6 +93,7 @@ class DashboardQuickScanController extends Controller
             'items' => $items,
             'q' => $q,
             'perPage' => $perPage,
+            'hasPrice' => $hasPrice,
         ]);
     }
 
@@ -335,12 +337,27 @@ class DashboardQuickScanController extends Controller
         $userId = $request->user()->effectiveUserId();
         $runId = null;
 
+        $setting = UserScrapeSetting::query()->where('user_id', $userId)->first();
+        if (! $setting || ! $setting->own_name_xpath || ! $setting->own_price_xpath) {
+            return redirect()
+                ->route('dashboard.quick-scan')
+                ->withInput()
+                ->withErrors(['base_url' => 'Chưa cấu hình XPath tên/giá của bạn. Vui lòng vào “Cài đặt” để nhập XPath trước khi quét.']);
+        }
+
         DB::transaction(function () use ($userId, $baseUrl, $usedSitemap, $urls, &$runId) {
             $runId = (int) DB::table('quick_scan_runs')->insertGetId([
                 'user_id' => $userId,
                 'base_url' => $baseUrl,
                 'sitemap_url' => $usedSitemap,
                 'found_urls' => count($urls),
+                'status' => 'idle',
+                'stop_requested' => 0,
+                'processed_count' => 0,
+                'product_count' => 0,
+                'priced_count' => 0,
+                'started_at' => null,
+                'finished_at' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -360,7 +377,7 @@ class DashboardQuickScanController extends Controller
                     'name' => null,
                     'price' => null,
                     'fetched_at' => null,
-                    'is_product' => 1,
+                    'is_product' => 0,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
@@ -373,6 +390,10 @@ class DashboardQuickScanController extends Controller
                 DB::table('quick_scan_items')->insertOrIgnore($batch);
             }
         });
+
+        if ($runId) {
+            dispatch(new QuickScanScrapeRun((int) $runId));
+        }
 
         return redirect()->route('dashboard.quick-scan', [
             'run' => $runId,
@@ -476,91 +497,38 @@ class DashboardQuickScanController extends Controller
         return redirect()->route('dashboard')->with('status', $msg);
     }
 
-    private function hydratePageItemData(int $userId, array $items): void
+    public function pause(Request $request, int $run): RedirectResponse
     {
-        if ($items === []) {
-            return;
+        $userId = $request->user()->effectiveUserId();
+        DB::table('quick_scan_runs')
+            ->where('user_id', $userId)
+            ->where('id', $run)
+            ->update([
+                'stop_requested' => 1,
+                'status' => 'pausing',
+                'updated_at' => now(),
+            ]);
+
+        return redirect()->route('dashboard.quick-scan', ['run' => $run])->with('status', 'Đã gửi yêu cầu dừng. Hệ thống sẽ dừng sau khi xử lý xong batch hiện tại.');
+    }
+
+    public function resume(Request $request, int $run): RedirectResponse
+    {
+        $userId = $request->user()->effectiveUserId();
+        $updated = DB::table('quick_scan_runs')
+            ->where('user_id', $userId)
+            ->where('id', $run)
+            ->update([
+                'stop_requested' => 0,
+                'status' => 'running',
+                'updated_at' => now(),
+            ]);
+
+        if ($updated) {
+            dispatch(new QuickScanScrapeRun($run));
         }
 
-        $setting = UserScrapeSetting::query()->where('user_id', $userId)->first();
-        if (! $setting || ! $setting->own_name_xpath || ! $setting->own_price_xpath) {
-            return;
-        }
-
-        $appSetting = null;
-        try {
-            $appSetting = AppSetting::current();
-        } catch (\Throwable) {
-        }
-        $concurrency = max(1, (int) ($appSetting?->website_scrape_concurrency ?? 10));
-        $timeoutSeconds = max(1, (int) ($appSetting?->website_scrape_timeout_seconds ?? 7));
-
-        $scraper = new PriceScraper(timeoutSeconds: $timeoutSeconds, connectTimeoutSeconds: $timeoutSeconds);
-        $nameXpaths = array_merge(
-            [(string) $setting->own_name_xpath],
-            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
-        );
-        $priceXpaths = array_merge(
-            [(string) $setting->own_price_xpath],
-            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
-        );
-
-        $toFetch = [];
-        foreach ($items as $row) {
-            $id = (int) ($row->id ?? 0);
-            $url = (string) ($row->url ?? '');
-            $fetchedAt = $row->fetched_at ?? null;
-            if ($id > 0 && $url !== '' && $fetchedAt === null) {
-                $toFetch[(string) $id] = $url;
-            }
-        }
-
-        if ($toFetch === []) {
-            return;
-        }
-
-        try {
-            $htmlByKey = $scraper->fetchHtmlPool($toFetch, $concurrency);
-        } catch (\Throwable) {
-            $htmlByKey = [];
-        }
-
-        $now = now();
-        foreach ($toFetch as $id => $url) {
-            $html = $htmlByKey[$id] ?? null;
-            if (! is_string($html) || trim($html) === '') {
-                continue;
-            }
-
-            $name = $scraper->extractFirstByXPaths($html, $nameXpaths);
-            if (! $name) {
-                $name = $scraper->extractTitle($html);
-            }
-
-            $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
-            $price = $scraper->parsePriceToInt($priceRaw, (string) ($setting->price_regex ?? null));
-
-            if (! $name || is_null($price)) {
-                $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
-                if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
-                    $name = (string) $structured['name'];
-                }
-                if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
-                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], (string) ($setting->price_regex ?? null));
-                }
-            }
-
-            $isProduct = ($name && ! is_null($price) && (int) $price > 0);
-            DB::table('quick_scan_items')
-                ->where('id', (int) $id)
-                ->update([
-                    'name' => $name ? mb_substr(trim((string) $name), 0, 255) : null,
-                    'price' => $price,
-                    'fetched_at' => $now,
-                    'is_product' => $isProduct ? 1 : 0,
-                    'updated_at' => $now,
-                ]);
-        }
+        return redirect()->route('dashboard.quick-scan', ['run' => $run])->with('status', 'Đã tiếp tục quét.');
     }
 
     private function guessProductNameFromUrl(string $url): string
