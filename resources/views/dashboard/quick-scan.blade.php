@@ -173,6 +173,12 @@
         </div>
     </div>
 
+    <style>
+        .scan-row:hover{background:rgba(17,24,39,.04)}
+        .scan-row.is-selected{background:rgba(13,110,253,.14)}
+        .scan-row.is-selected td{font-weight:700}
+    </style>
+
     <script>
         (function () {
             const selectAllBtn = document.getElementById('scanSelectAll');
@@ -213,7 +219,7 @@
 
             function setRowSelected(tr, on) {
                 if (!tr) return;
-                tr.style.background = on ? 'rgba(13,110,253,.10)' : '';
+                tr.classList.toggle('is-selected', !!on);
             }
 
             function syncUi(map) {
