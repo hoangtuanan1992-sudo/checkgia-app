@@ -3,10 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\ScrapeProductPrices;
+use App\Models\AppSetting;
 use App\Models\Product;
+use App\Models\UserScrapeSetting;
+use App\Models\UserScrapeXpath;
 use App\Models\User;
+use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
@@ -15,12 +20,78 @@ class DashboardQuickScanController extends Controller
 {
     public function index(Request $request): View
     {
+        $authUser = $request->user();
+        $userId = $authUser->effectiveUserId();
+
+        $perPage = 50;
+        if (Schema::hasColumn('users', 'quick_scan_per_page')) {
+            $stored = User::query()->whereKey($authUser->id)->value('quick_scan_per_page');
+            $storedInt = is_null($stored) ? null : (int) $stored;
+            if (in_array($storedInt, [25, 50, 100, 200], true)) {
+                $perPage = $storedInt;
+            }
+        }
+
+        $perPageRaw = trim((string) $request->query('per_page', ''));
+        if ($perPageRaw !== '' && ctype_digit($perPageRaw)) {
+            $pp = (int) $perPageRaw;
+            if (in_array($pp, [25, 50, 100, 200], true)) {
+                $perPage = $pp;
+                if (Schema::hasColumn('users', 'quick_scan_per_page')) {
+                    User::query()->whereKey($authUser->id)->update(['quick_scan_per_page' => $pp]);
+                }
+            }
+        }
+
+        $runId = trim((string) $request->query('run', ''));
+        $run = null;
+        if ($runId !== '' && ctype_digit($runId)) {
+            $run = DB::table('quick_scan_runs')
+                ->where('user_id', $userId)
+                ->where('id', (int) $runId)
+                ->first();
+        }
+        if (! $run) {
+            $run = DB::table('quick_scan_runs')
+                ->where('user_id', $userId)
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        $q = trim((string) $request->query('q', ''));
+        $items = null;
+
+        if ($run) {
+            $itemsQuery = DB::table('quick_scan_items')
+                ->where('run_id', (int) $run->id)
+                ->where('is_product', 1);
+
+            if ($q !== '') {
+                $itemsQuery->where(function ($qq) use ($q) {
+                    $qq->where('url', 'like', '%'.$q.'%')
+                        ->orWhere('name', 'like', '%'.$q.'%')
+                        ->orWhere('name_guess', 'like', '%'.$q.'%');
+                });
+            }
+
+            /** @var LengthAwarePaginator $items */
+            $items = $itemsQuery
+                ->orderByDesc('id')
+                ->paginate($perPage)
+                ->withQueryString();
+
+            $this->hydratePageItemData($userId, $items->items());
+        }
+
         return view('dashboard.quick-scan', [
             'baseUrl' => (string) old('base_url', (string) $request->query('base_url', '')),
             'sitemapUrl' => (string) old('sitemap_url', (string) $request->query('sitemap_url', '')),
             'limit' => (int) old('limit', (int) $request->query('limit', 2000)),
-            'urls' => [],
             'scanMessage' => null,
+            'run' => $run,
+            'items' => $items,
+            'q' => $q,
+            'perPage' => $perPage,
         ]);
     }
 
@@ -261,43 +332,98 @@ class DashboardQuickScanController extends Controller
                 ->withErrors(['sitemap_url' => 'Không tự tìm thấy sitemap. Vui lòng nhập link sitemap (xem robots.txt hoặc thử /sitemap.xml).']);
         }
 
-        return view('dashboard.quick-scan', [
-            'baseUrl' => $baseUrl,
-            'sitemapUrl' => $sitemapUrl,
-            'limit' => $limit,
-            'urls' => $urls,
-            'scanMessage' => $scanMessage,
-        ]);
+        $userId = $request->user()->effectiveUserId();
+        $runId = null;
+
+        DB::transaction(function () use ($userId, $baseUrl, $usedSitemap, $urls, &$runId) {
+            $runId = (int) DB::table('quick_scan_runs')->insertGetId([
+                'user_id' => $userId,
+                'base_url' => $baseUrl,
+                'sitemap_url' => $usedSitemap,
+                'found_urls' => count($urls),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $now = now();
+            $batch = [];
+            foreach ($urls as $url) {
+                $url = trim((string) $url);
+                if ($url === '') {
+                    continue;
+                }
+                $batch[] = [
+                    'run_id' => $runId,
+                    'url_hash' => sha1($url),
+                    'url' => $url,
+                    'name_guess' => $this->guessProductNameFromUrl($url),
+                    'name' => null,
+                    'price' => null,
+                    'fetched_at' => null,
+                    'is_product' => 1,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+                if (count($batch) >= 500) {
+                    DB::table('quick_scan_items')->insertOrIgnore($batch);
+                    $batch = [];
+                }
+            }
+            if ($batch !== []) {
+                DB::table('quick_scan_items')->insertOrIgnore($batch);
+            }
+        });
+
+        return redirect()->route('dashboard.quick-scan', [
+            'run' => $runId,
+        ])->with('status', $scanMessage ?: 'Đã quét xong.');
     }
 
     public function import(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'base_url' => ['required', 'url', 'max:2048'],
+            'run_id' => ['required', 'integer'],
             'urls' => ['array'],
             'urls.*' => ['nullable', 'url', 'max:2048'],
         ]);
 
         $userId = $request->user()->effectiveUserId();
+        $runId = (int) $validated['run_id'];
+
+        $run = DB::table('quick_scan_runs')->where('user_id', $userId)->where('id', $runId)->first();
+        if (! $run) {
+            return redirect()->route('dashboard.quick-scan')->withErrors(['run_id' => 'Phiên quét không tồn tại hoặc không thuộc tài khoản của bạn.']);
+        }
+
         $limit = User::resolveProductLimitById($userId);
         $currentCount = Product::query()->where('user_id', $userId)->count();
         $remaining = max(0, $limit - $currentCount);
-
-        $baseUrl = trim((string) $validated['base_url']);
-        $baseHost = parse_url($baseUrl, PHP_URL_HOST);
-        $baseHost = is_string($baseHost) ? strtolower($baseHost) : '';
 
         $urls = $validated['urls'] ?? [];
         $clean = [];
         foreach ($urls as $u) {
             $u = is_string($u) ? trim($u) : '';
             if ($u === '') continue;
-            $host = parse_url($u, PHP_URL_HOST);
-            $host = is_string($host) ? strtolower($host) : '';
-            if ($baseHost !== '' && $host !== '' && $host !== $baseHost) continue;
             $clean[$u] = true;
         }
         $cleanUrls = array_keys($clean);
+
+        if ($cleanUrls === []) {
+            return redirect()->route('dashboard.quick-scan', ['run' => $runId])->withErrors(['urls' => 'Vui lòng chọn ít nhất 1 sản phẩm.']);
+        }
+
+        $allowed = DB::table('quick_scan_items')
+            ->where('run_id', $runId)
+            ->where('is_product', 1)
+            ->whereIn('url', $cleanUrls)
+            ->pluck('url')
+            ->all();
+        $allowedSet = array_fill_keys(array_map('strval', $allowed), true);
+
+        $cleanUrls = array_values(array_filter($cleanUrls, fn ($u) => isset($allowedSet[$u])));
+        if ($cleanUrls === []) {
+            return redirect()->route('dashboard.quick-scan', ['run' => $runId])->withErrors(['urls' => 'Không tìm thấy sản phẩm hợp lệ trong phiên quét.']);
+        }
 
         $created = 0;
         $skippedExists = 0;
@@ -348,6 +474,93 @@ class DashboardQuickScanController extends Controller
         }
 
         return redirect()->route('dashboard')->with('status', $msg);
+    }
+
+    private function hydratePageItemData(int $userId, array $items): void
+    {
+        if ($items === []) {
+            return;
+        }
+
+        $setting = UserScrapeSetting::query()->where('user_id', $userId)->first();
+        if (! $setting || ! $setting->own_name_xpath || ! $setting->own_price_xpath) {
+            return;
+        }
+
+        $appSetting = null;
+        try {
+            $appSetting = AppSetting::current();
+        } catch (\Throwable) {
+        }
+        $concurrency = max(1, (int) ($appSetting?->website_scrape_concurrency ?? 10));
+        $timeoutSeconds = max(1, (int) ($appSetting?->website_scrape_timeout_seconds ?? 7));
+
+        $scraper = new PriceScraper(timeoutSeconds: $timeoutSeconds, connectTimeoutSeconds: $timeoutSeconds);
+        $nameXpaths = array_merge(
+            [(string) $setting->own_name_xpath],
+            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
+        );
+        $priceXpaths = array_merge(
+            [(string) $setting->own_price_xpath],
+            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
+        );
+
+        $toFetch = [];
+        foreach ($items as $row) {
+            $id = (int) ($row->id ?? 0);
+            $url = (string) ($row->url ?? '');
+            $fetchedAt = $row->fetched_at ?? null;
+            if ($id > 0 && $url !== '' && $fetchedAt === null) {
+                $toFetch[(string) $id] = $url;
+            }
+        }
+
+        if ($toFetch === []) {
+            return;
+        }
+
+        try {
+            $htmlByKey = $scraper->fetchHtmlPool($toFetch, $concurrency);
+        } catch (\Throwable) {
+            $htmlByKey = [];
+        }
+
+        $now = now();
+        foreach ($toFetch as $id => $url) {
+            $html = $htmlByKey[$id] ?? null;
+            if (! is_string($html) || trim($html) === '') {
+                continue;
+            }
+
+            $name = $scraper->extractFirstByXPaths($html, $nameXpaths);
+            if (! $name) {
+                $name = $scraper->extractTitle($html);
+            }
+
+            $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
+            $price = $scraper->parsePriceToInt($priceRaw, (string) ($setting->price_regex ?? null));
+
+            if (! $name || is_null($price)) {
+                $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
+                if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
+                    $name = (string) $structured['name'];
+                }
+                if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
+                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], (string) ($setting->price_regex ?? null));
+                }
+            }
+
+            $isProduct = ($name && ! is_null($price) && (int) $price > 0);
+            DB::table('quick_scan_items')
+                ->where('id', (int) $id)
+                ->update([
+                    'name' => $name ? mb_substr(trim((string) $name), 0, 255) : null,
+                    'price' => $price,
+                    'fetched_at' => $now,
+                    'is_product' => $isProduct ? 1 : 0,
+                    'updated_at' => $now,
+                ]);
+        }
     }
 
     private function guessProductNameFromUrl(string $url): string
