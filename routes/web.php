@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardCompetitorSetupController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardExportController;
 use App\Http\Controllers\DashboardProductController;
+use App\Http\Controllers\DashboardQuickScanController;
 use App\Http\Controllers\DashboardScrapeNowController;
 use App\Http\Controllers\DemoController;
 use App\Http\Controllers\ProductController;
@@ -41,6 +42,9 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/dashboard/compare-table/column-widths', [DashboardController::class, 'updateCompareColumnWidths'])->name('dashboard.compare-table.column-widths.update');
+    Route::get('/dashboard/quick-scan', [DashboardQuickScanController::class, 'index'])->name('dashboard.quick-scan');
+    Route::post('/dashboard/quick-scan/scan', [DashboardQuickScanController::class, 'scan'])->name('dashboard.quick-scan.scan');
+    Route::post('/dashboard/quick-scan/import', [DashboardQuickScanController::class, 'import'])->name('dashboard.quick-scan.import');
     Route::get('/dashboard/reports', [ReportController::class, 'index'])->name('dashboard.reports');
     Route::get('/dashboard/competitors', [DashboardCompetitorSetupController::class, 'index'])->name('dashboard.competitors');
     Route::get('/dashboard/export/products', [DashboardExportController::class, 'products'])->name('dashboard.export.products');
