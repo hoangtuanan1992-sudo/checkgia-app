@@ -18,6 +18,30 @@ use Illuminate\View\View;
 
 class DashboardQuickScanController extends Controller
 {
+    private function shouldSkipNonProductUrl(string $url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        $path = is_string($path) ? trim($path) : '';
+        $path = $path !== '' ? $path : '/';
+
+        if ($path === '/' || $path === '') {
+            return true;
+        }
+
+        if (str_ends_with($path, '/')) {
+            return true;
+        }
+
+        $lower = strtolower($path);
+        foreach (['/c/', '/category/', '/danh-muc/', '/collections/', '/collection/', '/search', '/tim-kiem'] as $needle) {
+            if (str_contains($lower, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function clearRuns(Request $request): RedirectResponse
     {
         if ($request->user()->isViewer()) {
@@ -428,7 +452,7 @@ class DashboardQuickScanController extends Controller
 
         return redirect()->route('dashboard.quick-scan', [
             'run' => $runId,
-        ])->with('status', $scanMessage ?: 'Đã quét xong.');
+        ])->with('status', $scanMessage ? ($scanMessage.' Đang lấy tên/giá...') : 'Đang quét và lấy tên/giá...');
     }
 
     public function tick(Request $request, int $run): JsonResponse
@@ -519,12 +543,59 @@ class DashboardQuickScanController extends Controller
         );
 
         $urlsByKey = [];
+        $skipIds = [];
         foreach ($batch as $row) {
             $id = (int) ($row->id ?? 0);
             $url = trim((string) ($row->url ?? ''));
+            if ($id > 0 && $url !== '' && $this->shouldSkipNonProductUrl($url)) {
+                $skipIds[] = $id;
+                continue;
+            }
             if ($id > 0 && $url !== '') {
                 $urlsByKey[(string) $id] = $url;
             }
+        }
+
+        if ($skipIds !== []) {
+            $now = now();
+            DB::table('quick_scan_items')
+                ->whereIn('id', $skipIds)
+                ->update([
+                    'name' => null,
+                    'price' => null,
+                    'fetched_at' => $now,
+                    'is_product' => 0,
+                    'updated_at' => $now,
+                ]);
+            DB::table('quick_scan_runs')
+                ->where('id', $run)
+                ->update([
+                    'processed_count' => DB::raw('processed_count + '.(int) count($skipIds)),
+                    'updated_at' => now(),
+                ]);
+        }
+
+        if ($urlsByKey === []) {
+            $runAfter = DB::table('quick_scan_runs')->where('id', $run)->first(['processed_count', 'product_count', 'priced_count', 'found_urls']);
+            $done = $runAfter && (int) ($runAfter->processed_count ?? 0) >= (int) ($runAfter->found_urls ?? 0);
+            if ($done) {
+                DB::table('quick_scan_runs')
+                    ->where('id', $run)
+                    ->update([
+                        'status' => 'done',
+                        'finished_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            return response()->json([
+                'ok' => true,
+                'status' => $done ? 'done' : 'running',
+                'processed_count' => (int) ($runAfter->processed_count ?? 0),
+                'product_count' => (int) ($runAfter->product_count ?? 0),
+                'priced_count' => (int) ($runAfter->priced_count ?? 0),
+                'found_urls' => (int) ($runAfter->found_urls ?? 0),
+            ]);
         }
 
         try {
@@ -559,11 +630,13 @@ class DashboardQuickScanController extends Controller
                 $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
                 $price = $scraper->parsePriceToInt($priceRaw, (string) ($setting->price_regex ?? null));
 
-                $isProduct = is_string($name) && trim($name) !== '';
-                if ($isProduct) {
+                $hasName = is_string($name) && trim($name) !== '';
+                $hasPrice = ! is_null($price) && (int) $price > 0;
+                $isProduct = $hasName && $hasPrice;
+                if ($hasName) {
                     $products++;
                 }
-                if (! is_null($price) && (int) $price > 0) {
+                if ($hasPrice) {
                     $priced++;
                 }
             }

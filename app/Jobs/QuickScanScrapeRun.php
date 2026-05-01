@@ -24,6 +24,30 @@ class QuickScanScrapeRun implements ShouldQueue
 
     public function __construct(public int $runId) {}
 
+    private function shouldSkipNonProductUrl(string $url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        $path = is_string($path) ? trim($path) : '';
+        $path = $path !== '' ? $path : '/';
+
+        if ($path === '/' || $path === '') {
+            return true;
+        }
+
+        if (str_ends_with($path, '/')) {
+            return true;
+        }
+
+        $lower = strtolower($path);
+        foreach (['/c/', '/category/', '/danh-muc/', '/collections/', '/collection/', '/search', '/tim-kiem'] as $needle) {
+            if (str_contains($lower, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function handle(): void
     {
         $run = DB::table('quick_scan_runs')->where('id', $this->runId)->first();
@@ -103,13 +127,37 @@ class QuickScanScrapeRun implements ShouldQueue
             ]);
 
         $urlsByKey = [];
+        $skipIds = [];
         foreach ($items as $row) {
             $id = (int) ($row->id ?? 0);
             $url = trim((string) ($row->url ?? ''));
             if ($id <= 0 || $url === '') {
                 continue;
             }
+            if ($this->shouldSkipNonProductUrl($url)) {
+                $skipIds[] = $id;
+                continue;
+            }
             $urlsByKey[(string) $id] = $url;
+        }
+
+        if ($skipIds !== []) {
+            $now = now();
+            DB::table('quick_scan_items')
+                ->whereIn('id', $skipIds)
+                ->update([
+                    'name' => null,
+                    'price' => null,
+                    'fetched_at' => $now,
+                    'is_product' => 0,
+                    'updated_at' => $now,
+                ]);
+            DB::table('quick_scan_runs')
+                ->where('id', $this->runId)
+                ->update([
+                    'processed_count' => DB::raw('processed_count + '.(int) count($skipIds)),
+                    'updated_at' => now(),
+                ]);
         }
 
         if ($urlsByKey === []) {
@@ -156,11 +204,13 @@ class QuickScanScrapeRun implements ShouldQueue
                 $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
                 $price = $scraper->parsePriceToInt($priceRaw, (string) ($setting->price_regex ?? null));
 
-                $isProduct = (is_string($name) && trim($name) !== '');
-                if ($isProduct) {
+                $hasName = is_string($name) && trim($name) !== '';
+                $hasPrice = ! is_null($price) && (int) $price > 0;
+                $isProduct = $hasName && $hasPrice;
+                if ($hasName) {
                     $products++;
                 }
-                if (! is_null($price) && (int) $price > 0) {
+                if ($hasPrice) {
                     $priced++;
                 }
             }
