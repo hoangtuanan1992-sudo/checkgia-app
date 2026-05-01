@@ -140,7 +140,8 @@
                                                 <a class="btn btn-secondary" href="{{ $items->previousPageUrl() }}">Trước</a>
                                             @endif
 
-                                            @php($pages = array_values(array_unique(array_filter(array_merge([1,2,3,4,$last,$current-1,$current,$current+1], fn($p)=>is_int($p) && $p>=1 && $p<=$last)))))
+                                            @php($pagesRaw = [1, 2, 3, 4, $last, $current - 1, $current, $current + 1])
+                                            @php($pages = array_values(array_unique(array_filter($pagesRaw, fn ($p) => is_int($p) && $p >= 1 && $p <= $last))))
                                             @php(sort($pages))
                                             @php($pageUrls = $items->getUrlRange(1, $last))
                                             @php($prev = 0)
