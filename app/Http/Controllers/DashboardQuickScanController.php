@@ -73,6 +73,8 @@ class DashboardQuickScanController extends Controller
         $q = trim((string) $request->query('q', ''));
         $hasPrice = (string) $request->query('has_price', '') === '1';
         $items = null;
+        $scanWarning = null;
+        $scanSampleUrls = [];
 
         if ($run) {
             $itemsQuery = DB::table('quick_scan_items')
@@ -96,6 +98,19 @@ class DashboardQuickScanController extends Controller
                 ->orderByDesc('id')
                 ->paginate($perPage)
                 ->withQueryString();
+
+            $found = (int) ($run->found_urls ?? 0);
+            $processed = (int) ($run->processed_count ?? 0);
+            $products = (int) ($run->product_count ?? 0);
+            if ($found > 0 && $processed >= $found && $products === 0) {
+                $scanWarning = 'Không lấy được tên sản phẩm từ bất kỳ link nào. Thường do XPath tên/giá không khớp với website shop hoặc website đang chặn request từ server.';
+                $scanSampleUrls = DB::table('quick_scan_items')
+                    ->where('run_id', (int) $run->id)
+                    ->orderBy('id')
+                    ->limit(5)
+                    ->pluck('url')
+                    ->all();
+            }
         }
 
         return view('dashboard.quick-scan', [
@@ -108,6 +123,8 @@ class DashboardQuickScanController extends Controller
             'q' => $q,
             'perPage' => $perPage,
             'hasPrice' => $hasPrice,
+            'scanWarning' => $scanWarning,
+            'scanSampleUrls' => $scanSampleUrls,
         ]);
     }
 
@@ -523,6 +540,13 @@ class DashboardQuickScanController extends Controller
 
         foreach ($urlsByKey as $id => $url) {
             $html = $htmlByKey[$id] ?? null;
+            if (! is_string($html) || trim($html) === '') {
+                try {
+                    $html = $scraper->fetchHtml($url);
+                } catch (\Throwable) {
+                    $html = null;
+                }
+            }
             $name = null;
             $price = null;
             $isProduct = false;

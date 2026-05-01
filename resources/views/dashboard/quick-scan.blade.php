@@ -61,6 +61,8 @@
 
                 @php($run = $run ?? null)
                 @php($items = $items ?? null)
+                @php($scanWarning = $scanWarning ?? null)
+                @php($scanSampleUrls = $scanSampleUrls ?? [])
                 @if($run && $items)
                     <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px">
                         <div class="card-header" style="padding:16px 16px 6px;display:flex;justify-content:space-between;gap:10px;align-items:flex-end;flex-wrap:wrap">
@@ -74,6 +76,19 @@
                                     • Có giá: <span id="qsPriced">{{ number_format((int) ($run->priced_count ?? 0), 0, ',', '.') }}</span>
                                     • Hiển thị {{ $items->count() }}/{{ $items->total() }}
                                 </p>
+                                @if($scanWarning)
+                                    <div class="hint" style="margin-top:10px;color:#991b1b">
+                                        {{ $scanWarning }}
+                                        @if(is_array($scanSampleUrls) && count($scanSampleUrls) > 0)
+                                            <div style="margin-top:6px">
+                                                Ví dụ link:
+                                                @foreach($scanSampleUrls as $u)
+                                                    <div style="word-break:break-word">{{ $u }}</div>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    </div>
+                                @endif
                             </div>
                             <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
                                 <form method="GET" action="{{ route('dashboard.quick-scan') }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">

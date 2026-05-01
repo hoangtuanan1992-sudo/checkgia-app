@@ -137,12 +137,22 @@ class QuickScanScrapeRun implements ShouldQueue
 
         foreach ($urlsByKey as $id => $url) {
             $html = $htmlByKey[$id] ?? null;
+            if (! is_string($html) || trim($html) === '') {
+                try {
+                    $html = $scraper->fetchHtml($url);
+                } catch (\Throwable) {
+                    $html = null;
+                }
+            }
             $name = null;
             $price = null;
             $isProduct = false;
 
             if (is_string($html) && trim($html) !== '') {
                 $name = $scraper->extractFirstByXPaths($html, $nameXpaths);
+                if (! $name) {
+                    $name = $scraper->extractTitle($html);
+                }
                 $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
                 $price = $scraper->parsePriceToInt($priceRaw, (string) ($setting->price_regex ?? null));
 
@@ -190,4 +200,3 @@ class QuickScanScrapeRun implements ShouldQueue
         dispatch(new self($this->runId));
     }
 }
-
