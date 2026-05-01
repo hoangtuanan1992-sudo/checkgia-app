@@ -7,7 +7,9 @@ use App\Jobs\QuickScanScrapeRun;
 use App\Models\Product;
 use App\Models\UserScrapeSetting;
 use App\Models\User;
+use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -363,12 +365,12 @@ class DashboardQuickScanController extends Controller
                 'base_url' => $baseUrl,
                 'sitemap_url' => $usedSitemap,
                 'found_urls' => count($urls),
-                'status' => 'idle',
+                'status' => 'running',
                 'stop_requested' => 0,
                 'processed_count' => 0,
                 'product_count' => 0,
                 'priced_count' => 0,
-                'started_at' => null,
+                'started_at' => now(),
                 'finished_at' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
@@ -410,6 +412,180 @@ class DashboardQuickScanController extends Controller
         return redirect()->route('dashboard.quick-scan', [
             'run' => $runId,
         ])->with('status', $scanMessage ?: 'Đã quét xong.');
+    }
+
+    public function tick(Request $request, int $run): JsonResponse
+    {
+        $userId = $request->user()->effectiveUserId();
+
+        $runRow = DB::table('quick_scan_runs')
+            ->where('user_id', $userId)
+            ->where('id', $run)
+            ->first();
+
+        if (! $runRow) {
+            return response()->json(['ok' => false, 'message' => 'Run không tồn tại.'], 404);
+        }
+
+        if ((int) ($runRow->stop_requested ?? 0) === 1) {
+            DB::table('quick_scan_runs')
+                ->where('id', $run)
+                ->update([
+                    'status' => 'paused',
+                    'updated_at' => now(),
+                ]);
+
+            return response()->json([
+                'ok' => true,
+                'status' => 'paused',
+                'processed_count' => (int) ($runRow->processed_count ?? 0),
+                'product_count' => (int) ($runRow->product_count ?? 0),
+                'priced_count' => (int) ($runRow->priced_count ?? 0),
+                'found_urls' => (int) ($runRow->found_urls ?? 0),
+            ]);
+        }
+
+        $setting = UserScrapeSetting::query()->where('user_id', $userId)->first();
+        if (! $setting || ! $setting->own_name_xpath || ! $setting->own_price_xpath) {
+            return response()->json(['ok' => false, 'message' => 'Chưa cấu hình XPath tên/giá.'], 422);
+        }
+
+        $batch = DB::table('quick_scan_items')
+            ->where('run_id', $run)
+            ->whereNull('fetched_at')
+            ->orderBy('id')
+            ->limit(10)
+            ->get(['id', 'url'])
+            ->all();
+
+        if ($batch === []) {
+            DB::table('quick_scan_runs')
+                ->where('id', $run)
+                ->update([
+                    'status' => 'done',
+                    'finished_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            return response()->json([
+                'ok' => true,
+                'status' => 'done',
+                'processed_count' => (int) ($runRow->processed_count ?? 0),
+                'product_count' => (int) ($runRow->product_count ?? 0),
+                'priced_count' => (int) ($runRow->priced_count ?? 0),
+                'found_urls' => (int) ($runRow->found_urls ?? 0),
+            ]);
+        }
+
+        $timeoutSeconds = 7;
+        $concurrency = 5;
+        try {
+            if (Schema::hasTable('app_settings') && Schema::hasColumn('app_settings', 'website_scrape_timeout_seconds')) {
+                $timeoutSeconds = max(1, (int) (\App\Models\AppSetting::current()?->website_scrape_timeout_seconds ?? 7));
+            }
+            if (Schema::hasTable('app_settings') && Schema::hasColumn('app_settings', 'website_scrape_concurrency')) {
+                $concurrency = max(1, (int) (\App\Models\AppSetting::current()?->website_scrape_concurrency ?? 5));
+                $concurrency = min(10, $concurrency);
+            }
+        } catch (\Throwable) {
+        }
+
+        $scraper = new PriceScraper(timeoutSeconds: $timeoutSeconds, connectTimeoutSeconds: $timeoutSeconds);
+
+        $nameXpaths = array_merge(
+            [(string) $setting->own_name_xpath],
+            \App\Models\UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
+        );
+        $priceXpaths = array_merge(
+            [(string) $setting->own_price_xpath],
+            \App\Models\UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
+        );
+
+        $urlsByKey = [];
+        foreach ($batch as $row) {
+            $id = (int) ($row->id ?? 0);
+            $url = trim((string) ($row->url ?? ''));
+            if ($id > 0 && $url !== '') {
+                $urlsByKey[(string) $id] = $url;
+            }
+        }
+
+        try {
+            $htmlByKey = $scraper->fetchHtmlPool($urlsByKey, $concurrency);
+        } catch (\Throwable) {
+            $htmlByKey = [];
+        }
+
+        $now = now();
+        $processed = 0;
+        $products = 0;
+        $priced = 0;
+
+        foreach ($urlsByKey as $id => $url) {
+            $html = $htmlByKey[$id] ?? null;
+            $name = null;
+            $price = null;
+            $isProduct = false;
+
+            if (is_string($html) && trim($html) !== '') {
+                $name = $scraper->extractFirstByXPaths($html, $nameXpaths);
+                if (! $name) {
+                    $name = $scraper->extractTitle($html);
+                }
+                $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
+                $price = $scraper->parsePriceToInt($priceRaw, (string) ($setting->price_regex ?? null));
+
+                $isProduct = is_string($name) && trim($name) !== '';
+                if ($isProduct) {
+                    $products++;
+                }
+                if (! is_null($price) && (int) $price > 0) {
+                    $priced++;
+                }
+            }
+
+            DB::table('quick_scan_items')
+                ->where('id', (int) $id)
+                ->update([
+                    'name' => $name ? mb_substr(trim((string) $name), 0, 255) : null,
+                    'price' => $price,
+                    'fetched_at' => $now,
+                    'is_product' => $isProduct ? 1 : 0,
+                    'updated_at' => $now,
+                ]);
+            $processed++;
+        }
+
+        DB::table('quick_scan_runs')
+            ->where('id', $run)
+            ->update([
+                'status' => 'running',
+                'processed_count' => DB::raw('processed_count + '.(int) $processed),
+                'product_count' => DB::raw('product_count + '.(int) $products),
+                'priced_count' => DB::raw('priced_count + '.(int) $priced),
+                'updated_at' => now(),
+            ]);
+
+        $runAfter = DB::table('quick_scan_runs')->where('id', $run)->first(['processed_count', 'product_count', 'priced_count', 'found_urls']);
+        $done = $runAfter && (int) ($runAfter->processed_count ?? 0) >= (int) ($runAfter->found_urls ?? 0);
+        if ($done) {
+            DB::table('quick_scan_runs')
+                ->where('id', $run)
+                ->update([
+                    'status' => 'done',
+                    'finished_at' => now(),
+                    'updated_at' => now(),
+                ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'status' => $done ? 'done' : 'running',
+            'processed_count' => (int) ($runAfter->processed_count ?? 0),
+            'product_count' => (int) ($runAfter->product_count ?? 0),
+            'priced_count' => (int) ($runAfter->priced_count ?? 0),
+            'found_urls' => (int) ($runAfter->found_urls ?? 0),
+        ]);
     }
 
     public function import(Request $request): RedirectResponse
@@ -533,6 +709,7 @@ class DashboardQuickScanController extends Controller
             ->update([
                 'stop_requested' => 0,
                 'status' => 'running',
+                'started_at' => now(),
                 'updated_at' => now(),
             ]);
 

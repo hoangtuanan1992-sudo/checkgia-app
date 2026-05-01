@@ -46,6 +46,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/dashboard/quick-scan/scan', [DashboardQuickScanController::class, 'scan'])->name('dashboard.quick-scan.scan');
     Route::post('/dashboard/quick-scan/import', [DashboardQuickScanController::class, 'import'])->name('dashboard.quick-scan.import');
     Route::post('/dashboard/quick-scan/clear-runs', [DashboardQuickScanController::class, 'clearRuns'])->name('dashboard.quick-scan.clear-runs');
+    Route::post('/dashboard/quick-scan/{run}/tick', [DashboardQuickScanController::class, 'tick'])->name('dashboard.quick-scan.tick');
     Route::post('/dashboard/quick-scan/{run}/pause', [DashboardQuickScanController::class, 'pause'])->name('dashboard.quick-scan.pause');
     Route::post('/dashboard/quick-scan/{run}/resume', [DashboardQuickScanController::class, 'resume'])->name('dashboard.quick-scan.resume');
     Route::get('/dashboard/reports', [ReportController::class, 'index'])->name('dashboard.reports');

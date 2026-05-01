@@ -68,10 +68,10 @@
                                 <h2 class="card-title" style="font-size:18px">Kết quả quét</h2>
                                 <p class="card-sub">
                                     Run #{{ $run->id }}
-                                    • Trạng thái: {{ (string) ($run->status ?? 'idle') }}
-                                    • Đã quét: {{ number_format((int) ($run->processed_count ?? 0), 0, ',', '.') }}/{{ number_format((int) ($run->found_urls ?? 0), 0, ',', '.') }}
-                                    • Sản phẩm: {{ number_format((int) ($run->product_count ?? 0), 0, ',', '.') }}
-                                    • Có giá: {{ number_format((int) ($run->priced_count ?? 0), 0, ',', '.') }}
+                                    • Trạng thái: <span id="qsStatus">{{ (string) ($run->status ?? 'idle') }}</span>
+                                    • Đã quét: <span id="qsProcessed">{{ number_format((int) ($run->processed_count ?? 0), 0, ',', '.') }}</span>/<span id="qsFound">{{ number_format((int) ($run->found_urls ?? 0), 0, ',', '.') }}</span>
+                                    • Sản phẩm: <span id="qsProducts">{{ number_format((int) ($run->product_count ?? 0), 0, ',', '.') }}</span>
+                                    • Có giá: <span id="qsPriced">{{ number_format((int) ($run->priced_count ?? 0), 0, ',', '.') }}</span>
                                     • Hiển thị {{ $items->count() }}/{{ $items->total() }}
                                 </p>
                             </div>
@@ -224,6 +224,13 @@
             const runId = @json(($run ?? null)?->id ? (int) $run->id : null);
             const storageKey = runId ? `checkgia_quick_scan_selected:${runId}` : null;
             const rows = Array.from(document.querySelectorAll('tr.scan-row'));
+            const csrfToken = @json(csrf_token());
+            const tickUrl = @json(($run ?? null) ? route('dashboard.quick-scan.tick', (int) $run->id) : null);
+            const statusEl = document.getElementById('qsStatus');
+            const processedEl = document.getElementById('qsProcessed');
+            const foundEl = document.getElementById('qsFound');
+            const productsEl = document.getElementById('qsProducts');
+            const pricedEl = document.getElementById('qsPriced');
 
             function loadSelected() {
                 if (!storageKey) return {};
@@ -317,6 +324,98 @@
                         form.appendChild(inp);
                     });
                 });
+            }
+
+            function parseIntText(el) {
+                if (!el) return 0;
+                const s = String(el.textContent || '').replace(/[^\d]/g, '');
+                const n = Number(s);
+                return Number.isFinite(n) ? n : 0;
+            }
+
+            function setText(el, v) {
+                if (!el) return;
+                el.textContent = String(v);
+            }
+
+            function formatInt(v) {
+                const n = Number(v);
+                if (!Number.isFinite(n)) return '0';
+                return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            }
+
+            async function doTick() {
+                if (!tickUrl) return null;
+                try {
+                    const res = await fetch(tickUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({}),
+                    });
+                    const data = await res.json().catch(() => null);
+                    if (!res.ok || !data) return null;
+                    return data;
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            let ticking = false;
+            let tickCount = 0;
+            let lastProducts = parseIntText(productsEl);
+            let lastProcessed = parseIntText(processedEl);
+
+            async function loop() {
+                if (ticking) return;
+                if (!tickUrl) return;
+                const currentStatus = statusEl ? String(statusEl.textContent || '') : '';
+                if (currentStatus === 'paused' || currentStatus === 'done' || currentStatus === 'error') return;
+
+                ticking = true;
+                const data = await doTick();
+                ticking = false;
+                if (!data || data.ok !== true) {
+                    setTimeout(loop, 2000);
+                    return;
+                }
+
+                if (statusEl && typeof data.status === 'string') statusEl.textContent = data.status;
+                if (processedEl && data.processed_count !== undefined) processedEl.textContent = formatInt(data.processed_count);
+                if (foundEl && data.found_urls !== undefined) foundEl.textContent = formatInt(data.found_urls);
+                if (productsEl && data.product_count !== undefined) productsEl.textContent = formatInt(data.product_count);
+                if (pricedEl && data.priced_count !== undefined) pricedEl.textContent = formatInt(data.priced_count);
+
+                const newProducts = typeof data.product_count === 'number' ? data.product_count : lastProducts;
+                const newProcessed = typeof data.processed_count === 'number' ? data.processed_count : lastProcessed;
+                tickCount++;
+
+                const shouldReload = (newProducts > lastProducts && (rows.length === 0 || tickCount % 3 === 0)) || (rows.length > 0 && tickCount % 8 === 0 && newProcessed > lastProcessed);
+                lastProducts = newProducts;
+                lastProcessed = newProcessed;
+
+                if (shouldReload) {
+                    window.location.reload();
+                    return;
+                }
+
+                if (data.status === 'done' || data.status === 'paused') {
+                    if (rows.length === 0 && newProducts > 0) {
+                        window.location.reload();
+                    }
+                    return;
+                }
+
+                setTimeout(loop, 1500);
+            }
+
+            if (tickUrl) {
+                setTimeout(loop, 400);
             }
         })();
     </script>
