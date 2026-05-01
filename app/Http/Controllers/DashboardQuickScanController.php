@@ -16,6 +16,18 @@ use Illuminate\View\View;
 
 class DashboardQuickScanController extends Controller
 {
+    public function clearRuns(Request $request): RedirectResponse
+    {
+        if ($request->user()->isViewer()) {
+            abort(403);
+        }
+
+        $userId = $request->user()->effectiveUserId();
+        DB::table('quick_scan_runs')->where('user_id', $userId)->delete();
+
+        return redirect()->route('dashboard.quick-scan')->with('status', 'Đã xoá tất cả run.');
+    }
+
     public function index(Request $request): View
     {
         $authUser = $request->user();

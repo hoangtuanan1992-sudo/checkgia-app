@@ -6,9 +6,15 @@
             <div class="card-header" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
                 <div>
                     <h1 class="card-title">Quét nhanh</h1>
-                    <p class="card-sub">Quét link sản phẩm từ sitemap của website shop, chọn hàng loạt và thêm vào bảng Kết quả so sánh</p>
+                    <p class="card-sub">Quét sản phẩm từ website shop, chọn hàng loạt và thêm vào bảng Kết quả so sánh</p>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+                    @if(!auth()->user()->isViewer())
+                        <form method="POST" action="{{ route('dashboard.quick-scan.clear-runs') }}" style="display:inline" onsubmit="return confirm('Xóa tất cả run?');">
+                            @csrf
+                            <button class="btn btn-secondary" type="submit">Xóa tất cả run</button>
+                        </form>
+                    @endif
                     <a class="btn btn-secondary" href="{{ route('dashboard') }}">Quay lại</a>
                 </div>
             </div>
@@ -44,7 +50,7 @@
                             @error('limit')<div class="error">{{ $message }}</div>@enderror
                         </div>
                         <div class="actions" style="margin-top:0">
-                            <button class="btn" type="submit">Quét sitemap</button>
+                            <button class="btn" type="submit">Quét</button>
                         </div>
                     </div>
                 </form>
@@ -63,8 +69,8 @@
                                 <p class="card-sub">
                                     Run #{{ $run->id }}
                                     • Trạng thái: {{ (string) ($run->status ?? 'idle') }}
-                                    • Đã xử lý: {{ number_format((int) ($run->processed_count ?? 0), 0, ',', '.') }}/{{ number_format((int) ($run->found_urls ?? 0), 0, ',', '.') }}
-                                    • Có tên: {{ number_format((int) ($run->product_count ?? 0), 0, ',', '.') }}
+                                    • Đã quét: {{ number_format((int) ($run->processed_count ?? 0), 0, ',', '.') }}/{{ number_format((int) ($run->found_urls ?? 0), 0, ',', '.') }}
+                                    • Sản phẩm: {{ number_format((int) ($run->product_count ?? 0), 0, ',', '.') }}
                                     • Có giá: {{ number_format((int) ($run->priced_count ?? 0), 0, ',', '.') }}
                                     • Hiển thị {{ $items->count() }}/{{ $items->total() }}
                                 </p>
