@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\UserScrapeSetting;
 use App\Models\User;
 use App\Services\PriceScraper;
+use App\Services\ProductCodeExtractor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -191,17 +192,23 @@ class DashboardQuickScanController extends Controller
                 ->paginate($perPage)
                 ->withQueryString();
 
-            $scannerProducts->getCollection()->transform(fn ($product) => [
-                'id' => (string) ($product->external_id ?? ''),
-                'name' => (string) ($product->name ?? ''),
-                'price' => (string) ($product->price_text ?? ''),
-                'priceValue' => (int) ($product->price_value ?? 0),
-                'currency' => (string) ($product->currency ?? ''),
-                'url' => (string) ($product->url ?? ''),
-                'sourceUrl' => (string) ($product->source_url ?? ''),
-                'productCode' => (string) ($product->product_code ?? ''),
-                'updatedAt' => (string) ($product->updated_at ?? ''),
-            ]);
+            $scannerProducts->getCollection()->transform(function ($product) {
+                $name = (string) ($product->name ?? '');
+                $url = (string) ($product->url ?? '');
+                $sourceUrl = (string) ($product->source_url ?? '');
+
+                return [
+                    'id' => (string) ($product->external_id ?? ''),
+                    'name' => $name,
+                    'price' => (string) ($product->price_text ?? ''),
+                    'priceValue' => (int) ($product->price_value ?? 0),
+                    'currency' => (string) ($product->currency ?? ''),
+                    'url' => $url,
+                    'sourceUrl' => $sourceUrl,
+                    'productCode' => ProductCodeExtractor::best((string) ($product->product_code ?? ''), $name, $url, $sourceUrl),
+                    'updatedAt' => (string) ($product->updated_at ?? ''),
+                ];
+            });
         }
 
         return view('dashboard.quick-scan', [

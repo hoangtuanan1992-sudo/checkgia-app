@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\ProductCodeExtractor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -113,7 +114,14 @@ class ProductImportController extends Controller
                 }
 
                 $sourceUrl = $this->limit($product['sourceUrl'] ?? $source['startUrl'] ?? null, 2048);
+                $name = $this->limit($product['name'] ?? null, 255);
                 $priceText = $this->limit($product['priceText'] ?? $product['price'] ?? null, 255);
+                $productCode = ProductCodeExtractor::best(
+                    $this->limit($product['productCode'] ?? null, 255),
+                    $name,
+                    $url,
+                    $sourceUrl
+                );
                 $dedupeHash = sha1(mb_strtolower((string) $sourceUrl).'|'.mb_strtolower($url));
                 $exists = DB::table('scanner_import_products')
                     ->where('scanner_import_job_id', $jobId)
@@ -128,8 +136,8 @@ class ProductImportController extends Controller
                     [
                         'external_id' => $this->limit($product['externalId'] ?? null, 255),
                         'external_job_id' => $this->limit($product['jobId'] ?? $externalJobId, 255),
-                        'product_code' => $this->limit($product['productCode'] ?? null, 255),
-                        'name' => $this->limit($product['name'] ?? null, 255),
+                        'product_code' => $this->limit($productCode, 255),
+                        'name' => $name,
                         'price_text' => $priceText,
                         'price_value' => $this->parsePriceValue($product['priceValue'] ?? null, $priceText),
                         'currency' => $this->limit($product['currency'] ?? null, 20),

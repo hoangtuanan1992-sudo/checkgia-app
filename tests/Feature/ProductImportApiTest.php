@@ -87,6 +87,45 @@ class ProductImportApiTest extends TestCase
         ]);
     }
 
+    public function test_it_expands_truncated_product_code_from_product_name(): void
+    {
+        config(['services.checkgia_import.api_key' => 'secret-key']);
+
+        $payload = $this->payload();
+        $payload['source']['jobId'] = 'job-model-code';
+        $payload['source']['productCount'] = 1;
+        $payload['source']['batch']['size'] = 1;
+        $payload['products'] = [[
+            'externalId' => 'toshiba-1',
+            'jobId' => 'job-model-code',
+            'productCode' => 'GR-RS780WI',
+            'name' => 'Tu lanh Toshiba Inverter 596 lit GR-RS780WI-PGV(22)-XK',
+            'price' => '14.500.000 d',
+            'priceText' => '14.500.000 d',
+            'priceValue' => 14500000,
+            'currency' => 'VND',
+            'url' => 'https://dienmaydo.vn/tu-lanh-toshiba-inverter-596-lit-gr-rs780wi-pgv-22-xk',
+            'link' => 'https://dienmaydo.vn/tu-lanh-toshiba-inverter-596-lit-gr-rs780wi-pgv-22-xk',
+            'sourceUrl' => 'https://dienmaydo.vn/',
+        ]];
+
+        $response = $this->postJson('/api/products/import', $payload, [
+            'Authorization' => 'Bearer secret-key',
+        ]);
+
+        $response->assertOk()->assertJson([
+            'ok' => true,
+            'received' => 1,
+            'inserted' => 1,
+        ]);
+
+        $this->assertDatabaseHas('scanner_import_products', [
+            'external_job_id' => 'job-model-code',
+            'product_code' => 'GR-RS780WI-PGV(22)-XK',
+            'name' => 'Tu lanh Toshiba Inverter 596 lit GR-RS780WI-PGV(22)-XK',
+        ]);
+    }
+
     private function payload(): array
     {
         return [
