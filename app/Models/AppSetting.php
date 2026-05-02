@@ -25,6 +25,15 @@ use Illuminate\Database\Eloquent\Model;
     'shopee_rest_seconds_min',
     'shopee_rest_seconds_max',
     'shopee_max_checks_per_day',
+    'grok_api_key',
+    'grok_model',
+    'grok_models',
+    'gemini_api_key',
+    'gemini_model',
+    'gemini_models',
+    'chatgpt_api_key',
+    'chatgpt_model',
+    'chatgpt_models',
 ])]
 class AppSetting extends Model
 {
@@ -45,6 +54,12 @@ class AppSetting extends Model
             'shopee_rest_seconds_min' => 'integer',
             'shopee_rest_seconds_max' => 'integer',
             'shopee_max_checks_per_day' => 'integer',
+            'grok_api_key' => 'encrypted',
+            'grok_models' => 'array',
+            'gemini_api_key' => 'encrypted',
+            'gemini_models' => 'array',
+            'chatgpt_api_key' => 'encrypted',
+            'chatgpt_models' => 'array',
         ];
     }
 

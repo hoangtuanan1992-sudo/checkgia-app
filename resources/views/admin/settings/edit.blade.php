@@ -154,6 +154,115 @@
                         </div>
                     </div>
 
+                    @php
+                        $aiProviders = [
+                            [
+                                'key' => 'grok',
+                                'label' => 'Grok',
+                                'keyField' => 'grok_api_key',
+                                'modelField' => 'grok_model',
+                                'modelsField' => 'grok_models',
+                                'placeholder' => 'xai-...',
+                            ],
+                            [
+                                'key' => 'gemini',
+                                'label' => 'Gemini',
+                                'keyField' => 'gemini_api_key',
+                                'modelField' => 'gemini_model',
+                                'modelsField' => 'gemini_models',
+                                'placeholder' => 'AIza...',
+                            ],
+                            [
+                                'key' => 'chatgpt',
+                                'label' => 'ChatGPT',
+                                'keyField' => 'chatgpt_api_key',
+                                'modelField' => 'chatgpt_model',
+                                'modelsField' => 'chatgpt_models',
+                                'placeholder' => 'sk-...',
+                            ],
+                        ];
+                    @endphp
+
+                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Kết nối API AI</h2>
+                            <p class="card-sub">Lưu key, kiểm tra key và quét danh sách mô hình cho Grok, Gemini, ChatGPT</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+                                @foreach($aiProviders as $provider)
+                                    @php
+                                        $models = old($provider['modelsField'], $setting->{$provider['modelsField']} ?? []);
+                                        $models = is_array($models) ? $models : [];
+                                        $selectedModel = (string) old($provider['modelField'], $setting->{$provider['modelField']} ?? '');
+                                        $hasKey = filled($setting->{$provider['keyField']} ?? null);
+                                    @endphp
+                                    <div class="card ai-provider-card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0;border:1px solid var(--border)" data-ai-provider="{{ $provider['key'] }}">
+                                        <div class="card-header" style="padding:14px 14px 6px">
+                                            <h3 class="card-title" style="font-size:16px">{{ $provider['label'] }}</h3>
+                                            <p class="card-sub" data-ai-key-state>{{ $hasKey ? 'Đã lưu key' : 'Chưa lưu key' }}</p>
+                                        </div>
+                                        <div class="card-body" style="padding:8px 14px 14px">
+                                            <div class="field" style="margin-top:0">
+                                                <label class="label" for="{{ $provider['keyField'] }}">API key</label>
+                                                <input
+                                                    class="input ai-key-input"
+                                                    id="{{ $provider['keyField'] }}"
+                                                    name="{{ $provider['keyField'] }}"
+                                                    type="password"
+                                                    value=""
+                                                    placeholder="{{ $hasKey ? 'Nhập để cập nhật key' : $provider['placeholder'] }}"
+                                                    autocomplete="new-password"
+                                                >
+                                                @error($provider['keyField'])<div class="error">{{ $message }}</div>@enderror
+                                                <div class="hint" style="margin-top:6px">Để trống nếu không đổi key đã lưu.</div>
+                                            </div>
+
+                                            <div class="field">
+                                                <label class="label" for="{{ $provider['modelField'] }}">Mô hình mặc định</label>
+                                                <select class="input ai-model-select" id="{{ $provider['modelField'] }}" name="{{ $provider['modelField'] }}">
+                                                    <option value="" @selected($selectedModel === '')>-- Chưa chọn --</option>
+                                                    @foreach($models as $model)
+                                                        @php
+                                                            $modelId = is_array($model) ? (string) ($model['id'] ?? '') : (string) $model;
+                                                            $modelLabel = is_array($model) ? (string) ($model['label'] ?? $modelId) : $modelId;
+                                                        @endphp
+                                                        @if($modelId !== '')
+                                                            <option value="{{ $modelId }}" @selected($selectedModel === $modelId)>{{ $modelLabel }}</option>
+                                                        @endif
+                                                    @endforeach
+                                                </select>
+                                                @error($provider['modelField'])<div class="error">{{ $message }}</div>@enderror
+                                            </div>
+
+                                            <div class="hint ai-model-count" style="margin-top:8px">
+                                                Đã quét {{ number_format(count($models), 0, ',', '.') }} mô hình.
+                                            </div>
+                                            <div class="hint ai-provider-status" style="margin-top:8px;min-height:20px"></div>
+
+                                            <div class="actions" style="justify-content:flex-end;gap:8px;flex-wrap:wrap">
+                                                <button
+                                                    class="btn btn-secondary ai-test-key"
+                                                    type="button"
+                                                    data-url="{{ route('admin.settings.ai.test', $provider['key']) }}"
+                                                >
+                                                    Test key
+                                                </button>
+                                                <button
+                                                    class="btn btn-secondary ai-scan-models"
+                                                    type="button"
+                                                    data-url="{{ route('admin.settings.ai.models', $provider['key']) }}"
+                                                >
+                                                    Quét mô hình
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="actions" style="justify-content:flex-end">
                         <button class="btn" type="submit">Lưu</button>
                     </div>
@@ -449,4 +558,108 @@
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const csrfToken = @json(csrf_token());
+
+            function setStatus(card, message, ok = true) {
+                const status = card.querySelector('.ai-provider-status');
+                if (!status) return;
+                status.textContent = message || '';
+                status.style.color = ok ? 'var(--success)' : 'var(--danger)';
+            }
+
+            function renderModels(card, models) {
+                const select = card.querySelector('.ai-model-select');
+                const count = card.querySelector('.ai-model-count');
+                if (!select || !Array.isArray(models)) return;
+
+                const current = select.value || '';
+                select.innerHTML = '';
+
+                const blank = document.createElement('option');
+                blank.value = '';
+                blank.textContent = '-- Chưa chọn --';
+                select.appendChild(blank);
+
+                models.forEach((model) => {
+                    const id = String(model && model.id ? model.id : '').trim();
+                    if (!id) return;
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.textContent = String((model && model.label) || id);
+                    select.appendChild(option);
+                });
+
+                if (current && models.some((model) => String(model && model.id) === current)) {
+                    select.value = current;
+                } else if (models.length > 0 && models[0].id) {
+                    select.value = String(models[0].id);
+                }
+
+                if (count) {
+                    count.textContent = `Đã quét ${models.length.toLocaleString('vi-VN')} mô hình.`;
+                }
+            }
+
+            async function callAiEndpoint(button, shouldRenderModels) {
+                const card = button.closest('.ai-provider-card');
+                if (!card) return;
+                const keyInput = card.querySelector('.ai-key-input');
+                const url = button.dataset.url || '';
+                if (!url) return;
+
+                const originalText = button.textContent;
+                button.disabled = true;
+                button.textContent = 'Đang kiểm tra...';
+                setStatus(card, 'Đang kết nối API...', true);
+
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                        },
+                        body: JSON.stringify({
+                            api_key: keyInput ? keyInput.value : '',
+                        }),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.ok) {
+                        setStatus(card, data.message || `Lỗi HTTP ${response.status}`, false);
+                        return;
+                    }
+
+                    if (shouldRenderModels) {
+                        renderModels(card, data.models || []);
+                    }
+                    setStatus(card, data.message || 'Kết nối thành công.', true);
+                } catch (error) {
+                    setStatus(card, 'Không gọi được API kiểm tra.', false);
+                } finally {
+                    button.disabled = false;
+                    button.textContent = originalText;
+                }
+            }
+
+            document.querySelectorAll('.ai-test-key').forEach((button) => {
+                button.addEventListener('click', () => callAiEndpoint(button, true));
+            });
+
+            document.querySelectorAll('.ai-scan-models').forEach((button) => {
+                button.addEventListener('click', () => callAiEndpoint(button, true));
+            });
+        });
+    </script>
+
+    <style>
+        @media (max-width:1100px) {
+            .ai-provider-card {
+                grid-column:1 / -1;
+            }
+        }
+    </style>
 @endsection

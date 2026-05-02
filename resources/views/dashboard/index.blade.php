@@ -173,7 +173,7 @@
                             </form>
                         @endif
                         <button class="btn btn-secondary" type="button" id="compareViewToggle" style="display:none">Dạng thẻ</button>
-                        <button class="btn btn-secondary" type="button" id="filterReset">Reset</button>
+                        <button class="btn btn-secondary" type="button" id="filterReset">So Khớp</button>
                     </div>
                 </div>
                 <div class="table-wrap" id="comparisonTableView">
