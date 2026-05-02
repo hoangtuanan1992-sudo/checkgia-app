@@ -22,6 +22,11 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
+    'product_scanner' => [
+        'base_url' => env('PRODUCT_SCANNER_API_URL', 'http://127.0.0.1:3110'),
+        'timeout' => env('PRODUCT_SCANNER_TIMEOUT', 12),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),

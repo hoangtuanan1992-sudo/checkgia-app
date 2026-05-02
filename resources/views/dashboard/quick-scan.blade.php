@@ -1,221 +1,222 @@
 @extends('layouts.app')
 
 @section('content')
-    <div style="width:100%;max-width:1100px">
+    @php
+        $scannerJobs = $scannerJobs ?? collect();
+        $scannerProducts = $scannerProducts ?? null;
+        $selectedScannerJob = is_array($selectedScannerJob ?? null) ? $selectedScannerJob : null;
+        $selectedJobId = (string) ($selectedJobId ?? '');
+        $scannerMode = (string) ($scannerMode ?? 'all');
+        $q = (string) ($q ?? '');
+        $perPage = (int) ($perPage ?? 50);
+        $jobUrl = (string) ($selectedScannerJob['startUrl'] ?? '');
+        $jobStatus = (string) ($selectedScannerJob['status'] ?? 'unknown');
+        $productCount = (int) ($selectedScannerJob['productCount'] ?? ($scannerProducts?->total() ?? 0));
+        $filteredProductCount = (int) ($selectedScannerJob['filteredProductCount'] ?? 0);
+        $visitedCount = (int) ($selectedScannerJob['visitedCount'] ?? 0);
+        $maxPages = (int) ($selectedScannerJob['maxPages'] ?? 0);
+        $createdAt = (string) ($selectedScannerJob['createdAt'] ?? '');
+        $updatedAt = (string) ($selectedScannerJob['updatedAt'] ?? '');
+    @endphp
+
+    <div style="width:100%;max-width:1280px">
         <div class="card" style="max-width:none">
-            <div class="card-header" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+            <div class="card-header" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
                 <div>
                     <h1 class="card-title">Quét nhanh</h1>
-                    <p class="card-sub">Quét sản phẩm từ website shop, chọn hàng loạt và thêm vào bảng Kết quả so sánh</p>
+                    <p class="card-sub">Hiển thị kết quả đã quét từ Product Scanner.</p>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
-                    @if(!auth()->user()->isViewer())
-                        <form method="POST" action="{{ route('dashboard.quick-scan.clear-runs') }}" style="display:inline" onsubmit="return confirm('Xóa tất cả run?');">
-                            @csrf
-                            <button class="btn btn-secondary" type="submit">Xóa tất cả run</button>
-                        </form>
-                    @endif
+                    <a class="btn btn-secondary" href="{{ request()->fullUrl() }}">Làm mới</a>
                     <a class="btn btn-secondary" href="{{ route('dashboard') }}">Quay lại</a>
                 </div>
             </div>
+
             <div class="card-body">
-                <form method="POST" action="{{ route('dashboard.quick-scan.scan') }}">
-                    @csrf
-                    @php($sitemapVal = old('sitemap_url', $sitemapUrl ?? ''))
-                    @php($showSitemap = trim((string) $sitemapVal) !== '' || $errors->has('sitemap_url'))
-                    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
-                        <div class="field" style="margin-top:0">
-                            <label class="label" for="base_url">Website shop</label>
-                            <input class="input" id="base_url" name="base_url" type="url" value="{{ old('base_url', $baseUrl ?? '') }}" placeholder="https://tenmiencuaban.com" required>
-                            @error('base_url')<div class="error">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="field" style="margin-top:0">
-                            <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-end">
-                                <label class="label" for="sitemap_url">Sitemap</label>
-                                <button class="btn btn-secondary" type="button" id="showSitemapBtn" style="height:32px;padding:0 10px;display:{{ $showSitemap ? 'none' : '' }}">Nhập sitemap</button>
-                            </div>
-                            <div id="sitemapField" style="display:{{ $showSitemap ? '' : 'none' }}">
-                                <input class="input" id="sitemap_url" name="sitemap_url" type="url" value="{{ $sitemapVal }}" placeholder="https://tenmiencuaban.com/sitemap.xml">
-                                @error('sitemap_url')<div class="error">{{ $message }}</div>@enderror
-                                <div class="hint" style="margin-top:10px">
-                                    Nếu để trống, hệ thống sẽ tự tìm sitemap qua robots.txt và các đường dẫn phổ biến. Chỉ nhập khi không tự tìm được.
-                                </div>
-                            </div>
-                        </div>
+                @if(!empty($scannerError))
+                    <div class="scan-alert">
+                        <strong>Không kết nối được Scanner API.</strong>
+                        <div>{{ $scannerError }}</div>
+                        <div class="hint" style="margin-top:8px">API hiện cấu hình: {{ $scannerBaseUrl ?? 'http://127.0.0.1:3110' }}</div>
                     </div>
-                    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:12px">
-                        <div class="field" style="margin-top:0;min-width:220px">
-                            <label class="label" for="limit">Giới hạn link</label>
-                            <input class="input" id="limit" name="limit" type="number" min="1" max="5000" value="{{ old('limit', (int) ($limit ?? 2000)) }}">
-                            @error('limit')<div class="error">{{ $message }}</div>@enderror
-                        </div>
-                        <div class="actions" style="margin-top:0">
-                            <button class="btn" type="submit">Quét</button>
-                        </div>
+                @endif
+
+                <form method="GET" action="{{ route('dashboard.quick-scan') }}" class="scan-filter">
+                    <div class="field" style="margin-top:0;min-width:min(100%,360px);flex:2">
+                        <label class="label" for="job_id">Phiên quét</label>
+                        <select class="input" id="job_id" name="job_id">
+                            @forelse($scannerJobs as $job)
+                                @php
+                                    $jobId = (string) ($job['id'] ?? '');
+                                    $startUrl = (string) ($job['startUrl'] ?? $jobId);
+                                    $status = (string) ($job['status'] ?? 'unknown');
+                                    $count = (int) ($job['productCount'] ?? 0);
+                                @endphp
+                                <option value="{{ $jobId }}" @selected($jobId === $selectedJobId)>
+                                    {{ $startUrl }} - {{ $status }} - {{ number_format($count, 0, ',', '.') }} sản phẩm
+                                </option>
+                            @empty
+                                <option value="">Chưa có phiên quét</option>
+                            @endforelse
+                        </select>
+                    </div>
+                    <div class="field" style="margin-top:0;min-width:min(100%,260px);flex:1">
+                        <label class="label" for="q">Tìm kiếm</label>
+                        <input class="input" id="q" name="q" type="text" value="{{ $q }}" placeholder="Tên, mã hoặc link...">
+                    </div>
+                    <div class="field" style="margin-top:0;min-width:160px">
+                        <label class="label" for="mode">Lọc</label>
+                        <select class="input" id="mode" name="mode">
+                            <option value="all" @selected($scannerMode !== 'priced')>Tất cả</option>
+                            <option value="priced" @selected($scannerMode === 'priced')>Có giá</option>
+                        </select>
+                    </div>
+                    <div class="field" style="margin-top:0;min-width:150px">
+                        <label class="label" for="per_page">Số dòng</label>
+                        <select class="input" id="per_page" name="per_page">
+                            @foreach([25, 50, 100, 200] as $pp)
+                                <option value="{{ $pp }}" @selected($perPage === $pp)>{{ $pp }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="actions" style="margin-top:0">
+                        <button class="btn" type="submit">Lọc</button>
                     </div>
                 </form>
 
-                @if(!empty($scanMessage))
-                    <div class="hint" style="margin-top:12px">{{ $scanMessage }}</div>
+                @if($selectedScannerJob)
+                    <div class="scan-summary">
+                        <div class="scan-stat">
+                            <div class="scan-label">Website</div>
+                            <div class="scan-value" title="{{ $jobUrl }}">{{ $jobUrl ?: '---' }}</div>
+                        </div>
+                        <div class="scan-stat">
+                            <div class="scan-label">Trạng thái</div>
+                            <div class="scan-value"><span class="scan-badge scan-badge-{{ preg_replace('/[^a-z0-9_-]/i', '', $jobStatus) }}">{{ $jobStatus }}</span></div>
+                        </div>
+                        <div class="scan-stat">
+                            <div class="scan-label">Sản phẩm</div>
+                            <div class="scan-value">{{ number_format($productCount, 0, ',', '.') }}</div>
+                        </div>
+                        <div class="scan-stat">
+                            <div class="scan-label">Sản phẩm có giá</div>
+                            <div class="scan-value">{{ number_format($filteredProductCount, 0, ',', '.') }}</div>
+                        </div>
+                        <div class="scan-stat">
+                            <div class="scan-label">Trang đã quét</div>
+                            <div class="scan-value">
+                                {{ number_format($visitedCount, 0, ',', '.') }}@if($maxPages > 0)/{{ number_format($maxPages, 0, ',', '.') }}@endif
+                            </div>
+                        </div>
+                        <div class="scan-stat">
+                            <div class="scan-label">Cập nhật</div>
+                            <div class="scan-value" title="{{ $updatedAt ?: $createdAt }}">{{ $updatedAt ?: ($createdAt ?: '---') }}</div>
+                        </div>
+                    </div>
                 @endif
 
-                @php($run = $run ?? null)
-                @php($items = $items ?? null)
-                @php($scanWarning = $scanWarning ?? null)
-                @php($scanSampleUrls = $scanSampleUrls ?? [])
-                @if($run && $items)
-                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px">
-                        <div class="card-header" style="padding:16px 16px 6px;display:flex;justify-content:space-between;gap:10px;align-items:flex-end;flex-wrap:wrap">
-                            <div>
-                                <h2 class="card-title" style="font-size:18px">Kết quả quét</h2>
-                                <p class="card-sub">
-                                    Run #{{ $run->id }}
-                                    • Trạng thái: <span id="qsStatus">{{ (string) ($run->status ?? 'idle') }}</span>
-                                    • Đã quét: <span id="qsProcessed">{{ number_format((int) ($run->processed_count ?? 0), 0, ',', '.') }}</span>/<span id="qsFound">{{ number_format((int) ($run->found_urls ?? 0), 0, ',', '.') }}</span>
-                                    • Sản phẩm: <span id="qsProducts">{{ number_format((int) ($run->product_count ?? 0), 0, ',', '.') }}</span>
-                                    • Có giá: <span id="qsPriced">{{ number_format((int) ($run->priced_count ?? 0), 0, ',', '.') }}</span>
-                                    • Hiển thị {{ $items->count() }}/{{ $items->total() }}
-                                </p>
-                                @if($scanWarning)
-                                    <div class="hint" style="margin-top:10px;color:#991b1b">
-                                        {{ $scanWarning }}
-                                        @if(is_array($scanSampleUrls) && count($scanSampleUrls) > 0)
-                                            <div style="margin-top:6px">
-                                                Ví dụ link:
-                                                @foreach($scanSampleUrls as $u)
-                                                    <div style="word-break:break-word">{{ $u }}</div>
-                                                @endforeach
-                                            </div>
+                <div class="hint" style="margin-top:12px">
+                    API: {{ $scannerBaseUrl ?? 'http://127.0.0.1:3110' }}
+                    @if($scannerProducts)
+                        - Hiển thị {{ number_format($scannerProducts->count(), 0, ',', '.') }}/{{ number_format($scannerProducts->total(), 0, ',', '.') }} dòng
+                    @endif
+                </div>
+
+                <div class="table-wrap scan-table-wrap">
+                    <table class="table scan-table">
+                        <thead>
+                            <tr>
+                                <th style="width:64px">#</th>
+                                <th style="width:150px">Mã</th>
+                                <th>Tên sản phẩm</th>
+                                <th style="width:160px;text-align:right">Giá</th>
+                                <th>Link sản phẩm</th>
+                                <th>Nguồn quét</th>
+                                <th style="width:190px">Cập nhật</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($scannerProducts ?? [] as $index => $product)
+                                @php
+                                    $rowNumber = ($scannerProducts->firstItem() ?? 1) + $index;
+                                    $name = (string) ($product['name'] ?? '');
+                                    $url = (string) ($product['url'] ?? '');
+                                    $sourceUrl = (string) ($product['sourceUrl'] ?? '');
+                                    $code = (string) ($product['productCode'] ?? '');
+                                    $priceText = (string) ($product['price'] ?? '');
+                                    $priceValue = (int) ($product['priceValue'] ?? 0);
+                                    $displayPrice = $priceText !== '' ? $priceText : ($priceValue > 0 ? number_format($priceValue, 0, ',', '.').'đ' : '');
+                                @endphp
+                                <tr>
+                                    <td class="scan-muted">{{ $rowNumber }}</td>
+                                    <td>{{ $code !== '' ? $code : '---' }}</td>
+                                    <td style="font-weight:650">{{ $name !== '' ? $name : '---' }}</td>
+                                    <td style="text-align:right;font-weight:750">
+                                        @if($displayPrice !== '')
+                                            {{ $displayPrice }}
+                                        @else
+                                            <span class="scan-muted">---</span>
                                         @endif
-                                    </div>
-                                @endif
-                            </div>
-                            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-                                <form method="GET" action="{{ route('dashboard.quick-scan') }}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-                                    <input type="hidden" name="run" value="{{ $run->id }}">
-                                    <div class="field" style="margin-top:0;min-width:260px">
-                                        <label class="label" for="q">Tìm kiếm</label>
-                                        <input class="input" id="q" name="q" type="text" value="{{ $q ?? '' }}" placeholder="Tên hoặc link...">
-                                    </div>
-                                    <div class="field" style="margin-top:0;min-width:160px">
-                                        <label class="label" for="has_price">Lọc</label>
-                                        <select class="input" id="has_price" name="has_price">
-                                            <option value="" @selected(!($hasPrice ?? false))>Tất cả</option>
-                                            <option value="1" @selected(($hasPrice ?? false))>Chỉ có giá</option>
-                                        </select>
-                                    </div>
-                                    <div class="field" style="margin-top:0;min-width:160px">
-                                        <label class="label" for="per_page">Số dòng</label>
-                                        <select class="input" id="per_page" name="per_page">
-                                            @foreach([25, 50, 100, 200] as $pp)
-                                                <option value="{{ $pp }}" @selected(((int) ($perPage ?? 50)) === $pp)>{{ $pp }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                    <div class="actions" style="margin-top:0">
-                                        <button class="btn btn-secondary" type="submit">Lọc</button>
-                                    </div>
-                                </form>
-
-                                <div class="actions" style="margin-top:0">
-                                    @php($status = (string) ($run->status ?? 'idle'))
-                                    @php($stopRequested = (int) ($run->stop_requested ?? 0) === 1)
-                                    @if(in_array($status, ['running', 'idle', 'pausing'], true) && ! $stopRequested)
-                                        <form method="POST" action="{{ route('dashboard.quick-scan.pause', (int) $run->id) }}" style="display:inline">
-                                            @csrf
-                                            <button class="btn btn-secondary" type="submit">Dừng quét</button>
-                                        </form>
-                                    @elseif(in_array($status, ['paused', 'pausing'], true) || $stopRequested)
-                                        <form method="POST" action="{{ route('dashboard.quick-scan.resume', (int) $run->id) }}" style="display:inline">
-                                            @csrf
-                                            <button class="btn btn-secondary" type="submit">Tiếp tục quét</button>
-                                        </form>
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card-body" style="padding:8px 16px 16px">
-                            <form method="POST" action="{{ route('dashboard.quick-scan.import') }}" id="scanImportForm">
-                                @csrf
-                                <input type="hidden" name="run_id" value="{{ $run->id }}">
-                                <div class="table-wrap" style="max-height:70vh">
-                                    <table class="table" style="font-size:13px">
-                                        <thead>
-                                            <tr>
-                                                <th>Tên sản phẩm</th>
-                                                <th style="min-width:140px;text-align:right">Giá</th>
-                                                <th>Link</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="scanTbody">
-                                            @foreach($items as $item)
-                                                @php($url = (string) ($item->url ?? ''))
-                                                @php($name = trim((string) ($item->name ?? '')) ?: trim((string) ($item->name_guess ?? '')))
-                                                @php($price = $item->price)
-                                                <tr data-url="{{ $url }}" class="scan-row" style="cursor:pointer">
-                                                    <td style="font-weight:600">{{ $name ?: '---' }}</td>
-                                                    <td style="text-align:right;font-weight:700">
-                                                        @if(!is_null($price))
-                                                            {{ number_format((int) $price, 0, ',', '.') }}đ
-                                                        @else
-                                                            <span class="hint" style="margin-top:0">---</span>
-                                                        @endif
-                                                    </td>
-                                                    <td style="word-break:break-word">
-                                                        <a href="{{ $url }}" target="_blank" onclick="event.stopPropagation()">{{ $url }}</a>
-                                                    </td>
-                                                </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px">
-                                    <div class="hint" id="scanSelectedCount" style="margin-top:0">Đã chọn: 0</div>
-                                    <div class="actions" style="margin-top:0">
-                                        <button class="btn btn-secondary" type="button" id="scanSelectAll">Chọn tất cả trang</button>
-                                        <button class="btn btn-secondary" type="button" id="scanUnselectAll">Bỏ chọn</button>
-                                        <button class="btn" type="submit">Thêm check giá</button>
-                                    </div>
-                                </div>
-
-                                @if($items->total() > 0)
-                                    @php($current = (int) $items->currentPage())
-                                    @php($last = (int) $items->lastPage())
-                                    <div style="display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:nowrap;white-space:nowrap;margin-top:10px;overflow-x:auto">
-                                        @if($last > 1)
-                                            @if($items->onFirstPage())
-                                                <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Trước</span>
-                                            @else
-                                                <a class="btn btn-secondary" href="{{ $items->previousPageUrl() }}">Trước</a>
-                                            @endif
-
-                                            @php($pagesRaw = [1, 2, 3, 4, $last, $current - 1, $current, $current + 1])
-                                            @php($pages = array_values(array_unique(array_filter($pagesRaw, fn ($p) => is_int($p) && $p >= 1 && $p <= $last))))
-                                            @php(sort($pages))
-                                            @php($pageUrls = $items->getUrlRange(1, $last))
-                                            @php($prev = 0)
-                                            @foreach($pages as $p)
-                                                @if($prev && $p > $prev + 1)
-                                                    <span class="hint" style="margin-top:0;padding:0 2px">...</span>
-                                                @endif
-                                                @php($prev = $p)
-                                                @if($p === $current)
-                                                    <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $p }}</span>
-                                                @else
-                                                    <a class="btn btn-secondary" href="{{ $pageUrls[$p] ?? '' }}">{{ $p }}</a>
-                                                @endif
-                                            @endforeach
-
-                                            @if($items->hasMorePages())
-                                                <a class="btn btn-secondary" href="{{ $items->nextPageUrl() }}">Sau</a>
-                                            @else
-                                                <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Sau</span>
-                                            @endif
+                                    </td>
+                                    <td style="word-break:break-word">
+                                        @if($url !== '')
+                                            <a href="{{ $url }}" target="_blank" rel="noopener">{{ $url }}</a>
+                                        @else
+                                            <span class="scan-muted">---</span>
                                         @endif
-                                    </div>
+                                    </td>
+                                    <td style="word-break:break-word">
+                                        @if($sourceUrl !== '')
+                                            <a href="{{ $sourceUrl }}" target="_blank" rel="noopener">{{ $sourceUrl }}</a>
+                                        @else
+                                            <span class="scan-muted">---</span>
+                                        @endif
+                                    </td>
+                                    <td>{{ (string) ($product['updatedAt'] ?? '') ?: '---' }}</td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="7" class="scan-empty">Chưa có sản phẩm phù hợp để hiển thị.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                @if($scannerProducts && $scannerProducts->total() > 0)
+                    @php($current = (int) $scannerProducts->currentPage())
+                    @php($last = (int) $scannerProducts->lastPage())
+                    <div class="scan-pagination">
+                        @if($last > 1)
+                            @if($scannerProducts->onFirstPage())
+                                <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Trước</span>
+                            @else
+                                <a class="btn btn-secondary" href="{{ $scannerProducts->previousPageUrl() }}">Trước</a>
+                            @endif
+
+                            @php($pagesRaw = [1, 2, 3, 4, $last, $current - 1, $current, $current + 1])
+                            @php($pages = array_values(array_unique(array_filter($pagesRaw, fn ($p) => is_int($p) && $p >= 1 && $p <= $last))))
+                            @php(sort($pages))
+                            @php($pageUrls = $scannerProducts->getUrlRange(1, $last))
+                            @php($prev = 0)
+                            @foreach($pages as $page)
+                                @if($prev && $page > $prev + 1)
+                                    <span class="hint" style="margin-top:0;padding:0 2px">...</span>
                                 @endif
-                            </form>
-                        </div>
+                                @php($prev = $page)
+                                @if($page === $current)
+                                    <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $page }}</span>
+                                @else
+                                    <a class="btn btn-secondary" href="{{ $pageUrls[$page] ?? '' }}">{{ $page }}</a>
+                                @endif
+                            @endforeach
+
+                            @if($scannerProducts->hasMorePages())
+                                <a class="btn btn-secondary" href="{{ $scannerProducts->nextPageUrl() }}">Sau</a>
+                            @else
+                                <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Sau</span>
+                            @endif
+                        @endif
                     </div>
                 @endif
             </div>
@@ -223,215 +224,24 @@
     </div>
 
     <style>
-        .scan-row:hover{background:rgba(17,24,39,.04)}
-        .scan-row.is-selected{background:rgba(13,110,253,.14)}
-        .scan-row.is-selected td{font-weight:700}
+        .scan-filter{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+        .scan-alert{border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:10px;padding:12px 14px;margin-bottom:14px}
+        .scan-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-top:14px}
+        .scan-stat{border:1px solid #e5e7eb;border-radius:10px;padding:11px 12px;min-width:0;background:#fff}
+        .scan-label{font-size:12px;color:#6b7280;margin-bottom:6px}
+        .scan-value{font-size:14px;font-weight:700;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .scan-badge{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;background:#eef2ff;color:#3730a3;font-size:12px;font-weight:750;text-transform:capitalize}
+        .scan-badge-done{background:#ecfdf5;color:#047857}
+        .scan-badge-running{background:#eff6ff;color:#1d4ed8}
+        .scan-badge-queued{background:#fff7ed;color:#c2410c}
+        .scan-badge-failed{background:#fef2f2;color:#b91c1c}
+        .scan-table-wrap{max-height:70vh;margin-top:14px}
+        .scan-table{font-size:13px}
+        .scan-table tbody tr:hover{background:rgba(17,24,39,.04)}
+        .scan-muted{color:#6b7280;font-weight:500}
+        .scan-empty{text-align:center;color:#6b7280;padding:24px}
+        .scan-pagination{display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:nowrap;white-space:nowrap;margin-top:12px;overflow-x:auto}
+        @media (max-width:1100px){.scan-summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
+        @media (max-width:720px){.scan-summary{grid-template-columns:repeat(1,minmax(0,1fr))}.scan-filter .field{width:100%;min-width:100%}.scan-filter .actions{width:100%}.scan-filter .btn{width:100%}}
     </style>
-
-    <script>
-        (function () {
-            const selectAllBtn = document.getElementById('scanSelectAll');
-            const unselectAllBtn = document.getElementById('scanUnselectAll');
-            const selectedCount = document.getElementById('scanSelectedCount');
-            const form = document.getElementById('scanImportForm');
-            const showSitemapBtn = document.getElementById('showSitemapBtn');
-            const sitemapField = document.getElementById('sitemapField');
-            const runId = @json(($run ?? null)?->id ? (int) $run->id : null);
-            const storageKey = runId ? `checkgia_quick_scan_selected:${runId}` : null;
-            const rows = Array.from(document.querySelectorAll('tr.scan-row'));
-            const csrfToken = @json(csrf_token());
-            const tickUrl = @json(($run ?? null) ? route('dashboard.quick-scan.tick', (int) $run->id) : null);
-            const statusEl = document.getElementById('qsStatus');
-            const processedEl = document.getElementById('qsProcessed');
-            const foundEl = document.getElementById('qsFound');
-            const productsEl = document.getElementById('qsProducts');
-            const pricedEl = document.getElementById('qsPriced');
-
-            function loadSelected() {
-                if (!storageKey) return {};
-                try {
-                    const raw = sessionStorage.getItem(storageKey);
-                    if (!raw) return {};
-                    const arr = JSON.parse(raw);
-                    if (!Array.isArray(arr)) return {};
-                    const out = {};
-                    arr.forEach((u) => {
-                        const s = String(u || '').trim();
-                        if (s) out[s] = true;
-                    });
-                    return out;
-                } catch (e) {
-                    return {};
-                }
-            }
-
-            function saveSelected(map) {
-                if (!storageKey) return;
-                try {
-                    sessionStorage.setItem(storageKey, JSON.stringify(Object.keys(map)));
-                } catch (e) {
-                }
-            }
-
-            function setRowSelected(tr, on) {
-                if (!tr) return;
-                tr.classList.toggle('is-selected', !!on);
-            }
-
-            function syncUi(map) {
-                rows.forEach((tr) => {
-                    const url = String(tr.dataset.url || '').trim();
-                    setRowSelected(tr, !!map[url]);
-                });
-                if (selectedCount) selectedCount.textContent = `Đã chọn: ${Object.keys(map).length}`;
-            }
-
-            const selected = loadSelected();
-            syncUi(selected);
-
-            rows.forEach((tr) => {
-                tr.addEventListener('click', () => {
-                    const url = String(tr.dataset.url || '').trim();
-                    if (!url) return;
-                    if (selected[url]) delete selected[url];
-                    else selected[url] = true;
-                    saveSelected(selected);
-                    syncUi(selected);
-                });
-            });
-
-            function setAllVisible(on) {
-                rows.forEach((tr) => {
-                    const url = String(tr.dataset.url || '').trim();
-                    if (!url) return;
-                    if (on) selected[url] = true;
-                    else delete selected[url];
-                });
-                saveSelected(selected);
-                syncUi(selected);
-            }
-
-            if (selectAllBtn) selectAllBtn.addEventListener('click', () => setAllVisible(true));
-            if (unselectAllBtn) unselectAllBtn.addEventListener('click', () => setAllVisible(false));
-            if (showSitemapBtn && sitemapField) {
-                showSitemapBtn.addEventListener('click', () => {
-                    sitemapField.style.display = '';
-                    showSitemapBtn.style.display = 'none';
-                    const input = document.getElementById('sitemap_url');
-                    if (input) input.focus();
-                });
-            }
-
-            if (form) {
-                form.addEventListener('submit', (e) => {
-                    const urls = Object.keys(selected);
-                    if (urls.length === 0) {
-                        e.preventDefault();
-                        alert('Vui lòng chọn ít nhất 1 sản phẩm.');
-                        return;
-                    }
-                    form.querySelectorAll('input[name="urls[]"]').forEach((n) => n.remove());
-                    urls.forEach((u) => {
-                        const inp = document.createElement('input');
-                        inp.type = 'hidden';
-                        inp.name = 'urls[]';
-                        inp.value = u;
-                        form.appendChild(inp);
-                    });
-                });
-            }
-
-            function parseIntText(el) {
-                if (!el) return 0;
-                const s = String(el.textContent || '').replace(/[^\d]/g, '');
-                const n = Number(s);
-                return Number.isFinite(n) ? n : 0;
-            }
-
-            function setText(el, v) {
-                if (!el) return;
-                el.textContent = String(v);
-            }
-
-            function formatInt(v) {
-                const n = Number(v);
-                if (!Number.isFinite(n)) return '0';
-                return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-            }
-
-            async function doTick() {
-                if (!tickUrl) return null;
-                try {
-                    const res = await fetch(tickUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify({}),
-                    });
-                    const data = await res.json().catch(() => null);
-                    if (!res.ok || !data) return null;
-                    return data;
-                } catch (e) {
-                    return null;
-                }
-            }
-
-            let ticking = false;
-            let tickCount = 0;
-            let lastProducts = parseIntText(productsEl);
-            let lastProcessed = parseIntText(processedEl);
-
-            async function loop() {
-                if (ticking) return;
-                if (!tickUrl) return;
-                const currentStatus = statusEl ? String(statusEl.textContent || '') : '';
-                if (currentStatus === 'paused' || currentStatus === 'done' || currentStatus === 'error') return;
-
-                ticking = true;
-                const data = await doTick();
-                ticking = false;
-                if (!data || data.ok !== true) {
-                    setTimeout(loop, 2000);
-                    return;
-                }
-
-                if (statusEl && typeof data.status === 'string') statusEl.textContent = data.status;
-                if (processedEl && data.processed_count !== undefined) processedEl.textContent = formatInt(data.processed_count);
-                if (foundEl && data.found_urls !== undefined) foundEl.textContent = formatInt(data.found_urls);
-                if (productsEl && data.product_count !== undefined) productsEl.textContent = formatInt(data.product_count);
-                if (pricedEl && data.priced_count !== undefined) pricedEl.textContent = formatInt(data.priced_count);
-
-                const newProducts = typeof data.product_count === 'number' ? data.product_count : lastProducts;
-                const newProcessed = typeof data.processed_count === 'number' ? data.processed_count : lastProcessed;
-                tickCount++;
-
-                const shouldReload = (newProducts > lastProducts && (rows.length === 0 || tickCount % 3 === 0)) || (rows.length > 0 && tickCount % 8 === 0 && newProcessed > lastProcessed);
-                lastProducts = newProducts;
-                lastProcessed = newProcessed;
-
-                if (shouldReload) {
-                    window.location.reload();
-                    return;
-                }
-
-                if (data.status === 'done' || data.status === 'paused') {
-                    if (rows.length === 0 && newProducts > 0) {
-                        window.location.reload();
-                    }
-                    return;
-                }
-
-                setTimeout(loop, 1500);
-            }
-
-            if (tickUrl) {
-                setTimeout(loop, 400);
-            }
-        })();
-    </script>
 @endsection

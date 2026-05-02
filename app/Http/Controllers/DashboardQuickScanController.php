@@ -8,9 +8,12 @@ use App\Models\Product;
 use App\Models\UserScrapeSetting;
 use App\Models\User;
 use App\Services\PriceScraper;
+use App\Services\ProductScannerApiClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -54,7 +57,169 @@ class DashboardQuickScanController extends Controller
         return redirect()->route('dashboard.quick-scan')->with('status', 'Đã xoá tất cả run.');
     }
 
-    public function index(Request $request): View
+    public function index(Request $request, ProductScannerApiClient $scanner): View
+    {
+        $authUser = $request->user();
+
+        $perPage = 50;
+        if ($authUser && Schema::hasColumn('users', 'quick_scan_per_page')) {
+            $stored = User::query()->whereKey($authUser->id)->value('quick_scan_per_page');
+            $storedInt = is_null($stored) ? null : (int) $stored;
+            if (in_array($storedInt, [25, 50, 100, 200], true)) {
+                $perPage = $storedInt;
+            }
+        }
+
+        $perPageRaw = trim((string) $request->query('per_page', ''));
+        if ($perPageRaw !== '' && ctype_digit($perPageRaw)) {
+            $pp = (int) $perPageRaw;
+            if (in_array($pp, [25, 50, 100, 200], true)) {
+                $perPage = $pp;
+                if ($authUser && Schema::hasColumn('users', 'quick_scan_per_page')) {
+                    User::query()->whereKey($authUser->id)->update(['quick_scan_per_page' => $pp]);
+                }
+            }
+        }
+
+        $q = trim((string) $request->query('q', ''));
+        $scannerMode = (string) $request->query('mode', '') === 'priced' ? 'priced' : 'all';
+        $scannerError = null;
+        $selectedScannerJob = null;
+        $scannerProductsRaw = collect();
+
+        $jobsResponse = $scanner->jobs();
+        if (! ($jobsResponse['ok'] ?? false)) {
+            $scannerError = (string) ($jobsResponse['error'] ?? 'Khong ket noi duoc Scanner API.');
+        }
+
+        $scannerJobs = collect(data_get($jobsResponse, 'data.jobs', []))
+            ->filter(fn ($job) => is_array($job))
+            ->values();
+
+        $selectedJobId = trim((string) $request->query('job_id', ''));
+        if ($selectedJobId !== '' && ! $scannerJobs->contains(fn ($job) => (string) ($job['id'] ?? '') === $selectedJobId)) {
+            $selectedJobId = '';
+        }
+
+        if ($selectedJobId === '') {
+            $firstJob = $scannerJobs->first();
+            if (is_array($firstJob)) {
+                $selectedJobId = (string) ($firstJob['id'] ?? '');
+            }
+        }
+
+        if ($selectedJobId !== '' && ! $scannerError) {
+            $jobResponse = $scanner->job($selectedJobId);
+            if (! ($jobResponse['ok'] ?? false)) {
+                $scannerError = (string) ($jobResponse['error'] ?? 'Khong lay duoc ket qua job tu Scanner API.');
+            } else {
+                $job = data_get($jobResponse, 'data.job');
+                $selectedScannerJob = is_array($job) ? $job : null;
+                $scannerProductsRaw = collect(data_get($jobResponse, 'data.products', []))
+                    ->filter(fn ($product) => is_array($product))
+                    ->map(fn ($product) => $this->normalizeScannerProduct($product))
+                    ->values();
+            }
+        }
+
+        if (! $selectedScannerJob && $selectedJobId !== '') {
+            $selectedScannerJob = $scannerJobs->first(fn ($job) => (string) ($job['id'] ?? '') === $selectedJobId);
+            $selectedScannerJob = is_array($selectedScannerJob) ? $selectedScannerJob : null;
+        }
+
+        if ($scannerMode === 'priced') {
+            $scannerProductsRaw = $scannerProductsRaw
+                ->filter(fn (array $product) => $this->scannerProductPriceValue($product) > 0)
+                ->values();
+        }
+
+        if ($q !== '') {
+            $scannerProductsRaw = $scannerProductsRaw
+                ->filter(fn (array $product) => $this->scannerProductMatches($product, $q))
+                ->values();
+        }
+
+        $scannerProducts = $this->scannerProductsPaginator($scannerProductsRaw, $request, $perPage);
+
+        return view('dashboard.quick-scan', [
+            'scannerBaseUrl' => $scanner->baseUrl(),
+            'scannerError' => $scannerError,
+            'scannerJobs' => $scannerJobs,
+            'selectedScannerJob' => $selectedScannerJob,
+            'selectedJobId' => $selectedJobId,
+            'scannerProducts' => $scannerProducts,
+            'scannerMode' => $scannerMode,
+            'q' => $q,
+            'perPage' => $perPage,
+        ]);
+    }
+
+    private function scannerProductsPaginator(Collection $products, Request $request, int $perPage): LengthAwarePaginator
+    {
+        $pageRaw = (string) $request->query('page', '1');
+        $page = ctype_digit($pageRaw) ? max(1, (int) $pageRaw) : 1;
+        $query = $request->query();
+        unset($query['page']);
+
+        return new LengthAwarePaginator(
+            $products->forPage($page, $perPage)->values(),
+            $products->count(),
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $query,
+            ]
+        );
+    }
+
+    private function normalizeScannerProduct(array $product): array
+    {
+        $priceValue = $product['priceValue'] ?? $product['price_value'] ?? 0;
+
+        return [
+            'id' => (string) ($product['id'] ?? ''),
+            'name' => trim((string) ($product['name'] ?? '')),
+            'price' => trim((string) ($product['price'] ?? '')),
+            'priceValue' => is_numeric($priceValue) ? (int) round((float) $priceValue) : 0,
+            'currency' => trim((string) ($product['currency'] ?? '')),
+            'url' => trim((string) ($product['url'] ?? '')),
+            'sourceUrl' => trim((string) ($product['sourceUrl'] ?? $product['source_url'] ?? '')),
+            'productCode' => trim((string) ($product['productCode'] ?? $product['product_code'] ?? '')),
+            'updatedAt' => trim((string) ($product['updatedAt'] ?? $product['updated_at'] ?? '')),
+        ];
+    }
+
+    private function scannerProductPriceValue(array $product): int
+    {
+        $priceValue = $product['priceValue'] ?? 0;
+        if (is_numeric($priceValue) && (int) $priceValue > 0) {
+            return (int) $priceValue;
+        }
+
+        $digits = preg_replace('/[^\d]/', '', (string) ($product['price'] ?? '')) ?? '';
+
+        return $digits !== '' ? (int) $digits : 0;
+    }
+
+    private function scannerProductMatches(array $product, string $query): bool
+    {
+        $needle = mb_strtolower(trim($query));
+        if ($needle === '') {
+            return true;
+        }
+
+        foreach (['name', 'url', 'sourceUrl', 'productCode', 'price', 'currency'] as $key) {
+            $value = mb_strtolower((string) ($product[$key] ?? ''));
+            if ($value !== '' && str_contains($value, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function legacyIndex(Request $request): View
     {
         $authUser = $request->user();
         $userId = $authUser->effectiveUserId();
