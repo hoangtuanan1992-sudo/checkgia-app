@@ -147,6 +147,9 @@ class AdminSettingController extends Controller
             'website_scrape_batch_per_minute' => ['nullable', 'integer', 'min:1', 'max:1000'],
             'website_scrape_concurrency' => ['nullable', 'integer', 'min:1', 'max:50'],
             'website_scrape_timeout_seconds' => ['nullable', 'integer', 'min:3', 'max:60'],
+            'ai_provider' => ['nullable', 'in:grok,gemini,chatgpt'],
+            'ai_api_key' => ['nullable', 'string', 'max:4096'],
+            'ai_model' => ['nullable', 'string', 'max:255'],
             'grok_api_key' => ['nullable', 'string', 'max:4096'],
             'grok_model' => ['nullable', 'string', 'max:255'],
             'gemini_api_key' => ['nullable', 'string', 'max:4096'],
@@ -172,6 +175,22 @@ class AdminSettingController extends Controller
         }
 
         $table = (new AppSetting)->getTable();
+        $selectedAiProvider = strtolower((string) ($data['ai_provider'] ?? ''));
+        $selectedAiConfig = $selectedAiProvider !== '' ? $this->aiProviderConfig($selectedAiProvider) : null;
+        if ($selectedAiConfig && Schema::hasColumn($table, 'ai_provider')) {
+            $data['ai_provider'] = $selectedAiProvider;
+            $keyInput = trim((string) ($data['ai_api_key'] ?? ''));
+            if ($keyInput !== '' && Schema::hasColumn($table, $selectedAiConfig['key_column'])) {
+                $data[$selectedAiConfig['key_column']] = $keyInput;
+            }
+            if (Schema::hasColumn($table, $selectedAiConfig['model_column'])) {
+                $data[$selectedAiConfig['model_column']] = trim((string) ($data['ai_model'] ?? '')) ?: null;
+            }
+        } else {
+            unset($data['ai_provider']);
+        }
+        unset($data['ai_api_key'], $data['ai_model']);
+
         foreach (['website_scrape_batch_per_minute', 'website_scrape_concurrency', 'website_scrape_timeout_seconds'] as $col) {
             if (array_key_exists($col, $data) && ! Schema::hasColumn($table, $col)) {
                 unset($data[$col]);
@@ -273,6 +292,9 @@ class AdminSettingController extends Controller
             }
 
             $setting->{$config['models_column']} = $models;
+            if (Schema::hasColumn($table, 'ai_provider')) {
+                $setting->ai_provider = $config['provider'];
+            }
             if (! $setting->{$config['model_column']} && isset($models[0]['id'])) {
                 $setting->{$config['model_column']} = $models[0]['id'];
             }

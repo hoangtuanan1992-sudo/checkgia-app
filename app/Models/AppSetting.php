@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Model;
     'shopee_rest_seconds_min',
     'shopee_rest_seconds_max',
     'shopee_max_checks_per_day',
+    'ai_provider',
     'grok_api_key',
     'grok_model',
     'grok_models',

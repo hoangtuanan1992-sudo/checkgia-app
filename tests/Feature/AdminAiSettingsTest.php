@@ -18,23 +18,17 @@ class AdminAiSettingsTest extends TestCase
 
         $this->actingAs($admin)
             ->put(route('admin.settings.update'), [
-                'chatgpt_api_key' => 'sk-test-key',
-                'chatgpt_model' => 'gpt-test',
-                'gemini_api_key' => 'gemini-test-key',
-                'gemini_model' => 'models/gemini-test',
-                'grok_api_key' => 'xai-test-key',
-                'grok_model' => 'grok-test',
+                'ai_provider' => 'chatgpt',
+                'ai_api_key' => 'sk-test-key',
+                'ai_model' => 'gpt-test',
             ])
             ->assertRedirect();
 
         $setting = AppSetting::current();
 
+        $this->assertSame('chatgpt', $setting->ai_provider);
         $this->assertSame('sk-test-key', $setting->chatgpt_api_key);
         $this->assertSame('gpt-test', $setting->chatgpt_model);
-        $this->assertSame('gemini-test-key', $setting->gemini_api_key);
-        $this->assertSame('models/gemini-test', $setting->gemini_model);
-        $this->assertSame('xai-test-key', $setting->grok_api_key);
-        $this->assertSame('grok-test', $setting->grok_model);
     }
 
     public function test_admin_can_scan_chatgpt_models(): void
@@ -63,6 +57,7 @@ class AdminAiSettingsTest extends TestCase
         $setting = AppSetting::current();
 
         $this->assertSame('gpt-test-a', $setting->chatgpt_model);
+        $this->assertSame('chatgpt', $setting->ai_provider);
         $this->assertSame('gpt-test-a', $setting->chatgpt_models[0]['id']);
         $this->assertSame('gpt-test-b', $setting->chatgpt_models[1]['id']);
     }
