@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 class ProductImportController extends Controller
@@ -167,6 +168,21 @@ class ProductImportController extends Controller
                     'updated_at' => $now,
                 ]);
 
+            if (Schema::hasTable('scanner_scan_requests')) {
+                $sourceUrlKey = $this->websiteKey((string) ($source['startUrl'] ?? ''));
+                if ($sourceUrlKey !== '') {
+                    DB::table('scanner_scan_requests')
+                        ->where('url_key', $sourceUrlKey)
+                        ->update([
+                            'status' => 'done',
+                            'external_job_id' => $externalJobId,
+                            'completed_at' => $now,
+                            'error' => null,
+                            'updated_at' => $now,
+                        ]);
+                }
+            }
+
             return [
                 'job_id' => $externalJobId,
                 'received' => count($products),
@@ -238,5 +254,24 @@ class ProductImportController extends Controller
         $json = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         return is_string($json) ? $json : null;
+    }
+
+    private function websiteKey(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        $parts = parse_url($url);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if ($host === '') {
+            return '';
+        }
+
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+        $path = trim((string) ($parts['path'] ?? ''), '/');
+
+        return $host.($path !== '' ? '/'.$path : '');
     }
 }

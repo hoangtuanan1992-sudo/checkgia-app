@@ -80,9 +80,13 @@ class DashboardQuickScanController extends Controller
         }
 
         $q = trim((string) $request->query('q', ''));
+        $websiteUrl = trim((string) $request->query('website_url', ''));
+        $websiteUrl = $websiteUrl !== '' ? $this->normalizeWebsiteUrl($websiteUrl) : '';
+        $websiteKey = $this->websiteKey($websiteUrl);
         $scannerMode = (string) $request->query('mode', '') === 'priced' ? 'priced' : 'all';
         $scannerError = null;
         $selectedScannerJob = null;
+        $scanRequest = null;
         $scannerJobs = collect();
         $scannerProducts = new LengthAwarePaginator(
             collect(),
@@ -102,6 +106,8 @@ class DashboardQuickScanController extends Controller
                 'scannerJobs' => $scannerJobs,
                 'selectedScannerJob' => $selectedScannerJob,
                 'selectedJobId' => '',
+                'websiteUrl' => $websiteUrl,
+                'scanRequest' => $scanRequest,
                 'scannerProducts' => $scannerProducts,
                 'scannerMode' => $scannerMode,
                 'q' => $q,
@@ -118,6 +124,7 @@ class DashboardQuickScanController extends Controller
                 'id' => (string) ($job->external_job_id ?? ''),
                 'dbId' => (int) ($job->id ?? 0),
                 'startUrl' => (string) ($job->start_url ?? ''),
+                'websiteKey' => $this->websiteKey((string) ($job->start_url ?? '')),
                 'status' => 'imported',
                 'mode' => (string) ($job->mode ?? ''),
                 'productCount' => (int) ($job->imported_product_count ?? 0),
@@ -131,14 +138,32 @@ class DashboardQuickScanController extends Controller
             ])
             ->values();
 
-        $selectedJobId = trim((string) $request->query('job_id', ''));
-        if ($selectedJobId !== '' && ! $scannerJobs->contains(fn ($job) => (string) ($job['id'] ?? '') === $selectedJobId)) {
-            $selectedJobId = '';
+        $selectedJobId = '';
+        if ($websiteUrl !== '' && $websiteKey === '') {
+            $scannerError = 'Link website khong hop le.';
         }
 
-        if ($selectedJobId !== '') {
-            $selectedScannerJob = $scannerJobs->first(fn ($job) => (string) ($job['id'] ?? '') === $selectedJobId);
+        if ($websiteKey !== '') {
+            $selectedScannerJob = $scannerJobs->first(fn ($job) => (string) ($job['websiteKey'] ?? '') === $websiteKey);
             $selectedScannerJob = is_array($selectedScannerJob) ? $selectedScannerJob : null;
+            $selectedJobId = (string) ($selectedScannerJob['id'] ?? '');
+
+            if (! $selectedScannerJob && Schema::hasTable('scanner_scan_requests')) {
+                $row = DB::table('scanner_scan_requests')
+                    ->where('url_key', $websiteKey)
+                    ->first();
+                if ($row) {
+                    $scanRequest = [
+                        'id' => (int) ($row->id ?? 0),
+                        'status' => (string) ($row->status ?? ''),
+                        'requestedUrl' => (string) ($row->requested_url ?? ''),
+                        'requestedAt' => (string) ($row->requested_at ?? ''),
+                        'claimedAt' => (string) ($row->claimed_at ?? ''),
+                        'completedAt' => (string) ($row->completed_at ?? ''),
+                        'error' => (string) ($row->error ?? ''),
+                    ];
+                }
+            }
         }
 
         $selectedJobDbId = (int) ($selectedScannerJob['dbId'] ?? 0);
@@ -186,11 +211,109 @@ class DashboardQuickScanController extends Controller
             'scannerJobs' => $scannerJobs,
             'selectedScannerJob' => $selectedScannerJob,
             'selectedJobId' => $selectedJobId,
+            'websiteUrl' => $websiteUrl,
+            'scanRequest' => $scanRequest,
             'scannerProducts' => $scannerProducts,
             'scannerMode' => $scannerMode,
             'q' => $q,
             'perPage' => $perPage,
         ]);
+    }
+
+    public function requestScan(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'website_url' => ['required', 'url', 'max:2048'],
+        ]);
+
+        if (! Schema::hasTable('scanner_scan_requests')) {
+            return redirect()
+                ->route('dashboard.quick-scan', ['website_url' => $validated['website_url']])
+                ->withErrors(['website_url' => 'Chua co bang hang doi quet. Hay chay migration tren hosting.']);
+        }
+
+        $websiteUrl = $this->normalizeWebsiteUrl((string) $validated['website_url']);
+        $websiteKey = $this->websiteKey($websiteUrl);
+        if ($websiteKey === '') {
+            return redirect()
+                ->route('dashboard.quick-scan', ['website_url' => $validated['website_url']])
+                ->withErrors(['website_url' => 'Link website khong hop le.']);
+        }
+
+        $existing = DB::table('scanner_scan_requests')->where('url_key', $websiteKey)->first();
+        $now = now();
+
+        if ($existing) {
+            $activeStatuses = ['pending', 'claimed', 'running'];
+            $status = in_array((string) ($existing->status ?? ''), $activeStatuses, true)
+                ? (string) $existing->status
+                : 'pending';
+
+            DB::table('scanner_scan_requests')
+                ->where('id', (int) $existing->id)
+                ->update([
+                    'requested_by_user_id' => $request->user()?->id,
+                    'requested_url' => $websiteUrl,
+                    'status' => $status,
+                    'requested_at' => $status === 'pending' ? $now : ($existing->requested_at ?? $now),
+                    'failed_at' => null,
+                    'error' => null,
+                    'updated_at' => $now,
+                ]);
+        } else {
+            DB::table('scanner_scan_requests')->insert([
+                'requested_by_user_id' => $request->user()?->id,
+                'requested_url' => $websiteUrl,
+                'url_key' => $websiteKey,
+                'status' => 'pending',
+                'requested_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        return redirect()
+            ->route('dashboard.quick-scan', ['website_url' => $websiteUrl])
+            ->with('status', 'Da gui lenh quet website. Vui long cho khoang 1 ngay de phan mem Windows quet va day du lieu len Check Gia.');
+    }
+
+    private function normalizeWebsiteUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        $parts = parse_url($url);
+        $scheme = strtolower((string) ($parts['scheme'] ?? 'https'));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if ($host === '') {
+            return $url;
+        }
+
+        $port = isset($parts['port']) ? ':'.(int) $parts['port'] : '';
+        $path = trim((string) ($parts['path'] ?? ''), '/');
+
+        return $scheme.'://'.$host.$port.($path !== '' ? '/'.$path : '');
+    }
+
+    private function websiteKey(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        $parts = parse_url($url);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if ($host === '') {
+            return '';
+        }
+
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+        $path = trim((string) ($parts['path'] ?? ''), '/');
+
+        return $host.($path !== '' ? '/'.$path : '');
     }
 
     private function legacyIndex(Request $request): View

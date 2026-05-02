@@ -19,6 +19,10 @@
         $updatedAt = (string) ($selectedScannerJob['updatedAt'] ?? '');
         $importEndpoint = (string) ($importEndpoint ?? url('/api/products/import'));
         $apiKeyConfigured = (bool) ($apiKeyConfigured ?? false);
+        $websiteUrl = (string) ($websiteUrl ?? '');
+        $scanRequest = is_array($scanRequest ?? null) ? $scanRequest : null;
+        $scanRequestStatus = (string) ($scanRequest['status'] ?? '');
+        $hasActiveScanRequest = in_array($scanRequestStatus, ['pending', 'claimed', 'running'], true);
     @endphp
 
     <div style="width:100%;max-width:1280px">
@@ -52,23 +56,8 @@
 
                 <form method="GET" action="{{ route('dashboard.quick-scan') }}" class="scan-filter">
                     <div class="field" style="margin-top:0;min-width:min(100%,360px);flex:2">
-                        <label class="label" for="job_id">Link website đã quét</label>
-                        <select class="input" id="job_id" name="job_id" required>
-                            <option value="" @selected($selectedJobId === '') disabled>-- Chọn website muốn hiển thị --</option>
-                            @forelse($scannerJobs as $job)
-                                @php
-                                    $jobId = (string) ($job['id'] ?? '');
-                                    $startUrl = (string) ($job['startUrl'] ?? $jobId);
-                                    $status = (string) ($job['status'] ?? 'unknown');
-                                    $count = (int) ($job['productCount'] ?? 0);
-                                @endphp
-                                <option value="{{ $jobId }}" @selected($jobId === $selectedJobId)>
-                                    {{ $startUrl }} - {{ number_format($count, 0, ',', '.') }} sản phẩm
-                                </option>
-                            @empty
-                                <option value="" disabled>Chưa có dữ liệu đã đẩy lên</option>
-                            @endforelse
-                        </select>
+                        <label class="label" for="website_url">Nhập link website</label>
+                        <input class="input" id="website_url" name="website_url" type="url" value="{{ $websiteUrl }}" placeholder="https://tenmienwebsite.com" required>
                     </div>
                     <div class="field" style="margin-top:0;min-width:min(100%,260px);flex:1">
                         <label class="label" for="q">Tìm kiếm</label>
@@ -93,6 +82,33 @@
                         <button class="btn" type="submit">Quét</button>
                     </div>
                 </form>
+
+                @if($websiteUrl !== '' && !$selectedScannerJob && empty($scannerError))
+                    <div class="scan-request-box">
+                        <div>
+                            <strong>Website này chưa được quét.</strong>
+                            @if($hasActiveScanRequest)
+                                <div class="hint" style="margin-top:6px">
+                                    Lệnh quét đã được gửi vào hàng đợi. Vui lòng chờ khoảng 1 ngày để phần mềm Windows quét xong và tự đẩy dữ liệu lên Check Giá.
+                                </div>
+                            @else
+                                <div class="hint" style="margin-top:6px">
+                                    Bạn có muốn gửi lệnh quét website này không? Sau khi gửi, vui lòng chờ khoảng 1 ngày để quét xong.
+                                </div>
+                            @endif
+                            @if($scanRequestStatus !== '')
+                                <div class="hint" style="margin-top:6px">Trạng thái lệnh: {{ $scanRequestStatus }}</div>
+                            @endif
+                        </div>
+                        @if(!$hasActiveScanRequest)
+                            <form method="POST" action="{{ route('dashboard.quick-scan.request') }}">
+                                @csrf
+                                <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
+                                <button class="btn" type="submit">Gửi lệnh quét</button>
+                            </form>
+                        @endif
+                    </div>
+                @endif
 
                 @if($selectedScannerJob)
                     <div class="scan-summary">
@@ -191,8 +207,10 @@
                             @empty
                                 <tr>
                                     <td colspan="7" class="scan-empty">
-                                        @if($selectedJobId === '')
-                                            Hãy chọn link website đã quét rồi bấm Quét để hiển thị dữ liệu.
+                                        @if($websiteUrl === '')
+                                            Nhập link website rồi bấm Quét để hiển thị dữ liệu đã quét.
+                                        @elseif(!$selectedScannerJob)
+                                            Website này chưa có dữ liệu đã quét.
                                         @else
                                             Chưa có sản phẩm phù hợp để hiển thị.
                                         @endif
@@ -247,6 +265,7 @@
         .scan-filter{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
         .scan-alert{border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:10px;padding:12px 14px;margin-bottom:14px}
         .scan-alert-warning{border-color:#fed7aa;background:#fff7ed;color:#9a3412}
+        .scan-request-box{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:10px;padding:14px;margin-top:14px}
         .scan-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-top:14px}
         .scan-stat{border:1px solid #e5e7eb;border-radius:10px;padding:11px 12px;min-width:0;background:#fff}
         .scan-label{font-size:12px;color:#6b7280;margin-bottom:6px}
