@@ -22,9 +22,9 @@ return [
         'key' => env('RESEND_API_KEY'),
     ],
 
-    'product_scanner' => [
-        'base_url' => env('PRODUCT_SCANNER_API_URL', 'http://127.0.0.1:3110'),
-        'timeout' => env('PRODUCT_SCANNER_TIMEOUT', 12),
+    'checkgia_import' => [
+        'api_key' => env('CHECKGIA_IMPORT_API_KEY'),
+        'max_products_per_request' => env('CHECKGIA_IMPORT_MAX_PRODUCTS', 5000),
     ],
 
     'ses' => [

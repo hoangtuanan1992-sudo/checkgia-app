@@ -1,7 +1,10 @@
 <?php
 
+use App\Http\Controllers\Api\ProductImportController;
 use App\Http\Controllers\Shopee\ShopeeAgentApiController;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/products/import', [ProductImportController::class, 'store'])->name('api.products.import');
 
 Route::prefix('shopee')->group(function () {
     Route::middleware('shopee.cors')->group(function () {

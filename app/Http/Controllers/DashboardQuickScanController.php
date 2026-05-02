@@ -8,12 +8,10 @@ use App\Models\Product;
 use App\Models\UserScrapeSetting;
 use App\Models\User;
 use App\Services\PriceScraper;
-use App\Services\ProductScannerApiClient;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -57,7 +55,7 @@ class DashboardQuickScanController extends Controller
         return redirect()->route('dashboard.quick-scan')->with('status', 'Đã xoá tất cả run.');
     }
 
-    public function index(Request $request, ProductScannerApiClient $scanner): View
+    public function index(Request $request): View
     {
         $authUser = $request->user();
 
@@ -85,15 +83,52 @@ class DashboardQuickScanController extends Controller
         $scannerMode = (string) $request->query('mode', '') === 'priced' ? 'priced' : 'all';
         $scannerError = null;
         $selectedScannerJob = null;
-        $scannerProductsRaw = collect();
+        $scannerJobs = collect();
+        $scannerProducts = new LengthAwarePaginator(
+            collect(),
+            0,
+            $perPage,
+            1,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
 
-        $jobsResponse = $scanner->jobs();
-        if (! ($jobsResponse['ok'] ?? false)) {
-            $scannerError = (string) ($jobsResponse['error'] ?? 'Khong ket noi duoc Scanner API.');
+        if (! Schema::hasTable('scanner_import_jobs') || ! Schema::hasTable('scanner_import_products')) {
+            $scannerError = 'Chua co bang luu du lieu import. Hay chay migration tren hosting.';
+
+            return view('dashboard.quick-scan', [
+                'importEndpoint' => url('/api/products/import'),
+                'apiKeyConfigured' => trim((string) config('services.checkgia_import.api_key', '')) !== '',
+                'scannerError' => $scannerError,
+                'scannerJobs' => $scannerJobs,
+                'selectedScannerJob' => $selectedScannerJob,
+                'selectedJobId' => '',
+                'scannerProducts' => $scannerProducts,
+                'scannerMode' => $scannerMode,
+                'q' => $q,
+                'perPage' => $perPage,
+            ]);
         }
 
-        $scannerJobs = collect(data_get($jobsResponse, 'data.jobs', []))
-            ->filter(fn ($job) => is_array($job))
+        $scannerJobs = DB::table('scanner_import_jobs')
+            ->orderByDesc('last_pushed_at')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn ($job) => [
+                'id' => (string) ($job->external_job_id ?? ''),
+                'dbId' => (int) ($job->id ?? 0),
+                'startUrl' => (string) ($job->start_url ?? ''),
+                'status' => 'imported',
+                'mode' => (string) ($job->mode ?? ''),
+                'productCount' => (int) ($job->imported_product_count ?? 0),
+                'filteredProductCount' => (int) ($job->priced_product_count ?? 0),
+                'visitedCount' => 0,
+                'maxPages' => 0,
+                'batchIndex' => (int) ($job->batch_index ?? 0),
+                'batchTotal' => (int) ($job->batch_total ?? 0),
+                'createdAt' => (string) ($job->created_at ?? ''),
+                'updatedAt' => (string) (($job->last_pushed_at ?? null) ?: ($job->updated_at ?? '')),
+            ])
             ->values();
 
         $selectedJobId = trim((string) $request->query('job_id', ''));
@@ -108,41 +143,52 @@ class DashboardQuickScanController extends Controller
             }
         }
 
-        if ($selectedJobId !== '' && ! $scannerError) {
-            $jobResponse = $scanner->job($selectedJobId);
-            if (! ($jobResponse['ok'] ?? false)) {
-                $scannerError = (string) ($jobResponse['error'] ?? 'Khong lay duoc ket qua job tu Scanner API.');
-            } else {
-                $job = data_get($jobResponse, 'data.job');
-                $selectedScannerJob = is_array($job) ? $job : null;
-                $scannerProductsRaw = collect(data_get($jobResponse, 'data.products', []))
-                    ->filter(fn ($product) => is_array($product))
-                    ->map(fn ($product) => $this->normalizeScannerProduct($product))
-                    ->values();
-            }
-        }
-
-        if (! $selectedScannerJob && $selectedJobId !== '') {
+        if ($selectedJobId !== '') {
             $selectedScannerJob = $scannerJobs->first(fn ($job) => (string) ($job['id'] ?? '') === $selectedJobId);
             $selectedScannerJob = is_array($selectedScannerJob) ? $selectedScannerJob : null;
         }
 
-        if ($scannerMode === 'priced') {
-            $scannerProductsRaw = $scannerProductsRaw
-                ->filter(fn (array $product) => $this->scannerProductPriceValue($product) > 0)
-                ->values();
-        }
+        $selectedJobDbId = (int) ($selectedScannerJob['dbId'] ?? 0);
+        if ($selectedJobDbId > 0) {
+            $productsQuery = DB::table('scanner_import_products')
+                ->where('scanner_import_job_id', $selectedJobDbId);
 
-        if ($q !== '') {
-            $scannerProductsRaw = $scannerProductsRaw
-                ->filter(fn (array $product) => $this->scannerProductMatches($product, $q))
-                ->values();
-        }
+            if ($scannerMode === 'priced') {
+                $productsQuery->where('price_value', '>', 0);
+            }
 
-        $scannerProducts = $this->scannerProductsPaginator($scannerProductsRaw, $request, $perPage);
+            if ($q !== '') {
+                $productsQuery->where(function ($query) use ($q) {
+                    $query->where('name', 'like', '%'.$q.'%')
+                        ->orWhere('product_code', 'like', '%'.$q.'%')
+                        ->orWhere('url', 'like', '%'.$q.'%')
+                        ->orWhere('source_url', 'like', '%'.$q.'%')
+                        ->orWhere('price_text', 'like', '%'.$q.'%');
+                });
+            }
+
+            $scannerProducts = $productsQuery
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
+                ->paginate($perPage)
+                ->withQueryString();
+
+            $scannerProducts->getCollection()->transform(fn ($product) => [
+                'id' => (string) ($product->external_id ?? ''),
+                'name' => (string) ($product->name ?? ''),
+                'price' => (string) ($product->price_text ?? ''),
+                'priceValue' => (int) ($product->price_value ?? 0),
+                'currency' => (string) ($product->currency ?? ''),
+                'url' => (string) ($product->url ?? ''),
+                'sourceUrl' => (string) ($product->source_url ?? ''),
+                'productCode' => (string) ($product->product_code ?? ''),
+                'updatedAt' => (string) ($product->updated_at ?? ''),
+            ]);
+        }
 
         return view('dashboard.quick-scan', [
-            'scannerBaseUrl' => $scanner->baseUrl(),
+            'importEndpoint' => url('/api/products/import'),
+            'apiKeyConfigured' => trim((string) config('services.checkgia_import.api_key', '')) !== '',
             'scannerError' => $scannerError,
             'scannerJobs' => $scannerJobs,
             'selectedScannerJob' => $selectedScannerJob,
@@ -152,71 +198,6 @@ class DashboardQuickScanController extends Controller
             'q' => $q,
             'perPage' => $perPage,
         ]);
-    }
-
-    private function scannerProductsPaginator(Collection $products, Request $request, int $perPage): LengthAwarePaginator
-    {
-        $pageRaw = (string) $request->query('page', '1');
-        $page = ctype_digit($pageRaw) ? max(1, (int) $pageRaw) : 1;
-        $query = $request->query();
-        unset($query['page']);
-
-        return new LengthAwarePaginator(
-            $products->forPage($page, $perPage)->values(),
-            $products->count(),
-            $perPage,
-            $page,
-            [
-                'path' => $request->url(),
-                'query' => $query,
-            ]
-        );
-    }
-
-    private function normalizeScannerProduct(array $product): array
-    {
-        $priceValue = $product['priceValue'] ?? $product['price_value'] ?? 0;
-
-        return [
-            'id' => (string) ($product['id'] ?? ''),
-            'name' => trim((string) ($product['name'] ?? '')),
-            'price' => trim((string) ($product['price'] ?? '')),
-            'priceValue' => is_numeric($priceValue) ? (int) round((float) $priceValue) : 0,
-            'currency' => trim((string) ($product['currency'] ?? '')),
-            'url' => trim((string) ($product['url'] ?? '')),
-            'sourceUrl' => trim((string) ($product['sourceUrl'] ?? $product['source_url'] ?? '')),
-            'productCode' => trim((string) ($product['productCode'] ?? $product['product_code'] ?? '')),
-            'updatedAt' => trim((string) ($product['updatedAt'] ?? $product['updated_at'] ?? '')),
-        ];
-    }
-
-    private function scannerProductPriceValue(array $product): int
-    {
-        $priceValue = $product['priceValue'] ?? 0;
-        if (is_numeric($priceValue) && (int) $priceValue > 0) {
-            return (int) $priceValue;
-        }
-
-        $digits = preg_replace('/[^\d]/', '', (string) ($product['price'] ?? '')) ?? '';
-
-        return $digits !== '' ? (int) $digits : 0;
-    }
-
-    private function scannerProductMatches(array $product, string $query): bool
-    {
-        $needle = mb_strtolower(trim($query));
-        if ($needle === '') {
-            return true;
-        }
-
-        foreach (['name', 'url', 'sourceUrl', 'productCode', 'price', 'currency'] as $key) {
-            $value = mb_strtolower((string) ($product[$key] ?? ''));
-            if ($value !== '' && str_contains($value, $needle)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function legacyIndex(Request $request): View

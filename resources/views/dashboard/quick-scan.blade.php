@@ -13,10 +13,12 @@
         $jobStatus = (string) ($selectedScannerJob['status'] ?? 'unknown');
         $productCount = (int) ($selectedScannerJob['productCount'] ?? ($scannerProducts?->total() ?? 0));
         $filteredProductCount = (int) ($selectedScannerJob['filteredProductCount'] ?? 0);
-        $visitedCount = (int) ($selectedScannerJob['visitedCount'] ?? 0);
-        $maxPages = (int) ($selectedScannerJob['maxPages'] ?? 0);
+        $batchIndex = (int) ($selectedScannerJob['batchIndex'] ?? 0);
+        $batchTotal = (int) ($selectedScannerJob['batchTotal'] ?? 0);
         $createdAt = (string) ($selectedScannerJob['createdAt'] ?? '');
         $updatedAt = (string) ($selectedScannerJob['updatedAt'] ?? '');
+        $importEndpoint = (string) ($importEndpoint ?? url('/api/products/import'));
+        $apiKeyConfigured = (bool) ($apiKeyConfigured ?? false);
     @endphp
 
     <div style="width:100%;max-width:1280px">
@@ -24,7 +26,7 @@
             <div class="card-header" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
                 <div>
                     <h1 class="card-title">Quét nhanh</h1>
-                    <p class="card-sub">Hiển thị kết quả đã quét từ Product Scanner.</p>
+                    <p class="card-sub">Hiển thị kết quả Windows scanner đã đẩy vào database Check Giá.</p>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
                     <a class="btn btn-secondary" href="{{ request()->fullUrl() }}">Làm mới</a>
@@ -35,9 +37,16 @@
             <div class="card-body">
                 @if(!empty($scannerError))
                     <div class="scan-alert">
-                        <strong>Không kết nối được Scanner API.</strong>
+                        <strong>Chưa sẵn sàng nhận dữ liệu quét.</strong>
                         <div>{{ $scannerError }}</div>
-                        <div class="hint" style="margin-top:8px">API hiện cấu hình: {{ $scannerBaseUrl ?? 'http://127.0.0.1:3110' }}</div>
+                        <div class="hint" style="margin-top:8px">Endpoint import: {{ $importEndpoint }}</div>
+                    </div>
+                @endif
+
+                @if(!$apiKeyConfigured)
+                    <div class="scan-alert scan-alert-warning">
+                        <strong>Chưa cấu hình API key import.</strong>
+                        <div>Hãy đặt biến <code>CHECKGIA_IMPORT_API_KEY</code> trên hosting, rồi nhập cùng key đó vào phần mềm quét Windows.</div>
                     </div>
                 @endif
 
@@ -103,9 +112,13 @@
                             <div class="scan-value">{{ number_format($filteredProductCount, 0, ',', '.') }}</div>
                         </div>
                         <div class="scan-stat">
-                            <div class="scan-label">Trang đã quét</div>
+                            <div class="scan-label">Batch cuối</div>
                             <div class="scan-value">
-                                {{ number_format($visitedCount, 0, ',', '.') }}@if($maxPages > 0)/{{ number_format($maxPages, 0, ',', '.') }}@endif
+                                @if($batchIndex > 0 && $batchTotal > 0)
+                                    {{ number_format($batchIndex, 0, ',', '.') }}/{{ number_format($batchTotal, 0, ',', '.') }}
+                                @else
+                                    ---
+                                @endif
                             </div>
                         </div>
                         <div class="scan-stat">
@@ -116,7 +129,7 @@
                 @endif
 
                 <div class="hint" style="margin-top:12px">
-                    API: {{ $scannerBaseUrl ?? 'http://127.0.0.1:3110' }}
+                    Endpoint nhận dữ liệu: {{ $importEndpoint }}
                     @if($scannerProducts)
                         - Hiển thị {{ number_format($scannerProducts->count(), 0, ',', '.') }}/{{ number_format($scannerProducts->total(), 0, ',', '.') }} dòng
                     @endif
@@ -226,6 +239,7 @@
     <style>
         .scan-filter{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
         .scan-alert{border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:10px;padding:12px 14px;margin-bottom:14px}
+        .scan-alert-warning{border-color:#fed7aa;background:#fff7ed;color:#9a3412}
         .scan-summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-top:14px}
         .scan-stat{border:1px solid #e5e7eb;border-radius:10px;padding:11px 12px;min-width:0;background:#fff}
         .scan-label{font-size:12px;color:#6b7280;margin-bottom:6px}
@@ -235,6 +249,7 @@
         .scan-badge-running{background:#eff6ff;color:#1d4ed8}
         .scan-badge-queued{background:#fff7ed;color:#c2410c}
         .scan-badge-failed{background:#fef2f2;color:#b91c1c}
+        .scan-badge-imported{background:#ecfdf5;color:#047857}
         .scan-table-wrap{max-height:70vh;margin-top:14px}
         .scan-table{font-size:13px}
         .scan-table tbody tr:hover{background:rgba(17,24,39,.04)}
