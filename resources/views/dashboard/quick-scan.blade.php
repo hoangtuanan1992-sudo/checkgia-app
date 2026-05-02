@@ -182,9 +182,12 @@
                                     $name = (string) ($product['name'] ?? '');
                                     $url = (string) ($product['url'] ?? '');
                                     $code = (string) ($product['productCode'] ?? '');
-                                    $priceText = (string) ($product['price'] ?? '');
+                                    $priceText = trim((string) ($product['price'] ?? ''));
                                     $priceValue = (int) ($product['priceValue'] ?? 0);
-                                    $displayPrice = $priceText !== '' ? $priceText : ($priceValue > 0 ? number_format($priceValue, 0, ',', '.').'đ' : '');
+                                    $priceDigits = preg_replace('/\D+/', '', $priceText) ?? '';
+                                    $displayPrice = $priceValue > 0
+                                        ? number_format($priceValue, 0, ',', '.').'đ'
+                                        : ($priceDigits !== '' ? number_format((int) $priceDigits, 0, ',', '.').'đ' : $priceText);
                                 @endphp
                                 <tr class="js-scan-product-row" data-scan-product-id="{{ $dbId }}">
                                     <td class="scan-muted">{{ $rowNumber }}</td>
