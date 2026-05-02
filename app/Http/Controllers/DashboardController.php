@@ -147,6 +147,8 @@ class DashboardController extends Controller
             }
         }
 
+        $compareMatchEnabled = ! $authUser->isViewer() && User::compareMatchEnabledForId($userId);
+
         return view('dashboard.index', [
             'products' => $products,
             'competitorSites' => $competitorSites,
@@ -154,6 +156,7 @@ class DashboardController extends Controller
             'competitorSiteGroups' => $competitorSiteGroups,
             'priceEvents' => $priceEvents,
             'compareColumnWidths' => $compareColumnWidths,
+            'compareMatchEnabled' => $compareMatchEnabled,
         ]);
     }
 

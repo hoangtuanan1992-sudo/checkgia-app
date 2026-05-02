@@ -206,6 +206,7 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'product_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+            'allow_compare_match' => ['nullable', 'boolean'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
             'scrape_schedule_times' => ['nullable', 'string', 'max:10000'],
         ]);
@@ -240,6 +241,12 @@ class AdminUserController extends Controller
 
         if ($updates['role'] === 'owner' && User::hasProductLimitColumn()) {
             $updates['product_limit'] = (int) ($data['product_limit'] ?? 100);
+        }
+
+        if (User::hasCompareMatchColumn()) {
+            $updates['allow_compare_match'] = $updates['role'] === 'owner'
+                ? $request->boolean('allow_compare_match')
+                : false;
         }
 
         if (! empty($data['password'])) {

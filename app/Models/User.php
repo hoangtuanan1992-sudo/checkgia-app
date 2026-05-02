@@ -13,7 +13,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit', 'allow_compare_match'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -27,6 +27,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'service_start_date' => 'date',
             'service_end_date' => 'date',
+            'allow_compare_match' => 'boolean',
         ];
     }
 
@@ -101,6 +102,24 @@ class User extends Authenticatable
         $limit = (int) (static::query()->whereKey($userId)->value('product_limit') ?? 100);
 
         return $limit > 0 ? $limit : 100;
+    }
+
+    public static function hasCompareMatchColumn(): bool
+    {
+        try {
+            return Schema::hasColumn('users', 'allow_compare_match');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    public static function compareMatchEnabledForId(int $userId): bool
+    {
+        if (! static::hasCompareMatchColumn()) {
+            return false;
+        }
+
+        return (bool) static::query()->whereKey($userId)->value('allow_compare_match');
     }
 
     public function isViewer(): bool

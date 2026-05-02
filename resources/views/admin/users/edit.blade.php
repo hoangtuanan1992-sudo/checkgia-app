@@ -80,6 +80,21 @@
                                 <input class="input" id="product_limit" name="product_limit" type="number" min="1" max="1000000" value="{{ old('product_limit', (int) ($user->product_limit ?? 100)) }}">
                                 @error('product_limit')<div class="error">{{ $message }}</div>@enderror
                             </div>
+                            @if(\App\Models\User::hasCompareMatchColumn())
+                                <label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px">
+                                    <input
+                                        type="checkbox"
+                                        name="allow_compare_match"
+                                        value="1"
+                                        @checked((bool) old('allow_compare_match', (bool) ($user->allow_compare_match ?? false)))
+                                        style="width:20px;height:20px;margin-top:2px"
+                                    >
+                                    <span>
+                                        <span style="display:block;font-weight:700">Bật nút So Khớp</span>
+                                        <span class="hint" style="display:block;margin-top:4px">Khi bật, tài khoản này mới thấy nút So Khớp trong bảng Kết quả so sánh.</span>
+                                    </span>
+                                </label>
+                            @endif
                             <div class="hint" style="margin-top:10px">
                                 {{ $user->serviceRemainingText() ?: '---' }}
                             </div>

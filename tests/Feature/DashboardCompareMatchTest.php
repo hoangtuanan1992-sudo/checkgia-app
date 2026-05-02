@@ -20,7 +20,7 @@ class DashboardCompareMatchTest extends TestCase
 
     public function test_owner_can_match_empty_competitor_links_from_scanner_import_with_ai(): void
     {
-        $owner = User::factory()->create(['role' => 'owner']);
+        $owner = User::factory()->create(['role' => 'owner', 'allow_compare_match' => true]);
         $product = Product::query()->create([
             'user_id' => $owner->id,
             'name' => 'Tu lanh Toshiba Inverter 596 lit GR-RS780WI-PGV(22)-XK',
@@ -99,7 +99,7 @@ class DashboardCompareMatchTest extends TestCase
 
     public function test_empty_mode_keeps_existing_competitor_link(): void
     {
-        $owner = User::factory()->create(['role' => 'owner']);
+        $owner = User::factory()->create(['role' => 'owner', 'allow_compare_match' => true]);
         $product = Product::query()->create([
             'user_id' => $owner->id,
             'name' => 'Laptop ABC123',
@@ -153,7 +153,7 @@ class DashboardCompareMatchTest extends TestCase
 
     public function test_empty_skip_checked_mode_skips_blank_cells_that_were_checked_before(): void
     {
-        $owner = User::factory()->create(['role' => 'owner']);
+        $owner = User::factory()->create(['role' => 'owner', 'allow_compare_match' => true]);
         $product = Product::query()->create([
             'user_id' => $owner->id,
             'name' => 'Laptop ABC123',
@@ -207,6 +207,32 @@ class DashboardCompareMatchTest extends TestCase
             ->assertJsonPath('run.totalCells', 0);
 
         Http::assertNothingSent();
+    }
+
+    public function test_compare_match_button_is_hidden_until_admin_enables_it(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner', 'allow_compare_match' => false]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('id="compareMatchOpen"', false);
+
+        $owner->update(['allow_compare_match' => true]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('id="compareMatchOpen"', false);
+    }
+
+    public function test_compare_match_endpoint_is_forbidden_when_permission_is_off(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner', 'allow_compare_match' => false]);
+
+        $this->actingAs($owner)
+            ->postJson(route('dashboard.compare-match.run'), ['mode' => 'empty'])
+            ->assertForbidden();
     }
 
     /**

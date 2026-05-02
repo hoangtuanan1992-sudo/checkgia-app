@@ -173,7 +173,7 @@
                             </form>
                         @endif
                         <button class="btn btn-secondary" type="button" id="compareViewToggle" style="display:none">Dạng thẻ</button>
-                        @if(!auth()->user()->isViewer())
+                        @if($compareMatchEnabled ?? false)
                             <button class="btn btn-secondary" type="button" id="compareMatchOpen">So Khớp</button>
                         @endif
                     </div>

@@ -9,6 +9,7 @@ use App\Models\CompetitorSite;
 use App\Models\CompareMatchRun;
 use App\Models\CompareMatchRunItem;
 use App\Models\Product;
+use App\Models\User;
 use App\Services\ProductCodeExtractor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -32,6 +33,11 @@ class DashboardCompareMatchController extends Controller
             'mode' => ['required', 'in:all,empty,empty_skip_checked'],
         ]);
 
+        $userId = $request->user()->effectiveUserId();
+        if (! User::compareMatchEnabledForId($userId)) {
+            abort(403);
+        }
+
         if (! Schema::hasTable('scanner_import_jobs') || ! Schema::hasTable('scanner_import_products')) {
             return $this->startError($request, 'Chưa có bảng dữ liệu scanner. Hãy chạy migration import trước.');
         }
@@ -45,7 +51,6 @@ class DashboardCompareMatchController extends Controller
             return $this->startError($request, $ai['message']);
         }
 
-        $userId = $request->user()->effectiveUserId();
         $mode = (string) $validated['mode'];
 
         $sites = CompetitorSite::query()
@@ -163,6 +168,10 @@ class DashboardCompareMatchController extends Controller
         }
 
         $userId = $request->user()->effectiveUserId();
+        if (! User::compareMatchEnabledForId($userId)) {
+            abort(403);
+        }
+
         if ((int) $compareMatchRun->user_id !== (int) $userId) {
             abort(404);
         }
