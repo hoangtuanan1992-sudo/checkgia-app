@@ -91,6 +91,7 @@ class DashboardQuickScanController extends Controller
         $selectedScannerJob = null;
         $scanRequest = null;
         $scannerJobs = collect();
+        $scannerProductIds = [];
         $scannerProducts = new LengthAwarePaginator(
             collect(),
             0,
@@ -111,6 +112,7 @@ class DashboardQuickScanController extends Controller
                 'selectedJobId' => '',
                 'websiteUrl' => $websiteUrl,
                 'scanRequest' => $scanRequest,
+                'scannerProductIds' => $scannerProductIds,
                 'scannerProducts' => $scannerProducts,
                 'scannerMode' => $scannerMode,
                 'q' => $q,
@@ -188,6 +190,11 @@ class DashboardQuickScanController extends Controller
                 });
             }
 
+            $scannerProductIds = (clone $productsQuery)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
             $scannerProducts = $productsQuery
                 ->orderByDesc('updated_at')
                 ->orderByDesc('id')
@@ -223,6 +230,7 @@ class DashboardQuickScanController extends Controller
             'selectedJobId' => $selectedJobId,
             'websiteUrl' => $websiteUrl,
             'scanRequest' => $scanRequest,
+            'scannerProductIds' => $scannerProductIds,
             'scannerProducts' => $scannerProducts,
             'scannerMode' => $scannerMode,
             'q' => $q,
@@ -294,8 +302,9 @@ class DashboardQuickScanController extends Controller
         }
 
         $validated = $request->validate([
-            'scanner_product_ids' => ['required', 'array', 'min:1', 'max:500'],
-            'scanner_product_ids.*' => ['required', 'integer', 'min:1'],
+            'scanner_product_ids_json' => ['nullable', 'string', 'max:500000'],
+            'scanner_product_ids' => ['nullable', 'array', 'max:20000'],
+            'scanner_product_ids.*' => ['nullable', 'integer', 'min:1'],
             'website_url' => ['nullable', 'url', 'max:2048'],
         ]);
 
@@ -303,7 +312,19 @@ class DashboardQuickScanController extends Controller
             return back()->with('status', 'Chua co du lieu quet de them vao bang so sanh.');
         }
 
-        $ids = array_values(array_unique(array_map('intval', $validated['scanner_product_ids'] ?? [])));
+        $ids = [];
+        $idsJson = trim((string) ($validated['scanner_product_ids_json'] ?? ''));
+        if ($idsJson !== '') {
+            $decoded = json_decode($idsJson, true);
+            if (is_array($decoded)) {
+                $ids = $decoded;
+            }
+        }
+        if ($ids === []) {
+            $ids = $validated['scanner_product_ids'] ?? [];
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids), fn (int $id): bool => $id > 0)));
         if ($ids === []) {
             return back()->with('status', 'Hay chon it nhat 1 san pham.');
         }

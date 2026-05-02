@@ -23,6 +23,8 @@
         $scanRequest = is_array($scanRequest ?? null) ? $scanRequest : null;
         $scanRequestStatus = (string) ($scanRequest['status'] ?? '');
         $hasActiveScanRequest = in_array($scanRequestStatus, ['pending', 'claimed', 'running'], true);
+        $scannerProductIds = array_values(array_map('intval', $scannerProductIds ?? []));
+        $selectionStorageKey = 'checkgia_quick_scan_selection_'.sha1($selectedJobId.'|'.$websiteUrl.'|'.$scannerMode.'|'.$q);
     @endphp
 
     <div style="width:100%;max-width:1280px">
@@ -155,6 +157,7 @@
                 <form method="POST" action="{{ route('dashboard.quick-scan.add-to-compare') }}" id="scanCompareForm">
                     @csrf
                     <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
+                    <input type="hidden" name="scanner_product_ids_json" id="scanSelectedIdsInput" value="[]">
 
                 <div class="table-wrap scan-table-wrap">
                     <table class="table scan-table">
@@ -183,7 +186,7 @@
                                     $priceValue = (int) ($product['priceValue'] ?? 0);
                                     $displayPrice = $priceText !== '' ? $priceText : ($priceValue > 0 ? number_format($priceValue, 0, ',', '.').'đ' : '');
                                 @endphp
-                                <tr>
+                                <tr class="js-scan-product-row" data-scan-product-id="{{ $dbId }}">
                                     <td class="scan-muted">{{ $rowNumber }}</td>
                                     <td>{{ $code !== '' ? $code : '---' }}</td>
                                     <td style="font-weight:650">{{ $name !== '' ? $name : '---' }}</td>
@@ -207,8 +210,8 @@
                                             <input
                                                 type="checkbox"
                                                 class="scan-select-checkbox js-scan-product-select"
-                                                name="scanner_product_ids[]"
                                                 value="{{ $dbId }}"
+                                                data-scan-product-id="{{ $dbId }}"
                                                 aria-label="Chọn {{ $name !== '' ? $name : 'sản phẩm' }}"
                                             >
                                         @else
@@ -275,7 +278,11 @@
                             <div class="scan-selection-count">
                                 Đã chọn <strong id="scanSelectedCount">0</strong> sản phẩm
                             </div>
-                            <button class="btn" type="submit" id="scanAddCompareButton" disabled>Thêm so sánh giá</button>
+                            <div class="scan-selection-actions">
+                                <button class="btn btn-secondary" type="button" id="scanSelectAllFilteredButton">Chọn tất cả</button>
+                                <button class="btn btn-secondary" type="button" id="scanClearSelectionButton" disabled>Bỏ chọn</button>
+                                <button class="btn" type="submit" id="scanAddCompareButton" disabled>Thêm so sánh giá</button>
+                            </div>
                         </div>
                     @endif
                 </form>
@@ -291,30 +298,93 @@
             const checkboxes = Array.from(form.querySelectorAll('.js-scan-product-select'));
             const selectAll = document.getElementById('scanSelectAll');
             const selectedCount = document.getElementById('scanSelectedCount');
+            const selectedIdsInput = document.getElementById('scanSelectedIdsInput');
+            const selectAllFilteredButton = document.getElementById('scanSelectAllFilteredButton');
+            const clearSelectionButton = document.getElementById('scanClearSelectionButton');
             const submitButton = document.getElementById('scanAddCompareButton');
-
-            const updateSelection = () => {
-                const count = checkboxes.filter((checkbox) => checkbox.checked).length;
-                if (selectedCount) selectedCount.textContent = String(count);
-                if (submitButton) submitButton.disabled = count === 0;
-                if (selectAll) {
-                    selectAll.checked = count > 0 && count === checkboxes.length;
-                    selectAll.indeterminate = count > 0 && count < checkboxes.length;
+            const allProductIds = new Set(@json($scannerProductIds).map((id) => String(id)));
+            const storageKey = @json($selectionStorageKey);
+            const readStoredSelection = () => {
+                try {
+                    const raw = window.localStorage.getItem(storageKey);
+                    const decoded = raw ? JSON.parse(raw) : [];
+                    if (!Array.isArray(decoded)) return new Set();
+                    return new Set(decoded.map((id) => String(id)).filter((id) => allProductIds.has(id)));
+                } catch (error) {
+                    return new Set();
                 }
             };
+            const selectedIds = readStoredSelection();
+            const saveSelection = () => {
+                const ids = Array.from(selectedIds).filter((id) => allProductIds.has(id));
+                try {
+                    window.localStorage.setItem(storageKey, JSON.stringify(ids));
+                } catch (error) {
+                }
+                if (selectedIdsInput) selectedIdsInput.value = JSON.stringify(ids);
+            };
 
-            checkboxes.forEach((checkbox) => checkbox.addEventListener('change', updateSelection));
+            const updateSelection = () => {
+                checkboxes.forEach((checkbox) => {
+                    const id = String(checkbox.dataset.scanProductId || checkbox.value || '');
+                    const checked = selectedIds.has(id);
+                    checkbox.checked = checked;
+                    checkbox.closest('tr')?.classList.toggle('scan-row-selected', checked);
+                });
+
+                const count = selectedIds.size;
+                if (selectedCount) selectedCount.textContent = count.toLocaleString('vi-VN');
+                if (submitButton) submitButton.disabled = count === 0;
+                if (clearSelectionButton) clearSelectionButton.disabled = count === 0;
+                if (selectAll) {
+                    const visibleCount = checkboxes.length;
+                    const visibleChecked = checkboxes.filter((checkbox) => selectedIds.has(String(checkbox.dataset.scanProductId || checkbox.value || ''))).length;
+                    selectAll.checked = visibleCount > 0 && visibleChecked === visibleCount;
+                    selectAll.indeterminate = visibleChecked > 0 && visibleChecked < visibleCount;
+                }
+                saveSelection();
+            };
+
+            checkboxes.forEach((checkbox) => checkbox.addEventListener('change', () => {
+                const id = String(checkbox.dataset.scanProductId || checkbox.value || '');
+                if (!id) return;
+                if (checkbox.checked) {
+                    selectedIds.add(id);
+                } else {
+                    selectedIds.delete(id);
+                }
+                updateSelection();
+            }));
             if (selectAll) {
                 selectAll.addEventListener('change', () => {
                     checkboxes.forEach((checkbox) => {
-                        checkbox.checked = selectAll.checked;
+                        const id = String(checkbox.dataset.scanProductId || checkbox.value || '');
+                        if (!id) return;
+                        if (selectAll.checked) {
+                            selectedIds.add(id);
+                        } else {
+                            selectedIds.delete(id);
+                        }
                     });
+                    updateSelection();
+                });
+            }
+            if (selectAllFilteredButton) {
+                selectAllFilteredButton.addEventListener('click', () => {
+                    allProductIds.forEach((id) => selectedIds.add(id));
+                    updateSelection();
+                });
+            }
+            if (clearSelectionButton) {
+                clearSelectionButton.addEventListener('click', () => {
+                    selectedIds.clear();
                     updateSelection();
                 });
             }
 
             form.addEventListener('submit', (event) => {
-                if (checkboxes.some((checkbox) => checkbox.checked)) return;
+                saveSelection();
+                if (selectedIds.size > 0) return;
                 event.preventDefault();
             });
 
@@ -340,6 +410,8 @@
         .scan-table-wrap{max-height:70vh;margin-top:14px}
         .scan-table{font-size:13px}
         .scan-table tbody tr:hover{background:rgba(17,24,39,.04)}
+        .scan-table tbody tr.scan-row-selected{background:#eff6ff}
+        .scan-table tbody tr.scan-row-selected:hover{background:#dbeafe}
         .scan-muted{color:#6b7280;font-weight:500}
         .scan-empty{text-align:center;color:#6b7280;padding:24px}
         .scan-pagination{display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:nowrap;white-space:nowrap;margin-top:12px;overflow-x:auto}
@@ -347,6 +419,7 @@
         .scan-select-checkbox{width:24px;height:24px;accent-color:#0d6efd;cursor:pointer}
         .scan-selection-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;padding:12px 14px;margin-top:12px}
         .scan-selection-count{font-weight:700;color:#111827}
+        .scan-selection-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
         .scan-selection-bar .btn:disabled{opacity:.55;cursor:not-allowed}
         @media (max-width:1100px){.scan-summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
         @media (max-width:720px){.scan-summary{grid-template-columns:repeat(1,minmax(0,1fr))}.scan-filter .field{width:100%;min-width:100%}.scan-filter .actions{width:100%}.scan-filter .btn{width:100%}}

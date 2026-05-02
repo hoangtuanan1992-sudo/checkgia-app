@@ -105,7 +105,7 @@ class ScannerScanRequestTest extends TestCase
         $response = $this->actingAs($user)
             ->post(route('dashboard.quick-scan.add-to-compare'), [
                 'website_url' => 'https://dienmaydo.vn/',
-                'scanner_product_ids' => [$scannerProductId],
+                'scanner_product_ids_json' => json_encode([$scannerProductId]),
             ]);
 
         $response->assertRedirect(route('dashboard').'#comparisonCard');
