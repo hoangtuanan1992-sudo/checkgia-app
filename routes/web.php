@@ -115,6 +115,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/dashboard/products/import-template', [DashboardProductController::class, 'downloadImportTemplate'])->name('dashboard.products.import-template');
         Route::post('/dashboard/products/import', [DashboardProductController::class, 'importExcel'])->name('dashboard.products.import');
         Route::post('/dashboard/compare-match', [DashboardCompareMatchController::class, 'run'])->name('dashboard.compare-match.run');
+        Route::post('/dashboard/compare-match/{compareMatchRun}/tick', [DashboardCompareMatchController::class, 'tick'])->name('dashboard.compare-match.tick');
         Route::put('/dashboard/products/{product}/url', [ProductController::class, 'updateUrl'])->name('dashboard.products.url.update');
         Route::delete('/dashboard/products/{product}', [ProductController::class, 'destroyFromDashboard'])->name('dashboard.products.destroy');
         Route::match(['put', 'post', 'get'], '/dashboard/products/{product}/competitor-sites/{competitorSite}', [CompetitorController::class, 'upsertUrl'])->name('dashboard.products.competitors.upsert');

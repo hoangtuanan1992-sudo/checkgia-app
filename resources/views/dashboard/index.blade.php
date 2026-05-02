@@ -742,20 +742,42 @@
             <p class="card-sub">Tìm ứng viên từ dữ liệu scanner rồi dùng AI đang chọn trong Admin để xác nhận sản phẩm trùng.</p>
         </div>
         <div class="dialog-body">
-            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-                <form method="POST" action="{{ route('dashboard.compare-match.run') }}">
-                    @csrf
-                    <input type="hidden" name="mode" value="all">
-                    <button class="btn" type="submit" style="width:100%">So khớp toàn bộ</button>
-                </form>
-                <form method="POST" action="{{ route('dashboard.compare-match.run') }}">
-                    @csrf
-                    <input type="hidden" name="mode" value="empty">
-                    <button class="btn btn-secondary" type="submit" style="width:100%">So khớp ô trống</button>
-                </form>
+            <div id="compareMatchActions" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+                <button class="btn js-compare-match-start" type="button" data-mode="all" style="width:100%">So khớp toàn bộ</button>
+                <button class="btn btn-secondary js-compare-match-start" type="button" data-mode="empty" style="width:100%">So khớp ô trống</button>
+            </div>
+            <div id="compareMatchProgress" style="display:none;margin-top:14px">
+                <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px">
+                    <div style="font-weight:800" id="compareMatchProgressTitle">Đang chuẩn bị...</div>
+                    <div class="pill" id="compareMatchProgressPercent">0%</div>
+                </div>
+                <div style="height:12px;border-radius:999px;background:#eef2ff;border:1px solid #dbeafe;overflow:hidden">
+                    <div id="compareMatchProgressBar" style="width:0%;height:100%;background:var(--accent);transition:width .2s ease"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px">
+                    <div class="pill" style="justify-content:space-between;border-radius:10px">
+                        <span>Sản phẩm</span>
+                        <strong id="compareMatchProducts">0/0</strong>
+                    </div>
+                    <div class="pill" style="justify-content:space-between;border-radius:10px">
+                        <span>Ô đối thủ</span>
+                        <strong id="compareMatchCells">0/0</strong>
+                    </div>
+                    <div class="pill" style="justify-content:space-between;border-radius:10px">
+                        <span>Còn lại</span>
+                        <strong id="compareMatchRemaining">0</strong>
+                    </div>
+                    <div class="pill" style="justify-content:space-between;border-radius:10px">
+                        <span>Đã điền</span>
+                        <strong id="compareMatchMatched">0</strong>
+                    </div>
+                </div>
+                <div class="hint" id="compareMatchCurrent" style="margin-top:10px">Đang tạo danh sách...</div>
+                <div class="error" id="compareMatchError" style="display:none"></div>
             </div>
             <div class="actions" style="justify-content:flex-end;margin-top:12px">
                 <button class="btn btn-secondary" type="button" id="compareMatchCancel">Huỷ</button>
+                <button class="btn" type="button" id="compareMatchReload" style="display:none">Tải lại bảng</button>
             </div>
         </div>
     </dialog>
@@ -1480,12 +1502,28 @@
             const compareMatchOpen = document.getElementById('compareMatchOpen');
             const compareMatchDialog = document.getElementById('compareMatchDialog');
             const compareMatchCancel = document.getElementById('compareMatchCancel');
+            const compareMatchActions = document.getElementById('compareMatchActions');
+            const compareMatchProgress = document.getElementById('compareMatchProgress');
+            const compareMatchProgressTitle = document.getElementById('compareMatchProgressTitle');
+            const compareMatchProgressPercent = document.getElementById('compareMatchProgressPercent');
+            const compareMatchProgressBar = document.getElementById('compareMatchProgressBar');
+            const compareMatchProducts = document.getElementById('compareMatchProducts');
+            const compareMatchCells = document.getElementById('compareMatchCells');
+            const compareMatchRemaining = document.getElementById('compareMatchRemaining');
+            const compareMatchMatched = document.getElementById('compareMatchMatched');
+            const compareMatchCurrent = document.getElementById('compareMatchCurrent');
+            const compareMatchError = document.getElementById('compareMatchError');
+            const compareMatchReload = document.getElementById('compareMatchReload');
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
             const perPageSelect = document.getElementById('perPageSelect');
             const tbody = document.querySelector('table.table tbody');
             const filterCompetitorGroupKey = 'checkgia_compare_competitor_group';
             const competitorGroupMap = @json(($competitorSiteGroups ?? collect())->mapWithKeys(fn($g) => [(string) $g->id => $g->competitorSites->pluck('id')->values()])->all());
+            const compareMatchStartUrl = @json(route('dashboard.compare-match.run'));
+            const compareMatchTickUrlTemplate = @json(route('dashboard.compare-match.tick', ['compareMatchRun' => '__RUN__']));
+            const csrfToken = @json(csrf_token());
+            let compareMatchRunning = false;
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1681,7 +1719,135 @@
             }
             if (sortSelect) sortSelect.addEventListener('change', applyFiltersAndSort);
             if (compareMatchOpen && compareMatchDialog) {
+                function resetCompareMatchDialog() {
+                    compareMatchRunning = false;
+                    if (compareMatchActions) compareMatchActions.style.display = 'grid';
+                    if (compareMatchProgress) compareMatchProgress.style.display = 'none';
+                    if (compareMatchReload) compareMatchReload.style.display = 'none';
+                    if (compareMatchCancel) {
+                        compareMatchCancel.style.display = '';
+                        compareMatchCancel.textContent = 'Huỷ';
+                    }
+                    if (compareMatchError) {
+                        compareMatchError.style.display = 'none';
+                        compareMatchError.textContent = '';
+                    }
+                    compareMatchDialog.querySelectorAll('button').forEach((button) => {
+                        button.disabled = false;
+                    });
+                }
+
+                function renderCompareMatchProgress(run) {
+                    if (!run) return;
+                    const percent = Math.max(0, Math.min(100, Number(run.percent || 0)));
+                    if (compareMatchProgressTitle) {
+                        compareMatchProgressTitle.textContent = run.status === 'done'
+                            ? 'Hoàn tất so khớp'
+                            : 'Đang so khớp';
+                    }
+                    if (compareMatchProgressPercent) compareMatchProgressPercent.textContent = `${percent}%`;
+                    if (compareMatchProgressBar) compareMatchProgressBar.style.width = `${percent}%`;
+                    if (compareMatchProducts) compareMatchProducts.textContent = `${run.processedProducts || 0}/${run.totalProducts || 0}`;
+                    if (compareMatchCells) compareMatchCells.textContent = `${run.processedCells || 0}/${run.totalCells || 0}`;
+                    if (compareMatchRemaining) compareMatchRemaining.textContent = String(run.remainingCells || 0);
+                    if (compareMatchMatched) compareMatchMatched.textContent = String(run.matched || 0);
+                    if (compareMatchCurrent) {
+                        const current = run.currentProductName ? `Đang xử lý: ${run.currentProductName}` : (run.message || '');
+                        compareMatchCurrent.textContent = current || 'Đang chạy...';
+                    }
+                }
+
+                async function postCompareMatchJson(url, payload) {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify(payload || {}),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok || data.ok === false) {
+                        throw new Error(data.message || 'Không chạy được tiến trình so khớp.');
+                    }
+
+                    return data;
+                }
+
+                function showCompareMatchError(e) {
+                    compareMatchRunning = false;
+                    if (compareMatchError) {
+                        compareMatchError.style.display = '';
+                        compareMatchError.textContent = e && e.message ? e.message : 'Không chạy được tiến trình so khớp.';
+                    }
+                    if (compareMatchCancel) {
+                        compareMatchCancel.disabled = false;
+                        compareMatchCancel.textContent = 'Đóng';
+                    }
+                    if (compareMatchReload) {
+                        compareMatchReload.style.display = '';
+                    }
+                }
+
+                async function tickCompareMatch(runId) {
+                    const tickUrl = compareMatchTickUrlTemplate.replace('__RUN__', encodeURIComponent(runId));
+                    const data = await postCompareMatchJson(tickUrl, {});
+                    renderCompareMatchProgress(data.run);
+
+                    if (data.run && data.run.status === 'done') {
+                        compareMatchRunning = false;
+                        if (compareMatchCancel) {
+                            compareMatchCancel.style.display = 'none';
+                        }
+                        if (compareMatchReload) {
+                            compareMatchReload.style.display = '';
+                        }
+                        setTimeout(() => window.location.reload(), 1200);
+
+                        return;
+                    }
+
+                    if (data.run && data.run.status === 'failed') {
+                        throw new Error(data.run.message || 'Tiến trình so khớp bị lỗi.');
+                    }
+
+                    setTimeout(() => {
+                        tickCompareMatch(runId).catch(showCompareMatchError);
+                    }, 250);
+                }
+
+                async function startCompareMatch(mode) {
+                    compareMatchRunning = true;
+                    if (compareMatchActions) compareMatchActions.style.display = 'none';
+                    if (compareMatchProgress) compareMatchProgress.style.display = '';
+                    if (compareMatchReload) compareMatchReload.style.display = 'none';
+                    if (compareMatchError) {
+                        compareMatchError.style.display = 'none';
+                        compareMatchError.textContent = '';
+                    }
+                    if (compareMatchCancel) {
+                        compareMatchCancel.textContent = 'Đang chạy';
+                        compareMatchCancel.disabled = true;
+                    }
+                    if (compareMatchProgressTitle) compareMatchProgressTitle.textContent = 'Đang chuẩn bị...';
+
+                    try {
+                        const data = await postCompareMatchJson(compareMatchStartUrl, { mode });
+                        renderCompareMatchProgress(data.run);
+                        if (!data.run || !data.run.id) {
+                            throw new Error('Không nhận được mã tiến trình so khớp.');
+                        }
+                        await tickCompareMatch(data.run.id);
+                    } catch (e) {
+                        showCompareMatchError(e);
+                    }
+                }
+
                 compareMatchOpen.addEventListener('click', () => {
+                    resetCompareMatchDialog();
                     if (typeof compareMatchDialog.showModal === 'function') {
                         compareMatchDialog.showModal();
                     } else {
@@ -1689,20 +1855,25 @@
                     }
                 });
                 compareMatchDialog.addEventListener('click', (e) => {
-                    if (e.target === compareMatchDialog) {
+                    if (e.target === compareMatchDialog && !compareMatchRunning) {
                         compareMatchDialog.close();
                     }
                 });
-                compareMatchDialog.querySelectorAll('form').forEach((form) => {
-                    form.addEventListener('submit', () => {
-                        compareMatchDialog.querySelectorAll('button').forEach((button) => {
-                            button.disabled = true;
-                        });
+                compareMatchDialog.querySelectorAll('.js-compare-match-start').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        startCompareMatch(button.dataset.mode || 'empty');
                     });
                 });
             }
             if (compareMatchCancel && compareMatchDialog) {
-                compareMatchCancel.addEventListener('click', () => compareMatchDialog.close());
+                compareMatchCancel.addEventListener('click', () => {
+                    if (!compareMatchRunning) {
+                        compareMatchDialog.close();
+                    }
+                });
+            }
+            if (compareMatchReload) {
+                compareMatchReload.addEventListener('click', () => window.location.reload());
             }
 
             function syncExportLinks() {

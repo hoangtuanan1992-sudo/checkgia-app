@@ -6,8 +6,11 @@ use App\Models\AppSetting;
 use App\Models\Competitor;
 use App\Models\CompetitorPrice;
 use App\Models\CompetitorSite;
+use App\Models\CompareMatchRun;
+use App\Models\CompareMatchRunItem;
 use App\Models\Product;
 use App\Services\ProductCodeExtractor;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +22,7 @@ class DashboardCompareMatchController extends Controller
 {
     private const MIN_AI_CONFIDENCE = 0.72;
 
-    public function run(Request $request): RedirectResponse
+    public function run(Request $request): JsonResponse|RedirectResponse
     {
         if ($request->user()->isViewer()) {
             abort(403);
@@ -30,17 +33,16 @@ class DashboardCompareMatchController extends Controller
         ]);
 
         if (! Schema::hasTable('scanner_import_jobs') || ! Schema::hasTable('scanner_import_products')) {
-            return back()->with('status', 'Chưa có bảng dữ liệu scanner. Hãy chạy migration import trước.');
+            return $this->startError($request, 'Chưa có bảng dữ liệu scanner. Hãy chạy migration import trước.');
+        }
+
+        if (! Schema::hasTable('compare_match_runs') || ! Schema::hasTable('compare_match_run_items')) {
+            return $this->startError($request, 'Chưa có bảng tiến trình so khớp. Hãy chạy migration mới trên hosting.');
         }
 
         $ai = $this->resolveAiConfig();
         if (! $ai['ok']) {
-            return back()->with('status', $ai['message']);
-        }
-
-        try {
-            @set_time_limit(240);
-        } catch (\Throwable) {
+            return $this->startError($request, $ai['message']);
         }
 
         $userId = $request->user()->effectiveUserId();
@@ -53,81 +55,323 @@ class DashboardCompareMatchController extends Controller
             ->get();
 
         if ($sites->isEmpty()) {
-            return back()->with('status', 'Chưa có cột đối thủ để so khớp.');
+            return $this->startError($request, 'Chưa có cột đối thủ để so khớp.');
         }
 
-        $stats = [
-            'checked' => 0,
-            'matched' => 0,
-            'skipped_existing' => 0,
-            'no_candidates' => 0,
-            'no_match' => 0,
-            'errors' => 0,
-        ];
-        $errorSamples = [];
+        $run = null;
+        $totalCells = 0;
+        $totalProducts = 0;
+        $skippedExisting = 0;
 
-        $products = Product::query()
-            ->where('user_id', $userId)
-            ->with('competitors')
+        DB::transaction(function () use ($userId, $mode, $sites, &$run, &$totalCells, &$totalProducts, &$skippedExisting) {
+            $run = CompareMatchRun::query()->create([
+                'user_id' => $userId,
+                'mode' => $mode,
+                'status' => 'queued',
+                'message' => 'Đang chuẩn bị danh sách so khớp.',
+            ]);
+
+            Product::query()
+                ->where('user_id', $userId)
+                ->with('competitors:id,product_id,competitor_site_id,url')
+                ->orderBy('id')
+                ->chunkById(300, function ($products) use ($sites, $mode, $run, &$totalCells, &$totalProducts, &$skippedExisting) {
+                    $rows = [];
+
+                    foreach ($products as $product) {
+                        $map = $product->competitors->keyBy('competitor_site_id');
+                        $productCells = 0;
+
+                        foreach ($sites as $site) {
+                            $existing = $map->get($site->id);
+                            if ($mode === 'empty' && $existing && trim((string) $existing->url) !== '') {
+                                $skippedExisting++;
+                                continue;
+                            }
+
+                            $rows[] = [
+                                'compare_match_run_id' => $run->id,
+                                'product_id' => $product->id,
+                                'competitor_site_id' => $site->id,
+                                'status' => 'pending',
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ];
+                            $productCells++;
+                        }
+
+                        if ($productCells > 0) {
+                            $totalProducts++;
+                            $totalCells += $productCells;
+                        }
+                    }
+
+                    foreach (array_chunk($rows, 1000) as $chunk) {
+                        CompareMatchRunItem::query()->insert($chunk);
+                    }
+                });
+
+            $run->update([
+                'total_products' => $totalProducts,
+                'total_cells' => $totalCells,
+                'skipped_existing_count' => $skippedExisting,
+                'status' => $totalCells > 0 ? 'queued' : 'done',
+                'message' => $totalCells > 0
+                    ? 'Đã sẵn sàng so khớp.'
+                    : ($mode === 'empty' ? 'Không còn ô trống cần so khớp.' : 'Chưa có sản phẩm cần so khớp.'),
+                'finished_at' => $totalCells > 0 ? null : now(),
+            ]);
+        });
+
+        $run->refresh();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'run' => $this->progressPayload($run),
+            ]);
+        }
+
+        return back()->with('status', 'Đã tạo tiến trình so khớp. Vui lòng chạy trong popup để xem tiến độ.');
+    }
+
+    public function tick(Request $request, CompareMatchRun $compareMatchRun): JsonResponse
+    {
+        if ($request->user()->isViewer()) {
+            abort(403);
+        }
+
+        $userId = $request->user()->effectiveUserId();
+        if ((int) $compareMatchRun->user_id !== (int) $userId) {
+            abort(404);
+        }
+
+        if (in_array($compareMatchRun->status, ['done', 'failed'], true)) {
+            return response()->json([
+                'ok' => true,
+                'run' => $this->progressPayload($compareMatchRun->refresh()),
+            ]);
+        }
+
+        $ai = $this->resolveAiConfig();
+        if (! $ai['ok']) {
+            $compareMatchRun->update([
+                'status' => 'failed',
+                'message' => $ai['message'],
+                'finished_at' => now(),
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => $ai['message'],
+                'run' => $this->progressPayload($compareMatchRun->refresh()),
+            ], 422);
+        }
+
+        try {
+            @set_time_limit(90);
+        } catch (\Throwable) {
+        }
+
+        $compareMatchRun->update([
+            'status' => 'running',
+            'started_at' => $compareMatchRun->started_at ?: now(),
+        ]);
+
+        $item = CompareMatchRunItem::query()
+            ->where('compare_match_run_id', $compareMatchRun->id)
+            ->where('status', 'pending')
             ->orderBy('id')
-            ->get();
+            ->first();
 
-        foreach ($products as $product) {
-            $map = $product->competitors->keyBy('competitor_site_id');
+        if (! $item) {
+            $this->finishRunIfComplete($compareMatchRun);
 
-            foreach ($sites as $site) {
-                $existing = $map->get($site->id);
-                if ($mode === 'empty' && $existing && trim((string) $existing->url) !== '') {
-                    $stats['skipped_existing']++;
-                    continue;
-                }
-
-                $stats['checked']++;
-                $candidates = $this->findCandidates($product, $site);
-                if ($candidates === []) {
-                    $stats['no_candidates']++;
-                    continue;
-                }
-
-                try {
-                    $match = $this->askAiForMatch($ai['config'], $product, $site, $candidates);
-                } catch (\Throwable $e) {
-                    $stats['errors']++;
-                    if (count($errorSamples) < 3) {
-                        $errorSamples[] = $e->getMessage();
-                    }
-                    if ($stats['errors'] >= 3) {
-                        break 2;
-                    }
-                    continue;
-                }
-
-                $candidate = $this->matchedCandidate($candidates, $match);
-                if (! $candidate || (float) ($match['confidence'] ?? 0) < self::MIN_AI_CONFIDENCE) {
-                    $stats['no_match']++;
-                    continue;
-                }
-
-                $this->saveMatch($product, $site, $candidate);
-                $stats['matched']++;
-            }
+            return response()->json([
+                'ok' => true,
+                'run' => $this->progressPayload($compareMatchRun->refresh()),
+            ]);
         }
 
-        $message = 'Đã so khớp '.$stats['checked'].' ô, điền được '.$stats['matched'].' link.';
-        if ($mode === 'empty') {
-            $message .= ' Đã bỏ qua '.$stats['skipped_existing'].' ô đã có link.';
-        }
-        if ($stats['no_candidates'] > 0) {
-            $message .= ' '.$stats['no_candidates'].' ô chưa có ứng viên scanner.';
-        }
-        if ($stats['errors'] > 0) {
-            $message .= ' Có '.$stats['errors'].' lỗi AI.';
-            if ($errorSamples !== []) {
-                $message .= ' Lỗi đầu: '.Str::limit($errorSamples[0], 160);
-            }
+        $this->processItem($compareMatchRun, $item, $ai['config']);
+
+        $this->finishRunIfComplete($compareMatchRun);
+
+        return response()->json([
+            'ok' => true,
+            'run' => $this->progressPayload($compareMatchRun->refresh()),
+        ]);
+    }
+
+    private function startError(Request $request, string $message): JsonResponse|RedirectResponse
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => false,
+                'message' => $message,
+            ], 422);
         }
 
         return back()->with('status', $message);
+    }
+
+    private function processItem(CompareMatchRun $run, CompareMatchRunItem $item, array $ai): void
+    {
+        $product = Product::query()
+            ->where('user_id', $run->user_id)
+            ->find($item->product_id);
+        $site = CompetitorSite::query()
+            ->where('user_id', $run->user_id)
+            ->find($item->competitor_site_id);
+
+        if (! $product || ! $site) {
+            $this->markItemProcessed($run, $item, 'error', 'Sản phẩm hoặc cột đối thủ đã bị xoá.');
+
+            return;
+        }
+
+        $run->update([
+            'current_product_name' => Str::limit((string) $product->name, 255, ''),
+            'message' => 'Đang so khớp: '.$product->name,
+        ]);
+
+        if ($run->mode === 'empty') {
+            $existing = Competitor::query()
+                ->where('product_id', $product->id)
+                ->where('competitor_site_id', $site->id)
+                ->first();
+            if ($existing && trim((string) $existing->url) !== '') {
+                $this->markItemProcessed($run, $item, 'skipped_existing', 'Ô đã có link.');
+
+                return;
+            }
+        }
+
+        $candidates = $this->findCandidates($product, $site);
+        if ($candidates === []) {
+            $this->markItemProcessed($run, $item, 'no_candidates', 'Không có ứng viên scanner.');
+
+            return;
+        }
+
+        try {
+            $match = $this->askAiForMatch($ai, $product, $site, $candidates);
+            $candidate = $this->matchedCandidate($candidates, $match);
+
+            if (! $candidate || (float) ($match['confidence'] ?? 0) < self::MIN_AI_CONFIDENCE) {
+                $this->markItemProcessed($run, $item, 'no_match', 'AI chưa xác nhận được sản phẩm trùng.');
+
+                return;
+            }
+
+            $this->saveMatch($product, $site, $candidate);
+            $this->markItemProcessed($run, $item, 'matched', 'Đã điền link.', (string) $candidate['url']);
+        } catch (\Throwable $e) {
+            $this->markItemProcessed($run, $item, 'error', $e->getMessage());
+        }
+    }
+
+    private function markItemProcessed(CompareMatchRun $run, CompareMatchRunItem $item, string $status, string $message, ?string $matchedUrl = null): void
+    {
+        DB::transaction(function () use ($run, $item, $status, $message, $matchedUrl) {
+            $item->update([
+                'status' => $status,
+                'matched_url' => $matchedUrl,
+                'message' => Str::limit($message, 1000, ''),
+                'processed_at' => now(),
+            ]);
+
+            $increments = [
+                'processed_cells' => DB::raw('processed_cells + 1'),
+            ];
+
+            if ($status === 'matched') {
+                $increments['matched_count'] = DB::raw('matched_count + 1');
+            } elseif ($status === 'skipped_existing') {
+                $increments['skipped_existing_count'] = DB::raw('skipped_existing_count + 1');
+            } elseif ($status === 'no_candidates') {
+                $increments['no_candidates_count'] = DB::raw('no_candidates_count + 1');
+            } elseif ($status === 'no_match') {
+                $increments['no_match_count'] = DB::raw('no_match_count + 1');
+            } elseif ($status === 'error') {
+                $increments['error_count'] = DB::raw('error_count + 1');
+                $samples = $run->error_samples ?: [];
+                if (count($samples) < 3) {
+                    $samples[] = Str::limit($message, 300, '');
+                    $increments['error_samples'] = json_encode($samples, JSON_UNESCAPED_UNICODE);
+                }
+            }
+
+            $hasPendingForProduct = CompareMatchRunItem::query()
+                ->where('compare_match_run_id', $run->id)
+                ->where('product_id', $item->product_id)
+                ->where('status', 'pending')
+                ->exists();
+
+            if (! $hasPendingForProduct) {
+                $increments['processed_products'] = DB::raw('processed_products + 1');
+            }
+
+            CompareMatchRun::query()
+                ->whereKey($run->id)
+                ->update($increments + [
+                    'message' => $message,
+                    'updated_at' => now(),
+                ]);
+        });
+    }
+
+    private function finishRunIfComplete(CompareMatchRun $run): void
+    {
+        $pending = CompareMatchRunItem::query()
+            ->where('compare_match_run_id', $run->id)
+            ->where('status', 'pending')
+            ->exists();
+
+        if ($pending) {
+            return;
+        }
+
+        $run->refresh();
+        $message = 'Hoàn tất: đã xử lý '.$run->processed_cells.'/'.$run->total_cells.' ô, điền được '.$run->matched_count.' link.';
+        if ((int) $run->error_count > 0) {
+            $message .= ' Có '.$run->error_count.' lỗi.';
+        }
+
+        $run->update([
+            'status' => 'done',
+            'message' => $message,
+            'current_product_name' => null,
+            'finished_at' => now(),
+        ]);
+    }
+
+    private function progressPayload(CompareMatchRun $run): array
+    {
+        $totalCells = max(0, (int) $run->total_cells);
+        $processedCells = max(0, (int) $run->processed_cells);
+        $totalProducts = max(0, (int) $run->total_products);
+        $processedProducts = max(0, (int) $run->processed_products);
+
+        return [
+            'id' => (int) $run->id,
+            'mode' => (string) $run->mode,
+            'status' => (string) $run->status,
+            'totalProducts' => $totalProducts,
+            'processedProducts' => min($processedProducts, $totalProducts),
+            'remainingProducts' => max(0, $totalProducts - $processedProducts),
+            'totalCells' => $totalCells,
+            'processedCells' => min($processedCells, $totalCells),
+            'remainingCells' => max(0, $totalCells - $processedCells),
+            'matched' => (int) $run->matched_count,
+            'skippedExisting' => (int) $run->skipped_existing_count,
+            'noCandidates' => (int) $run->no_candidates_count,
+            'noMatch' => (int) $run->no_match_count,
+            'errors' => (int) $run->error_count,
+            'currentProductName' => (string) ($run->current_product_name ?? ''),
+            'message' => (string) ($run->message ?? ''),
+            'percent' => $totalCells > 0 ? (int) floor(($processedCells / $totalCells) * 100) : 100,
+        ];
     }
 
     private function resolveAiConfig(): array

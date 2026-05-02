@@ -64,9 +64,23 @@ class DashboardCompareMatchTest extends TestCase
             ], 200),
         ]);
 
+        $start = $this->actingAs($owner)
+            ->postJson(route('dashboard.compare-match.run'), ['mode' => 'empty'])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('run.totalCells', 1)
+            ->assertJsonPath('run.processedCells', 0);
+
+        $runId = (int) $start->json('run.id');
+
         $this->actingAs($owner)
-            ->post(route('dashboard.compare-match.run'), ['mode' => 'empty'])
-            ->assertRedirect();
+            ->postJson(route('dashboard.compare-match.tick', $runId))
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('run.status', 'done')
+            ->assertJsonPath('run.processedCells', 1)
+            ->assertJsonPath('run.remainingCells', 0)
+            ->assertJsonPath('run.matched', 1);
 
         $competitor = Competitor::query()
             ->where('product_id', $product->id)
@@ -120,8 +134,12 @@ class DashboardCompareMatchTest extends TestCase
         Http::fake();
 
         $this->actingAs($owner)
-            ->post(route('dashboard.compare-match.run'), ['mode' => 'empty'])
-            ->assertRedirect();
+            ->postJson(route('dashboard.compare-match.run'), ['mode' => 'empty'])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('run.status', 'done')
+            ->assertJsonPath('run.totalCells', 0)
+            ->assertJsonPath('run.skippedExisting', 1);
 
         $this->assertDatabaseHas('competitors', [
             'product_id' => $product->id,
