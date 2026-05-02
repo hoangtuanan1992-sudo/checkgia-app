@@ -136,13 +136,6 @@ class DashboardQuickScanController extends Controller
             $selectedJobId = '';
         }
 
-        if ($selectedJobId === '') {
-            $firstJob = $scannerJobs->first();
-            if (is_array($firstJob)) {
-                $selectedJobId = (string) ($firstJob['id'] ?? '');
-            }
-        }
-
         if ($selectedJobId !== '') {
             $selectedScannerJob = $scannerJobs->first(fn ($job) => (string) ($job['id'] ?? '') === $selectedJobId);
             $selectedScannerJob = is_array($selectedScannerJob) ? $selectedScannerJob : null;

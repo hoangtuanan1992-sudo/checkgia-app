@@ -52,8 +52,9 @@
 
                 <form method="GET" action="{{ route('dashboard.quick-scan') }}" class="scan-filter">
                     <div class="field" style="margin-top:0;min-width:min(100%,360px);flex:2">
-                        <label class="label" for="job_id">Phiên quét</label>
-                        <select class="input" id="job_id" name="job_id">
+                        <label class="label" for="job_id">Link website đã quét</label>
+                        <select class="input" id="job_id" name="job_id" required>
+                            <option value="" @selected($selectedJobId === '') disabled>-- Chọn website muốn hiển thị --</option>
                             @forelse($scannerJobs as $job)
                                 @php
                                     $jobId = (string) ($job['id'] ?? '');
@@ -62,10 +63,10 @@
                                     $count = (int) ($job['productCount'] ?? 0);
                                 @endphp
                                 <option value="{{ $jobId }}" @selected($jobId === $selectedJobId)>
-                                    {{ $startUrl }} - {{ $status }} - {{ number_format($count, 0, ',', '.') }} sản phẩm
+                                    {{ $startUrl }} - {{ number_format($count, 0, ',', '.') }} sản phẩm
                                 </option>
                             @empty
-                                <option value="">Chưa có phiên quét</option>
+                                <option value="" disabled>Chưa có dữ liệu đã đẩy lên</option>
                             @endforelse
                         </select>
                     </div>
@@ -89,7 +90,7 @@
                         </select>
                     </div>
                     <div class="actions" style="margin-top:0">
-                        <button class="btn" type="submit">Lọc</button>
+                        <button class="btn" type="submit">Quét</button>
                     </div>
                 </form>
 
@@ -130,7 +131,7 @@
 
                 <div class="hint" style="margin-top:12px">
                     Endpoint nhận dữ liệu: {{ $importEndpoint }}
-                    @if($scannerProducts)
+                    @if($selectedJobId !== '' && $scannerProducts)
                         - Hiển thị {{ number_format($scannerProducts->count(), 0, ',', '.') }}/{{ number_format($scannerProducts->total(), 0, ',', '.') }} dòng
                     @endif
                 </div>
@@ -189,7 +190,13 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="scan-empty">Chưa có sản phẩm phù hợp để hiển thị.</td>
+                                    <td colspan="7" class="scan-empty">
+                                        @if($selectedJobId === '')
+                                            Hãy chọn link website đã quét rồi bấm Quét để hiển thị dữ liệu.
+                                        @else
+                                            Chưa có sản phẩm phù hợp để hiển thị.
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforelse
                         </tbody>
