@@ -173,7 +173,9 @@
                             </form>
                         @endif
                         <button class="btn btn-secondary" type="button" id="compareViewToggle" style="display:none">Dạng thẻ</button>
-                        <button class="btn btn-secondary" type="button" id="filterReset">So Khớp</button>
+                        @if(!auth()->user()->isViewer())
+                            <button class="btn btn-secondary" type="button" id="compareMatchOpen">So Khớp</button>
+                        @endif
                     </div>
                 </div>
                 <div class="table-wrap" id="comparisonTableView">
@@ -730,6 +732,30 @@
             <div class="actions" style="justify-content:flex-end">
                 <button class="btn btn-secondary" type="button" id="deleteDialogCancel">Huỷ</button>
                 <button class="btn" type="button" id="deleteDialogConfirm">Xoá</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="compareMatchDialog" class="dialog">
+        <div class="dialog-header">
+            <h3 class="card-title" style="font-size:18px">So khớp link đối thủ</h3>
+            <p class="card-sub">Tìm ứng viên từ dữ liệu scanner rồi dùng AI đang chọn trong Admin để xác nhận sản phẩm trùng.</p>
+        </div>
+        <div class="dialog-body">
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+                <form method="POST" action="{{ route('dashboard.compare-match.run') }}">
+                    @csrf
+                    <input type="hidden" name="mode" value="all">
+                    <button class="btn" type="submit" style="width:100%">So khớp toàn bộ</button>
+                </form>
+                <form method="POST" action="{{ route('dashboard.compare-match.run') }}">
+                    @csrf
+                    <input type="hidden" name="mode" value="empty">
+                    <button class="btn btn-secondary" type="submit" style="width:100%">So khớp ô trống</button>
+                </form>
+            </div>
+            <div class="actions" style="justify-content:flex-end;margin-top:12px">
+                <button class="btn btn-secondary" type="button" id="compareMatchCancel">Huỷ</button>
             </div>
         </div>
     </dialog>
@@ -1451,7 +1477,9 @@
             const filterGroup = document.getElementById('filterGroup');
             const filterCompetitorGroup = document.getElementById('filterCompetitorGroup');
             const sortSelect = document.getElementById('sortSelect');
-            const filterReset = document.getElementById('filterReset');
+            const compareMatchOpen = document.getElementById('compareMatchOpen');
+            const compareMatchDialog = document.getElementById('compareMatchDialog');
+            const compareMatchCancel = document.getElementById('compareMatchCancel');
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
             const perPageSelect = document.getElementById('perPageSelect');
@@ -1652,28 +1680,29 @@
                 });
             }
             if (sortSelect) sortSelect.addEventListener('change', applyFiltersAndSort);
-            if (filterReset) {
-                filterReset.addEventListener('click', () => {
-                    if (filterSearch) filterSearch.value = '';
-                    if (filterGroup) filterGroup.value = '';
-                    if (filterCompetitorGroup) filterCompetitorGroup.value = '';
-                    if (sortSelect) sortSelect.value = 'row_asc';
-                    try {
-                        localStorage.removeItem(filterCompetitorGroupKey);
-                    } catch (e) {
+            if (compareMatchOpen && compareMatchDialog) {
+                compareMatchOpen.addEventListener('click', () => {
+                    if (typeof compareMatchDialog.showModal === 'function') {
+                        compareMatchDialog.showModal();
+                    } else {
+                        compareMatchDialog.setAttribute('open', 'open');
                     }
-                    const url = new URL(window.location.href);
-                    if (url.searchParams.has('q') || url.searchParams.has('page')) {
-                        url.searchParams.delete('q');
-                        url.searchParams.delete('page');
-                        window.location.assign(url.toString());
-
-                        return;
-                    }
-
-                    applyFiltersAndSort();
-                    applyCompetitorGroupFilter();
                 });
+                compareMatchDialog.addEventListener('click', (e) => {
+                    if (e.target === compareMatchDialog) {
+                        compareMatchDialog.close();
+                    }
+                });
+                compareMatchDialog.querySelectorAll('form').forEach((form) => {
+                    form.addEventListener('submit', () => {
+                        compareMatchDialog.querySelectorAll('button').forEach((button) => {
+                            button.disabled = true;
+                        });
+                    });
+                });
+            }
+            if (compareMatchCancel && compareMatchDialog) {
+                compareMatchCancel.addEventListener('click', () => compareMatchDialog.close());
             }
 
             function syncExportLinks() {
