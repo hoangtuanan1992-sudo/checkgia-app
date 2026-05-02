@@ -1522,7 +1522,6 @@
             const competitorGroupMap = @json(($competitorSiteGroups ?? collect())->mapWithKeys(fn($g) => [(string) $g->id => $g->competitorSites->pluck('id')->values()])->all());
             const compareMatchStartUrl = @json(route('dashboard.compare-match.run'));
             const compareMatchTickUrlTemplate = @json(route('dashboard.compare-match.tick', ['compareMatchRun' => '__RUN__']));
-            const csrfToken = @json(csrf_token());
             let compareMatchRunning = false;
 
             function parseNum(v) {
