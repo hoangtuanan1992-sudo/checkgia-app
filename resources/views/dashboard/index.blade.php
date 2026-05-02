@@ -618,33 +618,51 @@
                             @endif
                         </div>
                         <div style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap;justify-content:flex-end;white-space:nowrap">
-                            @if($products->lastPage() <= 1)
-                                @php($pageUrls = [])
-                            @endif
-
                             @if($products->lastPage() > 1)
-                            @if($products->onFirstPage())
-                                <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Trước</span>
-                            @else
-                                <a class="btn btn-secondary" href="{{ $products->previousPageUrl() }}">Trước</a>
-                            @endif
+                                <div style="display:flex;align-items:center;gap:8px;white-space:nowrap">
+                                    <span class="hint" style="margin:0">Bạn muốn xem trang:</span>
+                                    <input
+                                        class="input"
+                                        id="pageJumpInput"
+                                        type="number"
+                                        min="1"
+                                        max="{{ $products->lastPage() }}"
+                                        value="{{ $products->currentPage() }}"
+                                        data-last-page="{{ $products->lastPage() }}"
+                                        style="width:96px;padding:10px 12px"
+                                    >
+                                </div>
 
-                            @php($pageUrls = $products->getUrlRange(1, $products->lastPage()))
-                            <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;max-width:100%">
-                                @foreach($pageUrls as $p => $url)
-                                    @if((int) $p === (int) $products->currentPage())
-                                        <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $p }}</span>
-                                    @else
-                                        <a class="btn btn-secondary" href="{{ $url }}">{{ $p }}</a>
+                                @if($products->onFirstPage())
+                                    <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Trước</span>
+                                @else
+                                    <a class="btn btn-secondary" href="{{ $products->previousPageUrl() }}">Trước</a>
+                                @endif
+
+                                @php($firstPageUrls = $products->getUrlRange(1, min(4, $products->lastPage())))
+                                <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;max-width:100%">
+                                    @foreach($firstPageUrls as $p => $url)
+                                        @if((int) $p === (int) $products->currentPage())
+                                            <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $p }}</span>
+                                        @else
+                                            <a class="btn btn-secondary" href="{{ $url }}">{{ $p }}</a>
+                                        @endif
+                                    @endforeach
+                                    @if($products->lastPage() > 4)
+                                        <span style="display:inline-flex;align-items:center;color:var(--muted);font-weight:700;padding:0 4px">.....</span>
+                                        @if((int) $products->lastPage() === (int) $products->currentPage())
+                                            <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $products->lastPage() }}</span>
+                                        @else
+                                            <a class="btn btn-secondary" href="{{ $products->url($products->lastPage()) }}">{{ $products->lastPage() }}</a>
+                                        @endif
                                     @endif
-                                @endforeach
-                            </div>
+                                </div>
 
-                            @if($products->hasMorePages())
-                                <a class="btn btn-secondary" href="{{ $products->nextPageUrl() }}">Sau</a>
-                            @else
-                                <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Sau</span>
-                            @endif
+                                @if($products->hasMorePages())
+                                    <a class="btn btn-secondary" href="{{ $products->nextPageUrl() }}">Sau</a>
+                                @else
+                                    <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Sau</span>
+                                @endif
                             @endif
                         </div>
                     </div>
@@ -1518,6 +1536,7 @@
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
             const perPageSelect = document.getElementById('perPageSelect');
+            const pageJumpInput = document.getElementById('pageJumpInput');
             const tbody = document.querySelector('table.table tbody');
             const filterCompetitorGroupKey = 'checkgia_compare_competitor_group';
             const competitorGroupMap = @json(($competitorSiteGroups ?? collect())->mapWithKeys(fn($g) => [(string) $g->id => $g->competitorSites->pluck('id')->values()])->all());
@@ -1694,6 +1713,28 @@
                     url.searchParams.delete('page');
                     window.location.assign(url.toString());
                 });
+            }
+            if (pageJumpInput) {
+                const goToPage = () => {
+                    const last = Math.max(1, Number(pageJumpInput.dataset.lastPage || '1') || 1);
+                    const raw = Number(pageJumpInput.value || '1');
+                    const page = Math.max(1, Math.min(last, Math.floor(raw || 1)));
+                    pageJumpInput.value = String(page);
+                    const url = new URL(window.location.href);
+                    if (page <= 1) {
+                        url.searchParams.delete('page');
+                    } else {
+                        url.searchParams.set('page', String(page));
+                    }
+                    window.location.assign(url.toString());
+                };
+                pageJumpInput.addEventListener('keydown', (e) => {
+                    if (e && e.key === 'Enter') {
+                        e.preventDefault();
+                        goToPage();
+                    }
+                });
+                pageJumpInput.addEventListener('change', goToPage);
             }
             if (filterCompetitorGroup) {
                 try {
