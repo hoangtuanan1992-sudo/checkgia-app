@@ -745,6 +745,7 @@
             <div id="compareMatchActions" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
                 <button class="btn js-compare-match-start" type="button" data-mode="all" style="width:100%">So khớp toàn bộ</button>
                 <button class="btn btn-secondary js-compare-match-start" type="button" data-mode="empty" style="width:100%">So khớp ô trống</button>
+                <button class="btn btn-secondary js-compare-match-start" type="button" data-mode="empty_skip_checked" style="width:100%;grid-column:1 / -1">So khớp ô trống & bỏ qua ô trống đã so khớp</button>
             </div>
             <div id="compareMatchProgress" style="display:none;margin-top:14px">
                 <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px">

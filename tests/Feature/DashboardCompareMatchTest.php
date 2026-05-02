@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\AppSetting;
 use App\Models\Competitor;
 use App\Models\CompetitorSite;
+use App\Models\CompareMatchRun;
+use App\Models\CompareMatchRunItem;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -146,6 +148,64 @@ class DashboardCompareMatchTest extends TestCase
             'competitor_site_id' => $site->id,
             'url' => 'https://competitor.test/existing',
         ]);
+        Http::assertNothingSent();
+    }
+
+    public function test_empty_skip_checked_mode_skips_blank_cells_that_were_checked_before(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Laptop ABC123',
+            'price' => 10000000,
+            'product_url' => 'https://my-shop.test/laptop-abc123',
+        ]);
+        $site = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Doi thu',
+            'domain' => 'competitor.test',
+            'position' => 1,
+        ]);
+        $previousRun = CompareMatchRun::query()->create([
+            'user_id' => $owner->id,
+            'mode' => 'empty',
+            'status' => 'done',
+            'total_products' => 1,
+            'processed_products' => 1,
+            'total_cells' => 1,
+            'processed_cells' => 1,
+        ]);
+        CompareMatchRunItem::query()->create([
+            'compare_match_run_id' => $previousRun->id,
+            'product_id' => $product->id,
+            'competitor_site_id' => $site->id,
+            'status' => 'no_match',
+            'processed_at' => now(),
+        ]);
+        $this->insertScannerProduct([
+            'external_job_id' => 'scan-3',
+            'start_url' => 'https://competitor.test/',
+            'product_code' => 'ABC123',
+            'name' => 'Laptop ABC123',
+            'price_value' => 9000000,
+            'url' => 'https://competitor.test/new',
+            'source_url' => 'https://competitor.test/',
+        ]);
+        AppSetting::query()->create([
+            'ai_provider' => 'chatgpt',
+            'chatgpt_api_key' => 'sk-test-key',
+            'chatgpt_model' => 'gpt-test',
+        ]);
+
+        Http::fake();
+
+        $this->actingAs($owner)
+            ->postJson(route('dashboard.compare-match.run'), ['mode' => 'empty_skip_checked'])
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('run.status', 'done')
+            ->assertJsonPath('run.totalCells', 0);
+
         Http::assertNothingSent();
     }
 

@@ -29,7 +29,7 @@ class DashboardCompareMatchController extends Controller
         }
 
         $validated = $request->validate([
-            'mode' => ['required', 'in:all,empty'],
+            'mode' => ['required', 'in:all,empty,empty_skip_checked'],
         ]);
 
         if (! Schema::hasTable('scanner_import_jobs') || ! Schema::hasTable('scanner_import_products')) {
@@ -77,6 +77,21 @@ class DashboardCompareMatchController extends Controller
                 ->orderBy('id')
                 ->chunkById(300, function ($products) use ($sites, $mode, $run, &$totalCells, &$totalProducts, &$skippedExisting) {
                     $rows = [];
+                    $checkedPairs = [];
+                    $siteIds = $sites->pluck('id')->map(fn ($id) => (int) $id)->all();
+                    $productIds = $products->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+                    if ($mode === 'empty_skip_checked' && $productIds !== [] && $siteIds !== []) {
+                        $checkedPairs = CompareMatchRunItem::query()
+                            ->whereIn('product_id', $productIds)
+                            ->whereIn('competitor_site_id', $siteIds)
+                            ->whereIn('status', ['matched', 'no_candidates', 'no_match'])
+                            ->select('product_id', 'competitor_site_id')
+                            ->distinct()
+                            ->get()
+                            ->mapWithKeys(fn ($item) => [(int) $item->product_id.'|'.(int) $item->competitor_site_id => true])
+                            ->all();
+                    }
 
                     foreach ($products as $product) {
                         $map = $product->competitors->keyBy('competitor_site_id');
@@ -84,8 +99,12 @@ class DashboardCompareMatchController extends Controller
 
                         foreach ($sites as $site) {
                             $existing = $map->get($site->id);
-                            if ($mode === 'empty' && $existing && trim((string) $existing->url) !== '') {
+                            if (in_array($mode, ['empty', 'empty_skip_checked'], true) && $existing && trim((string) $existing->url) !== '') {
                                 $skippedExisting++;
+                                continue;
+                            }
+
+                            if ($mode === 'empty_skip_checked' && isset($checkedPairs[(int) $product->id.'|'.(int) $site->id])) {
                                 continue;
                             }
 
@@ -118,7 +137,9 @@ class DashboardCompareMatchController extends Controller
                 'status' => $totalCells > 0 ? 'queued' : 'done',
                 'message' => $totalCells > 0
                     ? 'Đã sẵn sàng so khớp.'
-                    : ($mode === 'empty' ? 'Không còn ô trống cần so khớp.' : 'Chưa có sản phẩm cần so khớp.'),
+                    : ($mode === 'empty_skip_checked'
+                        ? 'Không còn ô trống mới cần so khớp.'
+                        : (in_array($mode, ['empty'], true) ? 'Không còn ô trống cần so khớp.' : 'Chưa có sản phẩm cần so khớp.')),
                 'finished_at' => $totalCells > 0 ? null : now(),
             ]);
         });
@@ -235,7 +256,7 @@ class DashboardCompareMatchController extends Controller
             'message' => 'Đang so khớp: '.$product->name,
         ]);
 
-        if ($run->mode === 'empty') {
+        if (in_array($run->mode, ['empty', 'empty_skip_checked'], true)) {
             $existing = Competitor::query()
                 ->where('product_id', $product->id)
                 ->where('competitor_site_id', $site->id)
