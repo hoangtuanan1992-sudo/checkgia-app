@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ScannerScanRequestTest extends TestCase
@@ -59,6 +60,67 @@ class ScannerScanRequestTest extends TestCase
             'id' => $requestId,
             'status' => 'running',
             'external_job_id' => 'scanner-job-1',
+        ]);
+    }
+
+    public function test_user_can_add_scanned_products_to_compare_table(): void
+    {
+        $user = User::factory()->create();
+        $now = now();
+
+        $jobId = DB::table('scanner_import_jobs')->insertGetId([
+            'external_job_id' => 'job-add-compare',
+            'app' => 'windows-product-scanner',
+            'start_url' => 'https://dienmaydo.vn/',
+            'mode' => 'all',
+            'product_count' => 1,
+            'imported_product_count' => 1,
+            'priced_product_count' => 1,
+            'last_pushed_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $url = 'https://dienmaydo.vn/tu-lanh-toshiba-inverter-596-lit-gr-rs780wi-pgv-22-xk';
+        $scannerProductId = DB::table('scanner_import_products')->insertGetId([
+            'scanner_import_job_id' => $jobId,
+            'external_id' => 'toshiba-1',
+            'external_job_id' => 'job-add-compare',
+            'product_code' => 'GR-RS780WI-PGV(22)-XK',
+            'name' => 'Tu lanh Toshiba Inverter 596 lit GR-RS780WI-PGV(22)-XK',
+            'price_text' => '14.500.000 d',
+            'price_value' => 14500000,
+            'currency' => 'VND',
+            'url' => $url,
+            'link' => $url,
+            'source_url' => 'https://dienmaydo.vn/',
+            'url_hash' => sha1(mb_strtolower($url)),
+            'source_url_hash' => sha1('https://dienmaydo.vn/'),
+            'dedupe_hash' => sha1('https://dienmaydo.vn/|'.mb_strtolower($url)),
+            'imported_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->post(route('dashboard.quick-scan.add-to-compare'), [
+                'website_url' => 'https://dienmaydo.vn/',
+                'scanner_product_ids' => [$scannerProductId],
+            ]);
+
+        $response->assertRedirect(route('dashboard').'#comparisonCard');
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'Tu lanh Toshiba Inverter 596 lit GR-RS780WI-PGV(22)-XK',
+            'price' => 14500000,
+            'product_url' => $url,
+        ]);
+
+        $productId = (int) DB::table('products')->where('product_url', $url)->value('id');
+        $this->assertDatabaseHas('product_price_histories', [
+            'product_id' => $productId,
+            'price' => 14500000,
         ]);
     }
 }

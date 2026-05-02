@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Jobs\ScrapeProductPrices;
 use App\Jobs\QuickScanScrapeRun;
 use App\Models\Product;
+use App\Models\ProductPriceHistory;
+use App\Models\ShopeeProduct;
 use App\Models\UserScrapeSetting;
 use App\Models\User;
 use App\Services\PriceScraper;
@@ -199,6 +201,7 @@ class DashboardQuickScanController extends Controller
 
                 return [
                     'id' => (string) ($product->external_id ?? ''),
+                    'dbId' => (int) ($product->id ?? 0),
                     'name' => $name,
                     'price' => (string) ($product->price_text ?? ''),
                     'priceValue' => (int) ($product->price_value ?? 0),
@@ -282,6 +285,143 @@ class DashboardQuickScanController extends Controller
         return redirect()
             ->route('dashboard.quick-scan', ['website_url' => $websiteUrl])
             ->with('status', 'Da gui lenh quet website. Vui long cho khoang 1 ngay de phan mem Windows quet va day du lieu len Check Gia.');
+    }
+
+    public function addToCompare(Request $request): RedirectResponse
+    {
+        if ($request->user()->isViewer()) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'scanner_product_ids' => ['required', 'array', 'min:1', 'max:500'],
+            'scanner_product_ids.*' => ['required', 'integer', 'min:1'],
+            'website_url' => ['nullable', 'url', 'max:2048'],
+        ]);
+
+        if (! Schema::hasTable('scanner_import_products') || ! Schema::hasTable('scanner_import_jobs')) {
+            return back()->with('status', 'Chua co du lieu quet de them vao bang so sanh.');
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $validated['scanner_product_ids'] ?? [])));
+        if ($ids === []) {
+            return back()->with('status', 'Hay chon it nhat 1 san pham.');
+        }
+
+        $websiteKey = $this->websiteKey($this->normalizeWebsiteUrl((string) ($validated['website_url'] ?? '')));
+        $rows = DB::table('scanner_import_products')
+            ->join('scanner_import_jobs', 'scanner_import_jobs.id', '=', 'scanner_import_products.scanner_import_job_id')
+            ->whereIn('scanner_import_products.id', $ids)
+            ->select([
+                'scanner_import_products.id',
+                'scanner_import_products.name',
+                'scanner_import_products.product_code',
+                'scanner_import_products.price_value',
+                'scanner_import_products.url',
+                'scanner_import_products.updated_at',
+                'scanner_import_jobs.start_url',
+            ])
+            ->get()
+            ->filter(function ($row) use ($websiteKey) {
+                if ($websiteKey === '') {
+                    return true;
+                }
+
+                return $this->websiteKey((string) ($row->start_url ?? '')) === $websiteKey;
+            })
+            ->values();
+
+        if ($rows->isEmpty()) {
+            return back()->with('status', 'Khong tim thay san pham da chon trong du lieu quet hien tai.');
+        }
+
+        $userId = $request->user()->effectiveUserId();
+        $limit = User::resolveProductLimitById($userId);
+        $used = (int) Product::query()->where('user_id', $userId)->count()
+            + (int) ShopeeProduct::query()->where('user_id', $userId)->count();
+        $remaining = max(0, $limit - $used);
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $now = now();
+        $reachedLimit = false;
+
+        DB::transaction(function () use ($rows, $userId, &$created, &$updated, &$skipped, &$remaining, &$reachedLimit, $now): void {
+            foreach ($rows as $row) {
+                $url = trim((string) ($row->url ?? ''));
+                if ($url === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                $name = trim((string) ($row->name ?? ''));
+                if ($name === '') {
+                    $name = trim((string) ($row->product_code ?? ''));
+                }
+                if ($name === '') {
+                    $name = $this->guessProductNameFromUrl($url);
+                }
+
+                $price = max(0, (int) ($row->price_value ?? 0));
+                $product = Product::query()
+                    ->where('user_id', $userId)
+                    ->where('product_url', $url)
+                    ->first();
+
+                if (! $product) {
+                    if ($remaining <= 0) {
+                        $reachedLimit = true;
+                        $skipped++;
+                        continue;
+                    }
+
+                    $product = Product::create([
+                        'user_id' => $userId,
+                        'name' => mb_substr($name, 0, 255),
+                        'price' => $price,
+                        'product_url' => $url,
+                        'last_scraped_at' => $now,
+                    ]);
+                    $created++;
+                    $remaining--;
+                } else {
+                    $product->name = mb_substr($name, 0, 255);
+                    $product->price = $price;
+                    $product->last_scraped_at = $now;
+                    $product->save();
+                    $updated++;
+                }
+
+                if ($price > 0) {
+                    $latest = ProductPriceHistory::query()
+                        ->where('product_id', $product->id)
+                        ->latest('fetched_at')
+                        ->first();
+
+                    if (! $latest || (int) $latest->price !== $price) {
+                        ProductPriceHistory::create([
+                            'product_id' => $product->id,
+                            'price' => $price,
+                            'fetched_at' => $now,
+                        ]);
+                    }
+                }
+            }
+        });
+
+        $message = 'Da them '.$created.' san pham vao bang so sanh';
+        if ($updated > 0) {
+            $message .= ', cap nhat '.$updated.' san pham da co';
+        }
+        if ($skipped > 0) {
+            $message .= ', bo qua '.$skipped.' san pham';
+        }
+        if ($reachedLimit) {
+            $message .= '. Ban da den gioi han so sanh '.$limit.' san pham.';
+        }
+
+        return redirect()->to(route('dashboard').'#comparisonCard')->with('status', $message);
     }
 
     private function normalizeWebsiteUrl(string $url): string

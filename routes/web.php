@@ -44,6 +44,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/dashboard/compare-table/column-widths', [DashboardController::class, 'updateCompareColumnWidths'])->name('dashboard.compare-table.column-widths.update');
     Route::get('/dashboard/quick-scan', [DashboardQuickScanController::class, 'index'])->name('dashboard.quick-scan');
     Route::post('/dashboard/quick-scan/request', [DashboardQuickScanController::class, 'requestScan'])->name('dashboard.quick-scan.request');
+    Route::post('/dashboard/quick-scan/add-to-compare', [DashboardQuickScanController::class, 'addToCompare'])->name('dashboard.quick-scan.add-to-compare');
     Route::post('/dashboard/quick-scan/scan', [DashboardQuickScanController::class, 'scan'])->name('dashboard.quick-scan.scan');
     Route::post('/dashboard/quick-scan/import', [DashboardQuickScanController::class, 'import'])->name('dashboard.quick-scan.import');
     Route::post('/dashboard/quick-scan/clear-runs', [DashboardQuickScanController::class, 'clearRuns'])->name('dashboard.quick-scan.clear-runs');

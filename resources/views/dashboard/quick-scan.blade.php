@@ -152,6 +152,10 @@
                     @endif
                 </div>
 
+                <form method="POST" action="{{ route('dashboard.quick-scan.add-to-compare') }}" id="scanCompareForm">
+                    @csrf
+                    <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
+
                 <div class="table-wrap scan-table-wrap">
                     <table class="table scan-table">
                         <thead>
@@ -161,17 +165,19 @@
                                 <th>Tên sản phẩm</th>
                                 <th style="width:160px;text-align:right">Giá</th>
                                 <th>Link sản phẩm</th>
-                                <th>Nguồn quét</th>
                                 <th style="width:190px">Cập nhật</th>
+                                <th class="scan-select-cell" style="width:88px">
+                                    <input type="checkbox" id="scanSelectAll" class="scan-select-checkbox" title="Chọn tất cả">
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($scannerProducts ?? [] as $index => $product)
                                 @php
                                     $rowNumber = ($scannerProducts->firstItem() ?? 1) + $index;
+                                    $dbId = (int) ($product['dbId'] ?? 0);
                                     $name = (string) ($product['name'] ?? '');
                                     $url = (string) ($product['url'] ?? '');
-                                    $sourceUrl = (string) ($product['sourceUrl'] ?? '');
                                     $code = (string) ($product['productCode'] ?? '');
                                     $priceText = (string) ($product['price'] ?? '');
                                     $priceValue = (int) ($product['priceValue'] ?? 0);
@@ -195,14 +201,20 @@
                                             <span class="scan-muted">---</span>
                                         @endif
                                     </td>
-                                    <td style="word-break:break-word">
-                                        @if($sourceUrl !== '')
-                                            <a href="{{ $sourceUrl }}" target="_blank" rel="noopener">{{ $sourceUrl }}</a>
+                                    <td>{{ (string) ($product['updatedAt'] ?? '') ?: '---' }}</td>
+                                    <td class="scan-select-cell">
+                                        @if($dbId > 0)
+                                            <input
+                                                type="checkbox"
+                                                class="scan-select-checkbox js-scan-product-select"
+                                                name="scanner_product_ids[]"
+                                                value="{{ $dbId }}"
+                                                aria-label="Chọn {{ $name !== '' ? $name : 'sản phẩm' }}"
+                                            >
                                         @else
                                             <span class="scan-muted">---</span>
                                         @endif
                                     </td>
-                                    <td>{{ (string) ($product['updatedAt'] ?? '') ?: '---' }}</td>
                                 </tr>
                             @empty
                                 <tr>
@@ -257,9 +269,58 @@
                         @endif
                     </div>
                 @endif
+
+                    @if($scannerProducts && $scannerProducts->count() > 0)
+                        <div class="scan-selection-bar">
+                            <div class="scan-selection-count">
+                                Đã chọn <strong id="scanSelectedCount">0</strong> sản phẩm
+                            </div>
+                            <button class="btn" type="submit" id="scanAddCompareButton" disabled>Thêm so sánh giá</button>
+                        </div>
+                    @endif
+                </form>
             </div>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('scanCompareForm');
+            if (!form) return;
+
+            const checkboxes = Array.from(form.querySelectorAll('.js-scan-product-select'));
+            const selectAll = document.getElementById('scanSelectAll');
+            const selectedCount = document.getElementById('scanSelectedCount');
+            const submitButton = document.getElementById('scanAddCompareButton');
+
+            const updateSelection = () => {
+                const count = checkboxes.filter((checkbox) => checkbox.checked).length;
+                if (selectedCount) selectedCount.textContent = String(count);
+                if (submitButton) submitButton.disabled = count === 0;
+                if (selectAll) {
+                    selectAll.checked = count > 0 && count === checkboxes.length;
+                    selectAll.indeterminate = count > 0 && count < checkboxes.length;
+                }
+            };
+
+            checkboxes.forEach((checkbox) => checkbox.addEventListener('change', updateSelection));
+            if (selectAll) {
+                selectAll.addEventListener('change', () => {
+                    checkboxes.forEach((checkbox) => {
+                        checkbox.checked = selectAll.checked;
+                    });
+                    updateSelection();
+                });
+            }
+
+            form.addEventListener('submit', (event) => {
+                if (checkboxes.some((checkbox) => checkbox.checked)) return;
+                event.preventDefault();
+            });
+
+            updateSelection();
+        });
+    </script>
 
     <style>
         .scan-filter{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
@@ -282,6 +343,11 @@
         .scan-muted{color:#6b7280;font-weight:500}
         .scan-empty{text-align:center;color:#6b7280;padding:24px}
         .scan-pagination{display:flex;justify-content:flex-end;gap:8px;align-items:center;flex-wrap:nowrap;white-space:nowrap;margin-top:12px;overflow-x:auto}
+        .scan-select-cell{text-align:center;vertical-align:middle}
+        .scan-select-checkbox{width:24px;height:24px;accent-color:#0d6efd;cursor:pointer}
+        .scan-selection-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;padding:12px 14px;margin-top:12px}
+        .scan-selection-count{font-weight:700;color:#111827}
+        .scan-selection-bar .btn:disabled{opacity:.55;cursor:not-allowed}
         @media (max-width:1100px){.scan-summary{grid-template-columns:repeat(3,minmax(0,1fr))}}
         @media (max-width:720px){.scan-summary{grid-template-columns:repeat(1,minmax(0,1fr))}.scan-filter .field{width:100%;min-width:100%}.scan-filter .actions{width:100%}.scan-filter .btn{width:100%}}
     </style>
