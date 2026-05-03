@@ -18,6 +18,8 @@ class DashboardCompetitorSetupController extends Controller
     {
         $userId = $request->user()->effectiveUserId();
 
+        $this->normalizeSiteNames($userId);
+
         $userSetting = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
         $notification = UserNotificationSetting::query()->firstOrCreate(['user_id' => $userId]);
 
@@ -58,11 +60,16 @@ class DashboardCompetitorSetupController extends Controller
         ]);
 
         $userId = $request->user()->effectiveUserId();
+        $name = CompetitorSite::normalizedNameFromUserInput($validated['name']);
+        if ($name === '') {
+            return back()->withInput()->withErrors(['name' => 'Vui lòng nhập tên hoặc link website đối thủ.']);
+        }
+
         $position = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
 
         CompetitorSite::firstOrCreate([
             'user_id' => $request->user()->effectiveUserId(),
-            'name' => trim($validated['name']),
+            'name' => $name,
         ], [
             'position' => $position,
         ]);
@@ -136,6 +143,58 @@ class DashboardCompetitorSetupController extends Controller
         $this->normalizeSitePositions($userId);
 
         return back()->with('status', 'Đã cập nhật thứ tự đối thủ');
+    }
+
+    private function normalizeSiteNames(int $userId): void
+    {
+        $sites = CompetitorSite::query()
+            ->where('user_id', $userId)
+            ->orderBy('position')
+            ->orderBy('id')
+            ->with('scrapeXpaths')
+            ->get();
+
+        DB::transaction(function () use ($sites, $userId) {
+            foreach ($sites as $site) {
+                $normalized = CompetitorSite::normalizedNameFromUserInput($site->name);
+                if ($normalized === '' || $normalized === $site->name) {
+                    continue;
+                }
+
+                $target = CompetitorSite::query()
+                    ->where('user_id', $userId)
+                    ->where('name', $normalized)
+                    ->whereKeyNot($site->id)
+                    ->first();
+
+                if ($target) {
+                    $updates = [];
+                    foreach (['name_xpath', 'price_xpath', 'price_regex'] as $field) {
+                        if (! $target->{$field} && $site->{$field}) {
+                            $updates[$field] = $site->{$field};
+                        }
+                    }
+                    if ($updates !== []) {
+                        $target->update($updates);
+                    }
+
+                    if ($target->scrapeXpaths()->doesntExist()) {
+                        CompetitorSiteScrapeXpath::query()
+                            ->where('competitor_site_id', $site->id)
+                            ->update(['competitor_site_id' => $target->id]);
+                    }
+
+                    $site->competitors()->update(['competitor_site_id' => $target->id]);
+                    $site->delete();
+
+                    continue;
+                }
+
+                $site->update(['name' => $normalized]);
+            }
+        });
+
+        $this->normalizeSitePositions($userId);
     }
 
     private function normalizeSitePositions(int $userId): void
