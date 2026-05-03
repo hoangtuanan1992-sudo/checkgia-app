@@ -97,4 +97,21 @@ class PriceScraperTest extends TestCase
             'price' => 37990000,
         ], $result);
     }
+
+    public function test_topzone_price_does_not_keep_trailing_decimal_zero(): void
+    {
+        $html = <<<'HTML'
+            <html><body>
+                <h1>iPhone 17 Pro Max 256GB</h1>
+                <strong class="price">37.990.000.0&#x20AB;</strong>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeTopzonePriceAndName('https://www.topzone.vn/iphone/iphone-17-pro-max', $html);
+
+        $this->assertSame([
+            'name' => 'iPhone 17 Pro Max 256GB',
+            'price' => 37990000,
+        ], $result);
+    }
 }

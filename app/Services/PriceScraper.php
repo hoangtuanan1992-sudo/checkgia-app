@@ -111,6 +111,7 @@ class PriceScraper
             }
         }
 
+        $text = $this->stripTrailingDecimalZero($text);
         $digits = preg_replace('/[^\d]/u', '', $text);
         if (! is_string($digits) || $digits === '') {
             return null;
@@ -208,11 +209,21 @@ class PriceScraper
             return null;
         }
 
+        $value = $this->stripTrailingDecimalZero($value);
+
         if (preg_match('/^\d+(?:[.,]\d+)?$/', $value) === 1) {
             return (int) floor((float) str_replace(',', '.', $value));
         }
 
         return $this->parsePriceToInt($value);
+    }
+
+    private function stripTrailingDecimalZero(string $value): string
+    {
+        $boundary = '(?=\s*(?:\x{20AB}|\x{0111}|vnd)?(?:\s|$))';
+        $value = preg_replace('/(\d{1,3}(?:[.,]\d{3})+)[.,]0{1,2}'.$boundary.'/iu', '$1', $value) ?? $value;
+
+        return preg_replace('/(\d{5,})[.,]0{1,2}'.$boundary.'/iu', '$1', $value) ?? $value;
     }
 
     private function metaContent(string $html, string $property): ?string
