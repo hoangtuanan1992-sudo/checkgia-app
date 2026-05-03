@@ -190,7 +190,7 @@ class AccountController extends Controller
         abort_if($owner->isViewer(), 403);
 
         $ownerId = $owner->effectiveUserId();
-        abort_unless($user->parent_user_id === $ownerId && $user->role === 'viewer', 404);
+        abort_unless((int) $user->parent_user_id === (int) $ownerId && $user->role === 'viewer', 404);
 
         $validator = Validator::make($request->all(), array_merge([
             'name' => ['required', 'string', 'max:255'],
@@ -240,7 +240,7 @@ class AccountController extends Controller
         abort_if($owner->isViewer(), 403);
 
         $ownerId = $owner->effectiveUserId();
-        abort_unless($user->parent_user_id === $ownerId && $user->role === 'viewer', 404);
+        abort_unless((int) $user->parent_user_id === (int) $ownerId && $user->role === 'viewer', 404);
 
         $user->delete();
 

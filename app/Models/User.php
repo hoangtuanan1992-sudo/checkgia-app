@@ -25,6 +25,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'parent_user_id' => 'integer',
             'service_start_date' => 'date',
             'service_end_date' => 'date',
             'visible_product_group_ids' => 'array',
