@@ -59,4 +59,30 @@ class ProductCrudTest extends TestCase
             'product_url' => 'https://www.topzone.vn/iphone/iphone-17-pro-max',
         ]);
     }
+
+    public function test_dashboard_can_add_viettelstore_product_without_manual_xpath(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://viettelstore.vn/dien-thoai/samsung-galaxy-s26-plus-pid362293.html';
+
+        Http::fake([
+            $url => Http::response(
+                '<html><head><meta property="og:title" content="Samsung Galaxy S26 Plus 12GB | 256GB chinh hang - ViettelStore.vn" /></head><body><script type="application/ld+json">{"@context":"http://schema.org/","@type":"Product","name":"Samsung Galaxy S26 Plus 12GB 256GB","offers":{"@type":"AggregateOffer","Price":"24290000","priceCurrency":"VND"}}</script></body></html>',
+                200
+            ),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'Samsung Galaxy S26 Plus 12GB 256GB',
+            'price' => 24290000,
+            'product_url' => $url,
+        ]);
+    }
 }
