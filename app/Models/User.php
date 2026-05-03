@@ -13,7 +13,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit', 'allow_compare_match'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'visible_product_group_ids', 'visible_competitor_site_group_ids', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit', 'allow_compare_match'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -27,6 +27,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             'service_start_date' => 'date',
             'service_end_date' => 'date',
+            'visible_product_group_ids' => 'array',
+            'visible_competitor_site_group_ids' => 'array',
             'allow_compare_match' => 'boolean',
         ];
     }
@@ -120,6 +122,67 @@ class User extends Authenticatable
         }
 
         return (bool) static::query()->whereKey($userId)->value('allow_compare_match');
+    }
+
+    public static function hasSubUserVisibilityColumns(): bool
+    {
+        try {
+            return Schema::hasColumn('users', 'visible_product_group_ids')
+                && Schema::hasColumn('users', 'visible_competitor_site_group_ids');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function visibleProductGroupIds(): array
+    {
+        if (! self::hasSubUserVisibilityColumns()) {
+            return [];
+        }
+
+        return self::normalizeStoredIds($this->visible_product_group_ids ?? null);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function visibleCompetitorSiteGroupIds(): array
+    {
+        if (! self::hasSubUserVisibilityColumns()) {
+            return [];
+        }
+
+        return self::normalizeStoredIds($this->visible_competitor_site_group_ids ?? null);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private static function normalizeStoredIds(mixed $value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : [];
+        }
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($value as $id) {
+            if (is_int($id) || (is_string($id) && ctype_digit($id))) {
+                $id = (int) $id;
+                if ($id > 0) {
+                    $ids[] = $id;
+                }
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     public function isViewer(): bool

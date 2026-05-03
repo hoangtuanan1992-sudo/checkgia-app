@@ -33,10 +33,16 @@ class AccountController extends Controller
 
         $subUsers = collect();
         if (! $user->isViewer()) {
+            $subUserColumns = ['id', 'name', 'email', 'created_at'];
+            if (User::hasSubUserVisibilityColumns()) {
+                $subUserColumns[] = 'visible_product_group_ids';
+                $subUserColumns[] = 'visible_competitor_site_group_ids';
+            }
+
             $subUsers = User::query()
                 ->where('parent_user_id', $ownerId)
                 ->orderBy('name')
-                ->get(['id', 'name', 'email', 'created_at']);
+                ->get($subUserColumns);
         }
 
         $groups = collect();
@@ -152,11 +158,14 @@ class AccountController extends Controller
 
         $ownerId = $owner->effectiveUserId();
 
-        $data = $request->validate([
+        $rules = [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
+        ];
+        $rules = array_merge($rules, $this->subUserVisibilityRules($ownerId));
+
+        $data = $request->validate($rules);
 
         $canonical = User::canonicalEmail($data['email']);
         $existsCanonical = User::query()->where('email_canonical', $canonical)->exists();
@@ -164,15 +173,39 @@ class AccountController extends Controller
             return back()->withInput()->withErrors(['email' => 'Email này đã được dùng để tạo tài khoản (theo quy tắc Gmail).']);
         }
 
-        User::create([
+        User::create(array_merge([
             'parent_user_id' => $ownerId,
             'role' => 'viewer',
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => $data['password'],
-        ]);
+        ], $this->subUserVisibilityAttributes($data)));
 
         return back()->with('status', 'Đã tạo tài khoản con');
+    }
+
+    public function updateSubUser(Request $request, User $user): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+
+        $ownerId = $owner->effectiveUserId();
+        abort_unless($user->parent_user_id === $ownerId && $user->role === 'viewer', 404);
+
+        $validator = Validator::make($request->all(), $this->subUserVisibilityRules($ownerId));
+        if ($validator->fails()) {
+            return back()
+                ->withErrors($validator)
+                ->withInput()
+                ->with('edit_subuser_id', $user->id);
+        }
+
+        $updates = $this->subUserVisibilityAttributes($validator->validated());
+        if ($updates !== []) {
+            $user->update($updates);
+        }
+
+        return back()->with('status', 'Đã cập nhật quyền nhóm cho tài khoản con');
     }
 
     public function destroySubUser(Request $request, User $user): RedirectResponse
@@ -186,6 +219,75 @@ class AccountController extends Controller
         $user->delete();
 
         return back()->with('status', 'Đã xoá tài khoản con');
+    }
+
+    /**
+     * @return array<string, array<int, mixed>>
+     */
+    private function subUserVisibilityRules(int $ownerId): array
+    {
+        if (! User::hasSubUserVisibilityColumns()) {
+            return [];
+        }
+
+        $rules = [];
+        if (Schema::hasTable('product_groups')) {
+            $rules['product_group_ids'] = ['nullable', 'array'];
+            $rules['product_group_ids.*'] = [
+                'integer',
+                Rule::exists('product_groups', 'id')->where(fn ($q) => $q->where('user_id', $ownerId)),
+            ];
+        }
+
+        if (Schema::hasTable('competitor_site_groups')) {
+            $rules['competitor_site_group_ids'] = ['nullable', 'array'];
+            $rules['competitor_site_group_ids.*'] = [
+                'integer',
+                Rule::exists('competitor_site_groups', 'id')->where(fn ($q) => $q->where('user_id', $ownerId)),
+            ];
+        }
+
+        return $rules;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function subUserVisibilityAttributes(array $data): array
+    {
+        if (! User::hasSubUserVisibilityColumns()) {
+            return [];
+        }
+
+        return [
+            'visible_product_group_ids' => $this->normalizeSubUserVisibilityIds($data['product_group_ids'] ?? []),
+            'visible_competitor_site_group_ids' => $this->normalizeSubUserVisibilityIds($data['competitor_site_group_ids'] ?? []),
+        ];
+    }
+
+    /**
+     * @return array<int, int>|null
+     */
+    private function normalizeSubUserVisibilityIds(mixed $value): ?array
+    {
+        if (! is_array($value)) {
+            return null;
+        }
+
+        $ids = [];
+        foreach ($value as $id) {
+            if (is_int($id) || (is_string($id) && ctype_digit($id))) {
+                $id = (int) $id;
+                if ($id > 0) {
+                    $ids[] = $id;
+                }
+            }
+        }
+
+        $ids = array_values(array_unique($ids));
+
+        return $ids === [] ? null : $ids;
     }
 
     public function createGroup(Request $request): RedirectResponse

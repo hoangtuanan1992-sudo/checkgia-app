@@ -6,13 +6,21 @@ use App\Models\CompetitorSite;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\Response;
 
 class DashboardExportController extends Controller
 {
     public function products(Request $request): Response
     {
-        $userId = $request->user()->effectiveUserId();
+        $authUser = $request->user();
+        $userId = $authUser->effectiveUserId();
+        $productGroupRestrictionIds = $authUser->isViewer() ? $authUser->visibleProductGroupIds() : [];
+        $hasProductGroupRestriction = $authUser->isViewer() && $productGroupRestrictionIds !== [];
+        $restrictedCompetitorSiteIds = $authUser->isViewer()
+            ? $this->competitorSiteIdsForGroups($userId, $authUser->visibleCompetitorSiteGroupIds())
+            : null;
 
         $groupId = $request->query('group_id');
         $groupFilter = null;
@@ -22,17 +30,20 @@ class DashboardExportController extends Controller
             $groupFilter = (int) $groupId;
         }
 
-        $competitorSites = CompetitorSite::query()
+        $competitorSitesQuery = CompetitorSite::query()
             ->where('user_id', $userId)
             ->orderBy('position')
-            ->orderBy('name')
+            ->orderBy('name');
+        $this->constrainToIds($competitorSitesQuery, $restrictedCompetitorSiteIds, 'id');
+        $competitorSites = $competitorSitesQuery
             ->get(['id', 'name']);
 
         $productsQuery = Product::query()
             ->where('user_id', $userId)
             ->with([
                 'group:id,name',
-                'competitors' => function ($q) {
+                'competitors' => function ($q) use ($restrictedCompetitorSiteIds) {
+                    $this->constrainToIds($q, $restrictedCompetitorSiteIds, 'competitor_site_id');
                     $q->with(['prices' => function ($p) {
                         $p->latest('fetched_at')->limit(1);
                     }]);
@@ -40,9 +51,20 @@ class DashboardExportController extends Controller
             ])
             ->latest();
 
+        if ($hasProductGroupRestriction) {
+            $productsQuery->whereIn('product_group_id', $productGroupRestrictionIds);
+        }
+
         if ($groupFilter === '__none__') {
-            $productsQuery->whereNull('product_group_id');
+            if ($hasProductGroupRestriction) {
+                $productsQuery->whereRaw('1 = 0');
+            } else {
+                $productsQuery->whereNull('product_group_id');
+            }
         } elseif (is_int($groupFilter)) {
+            if ($hasProductGroupRestriction && ! in_array($groupFilter, $productGroupRestrictionIds, true)) {
+                abort(404);
+            }
             $productsQuery->where('product_group_id', $groupFilter);
         }
 
@@ -136,5 +158,48 @@ class DashboardExportController extends Controller
         $value = trim($value, '-');
 
         return $value === '' ? 'nhom' : $value;
+    }
+
+    /**
+     * @param array<int, int> $groupIds
+     * @return array<int, int>|null
+     */
+    private function competitorSiteIdsForGroups(int $userId, array $groupIds): ?array
+    {
+        if ($groupIds === []) {
+            return null;
+        }
+
+        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
+            return [];
+        }
+
+        return DB::table('competitor_site_group_sites')
+            ->join('competitor_site_groups', 'competitor_site_groups.id', '=', 'competitor_site_group_sites.competitor_site_group_id')
+            ->where('competitor_site_groups.user_id', $userId)
+            ->whereIn('competitor_site_group_sites.competitor_site_group_id', $groupIds)
+            ->pluck('competitor_site_group_sites.competitor_site_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, int>|null $ids
+     */
+    private function constrainToIds($query, ?array $ids, string $column): void
+    {
+        if (! is_array($ids)) {
+            return;
+        }
+
+        if ($ids === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn($column, $ids);
     }
 }
