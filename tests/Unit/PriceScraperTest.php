@@ -171,4 +171,40 @@ class PriceScraperTest extends TestCase
             'price' => 24290000,
         ], $result);
     }
+
+    public function test_extracts_mi_com_price_from_buy_api_without_xpath(): void
+    {
+        $html = <<<'HTML'
+            <html><head>
+                <meta property="og:title" content="Tat ca thong so va tinh nang cua POCO Pad X1 | Xiaomi Viet Nam" />
+            </head><body>
+                <script type="application/ld+json">
+                {
+                    "@context": "http://schema.org/",
+                    "@type": "Product",
+                    "name": "POCO Pad X1",
+                    "brand": {"@type": "Brand", "name": "Xiaomi"}
+                }
+                </script>
+                <div class="xm-price"><p class="xm-price--items"></p></div>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeMiComPriceAndName(
+            'https://www.mi.com/vn/product/poco-pad-x1/',
+            $html,
+            [
+                'errno' => 0,
+                'data' => [
+                    'item_min_price' => 10290000,
+                    'rrp' => 11290000,
+                ],
+            ]
+        );
+
+        $this->assertSame([
+            'name' => 'POCO Pad X1',
+            'price' => 10290000,
+        ], $result);
+    }
 }

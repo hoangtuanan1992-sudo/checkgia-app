@@ -156,6 +156,10 @@ class PriceScraper
             return $this->scrapeViettelStorePriceAndName($url);
         }
 
+        if ($this->isMiComUrl($url)) {
+            return $this->scrapeMiComPriceAndName($url);
+        }
+
         return null;
     }
 
@@ -173,6 +177,14 @@ class PriceScraper
         $host = preg_replace('/^www\./', '', $host) ?? $host;
 
         return $host === 'viettelstore.vn';
+    }
+
+    public function isMiComUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        return $host === 'mi.com';
     }
 
     /**
@@ -341,6 +353,163 @@ class PriceScraper
         }
 
         return null;
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeMiComPriceAndName(string $url, ?string $html = null, ?array $apiData = null): ?array
+    {
+        $tag = $this->miComProductTag($url);
+        if (! $tag) {
+            return null;
+        }
+
+        if ($html === null) {
+            try {
+                $html = $this->fetchHtml($url);
+            } catch (\Throwable) {
+                $html = '';
+            }
+        }
+
+        $name = $this->miComProductName($html);
+        if (! $name) {
+            $name = $this->nameFromSlug($tag);
+        }
+
+        $apiData = $apiData ?? $this->fetchMiComProductInfo($url, $tag);
+        $price = $this->miComApiPrice($apiData);
+
+        if (! $name || is_null($price)) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'price' => $price,
+        ];
+    }
+
+    private function miComProductTag(string $url): ?string
+    {
+        $path = trim((string) (parse_url($url, PHP_URL_PATH) ?? ''), '/');
+        $segments = array_values(array_filter(explode('/', $path), fn ($segment) => $segment !== ''));
+        $index = array_search('product', $segments, true);
+        if ($index === false || empty($segments[$index + 1])) {
+            return null;
+        }
+
+        $tag = strtolower(trim((string) $segments[$index + 1]));
+
+        return preg_match('/^[a-z0-9][a-z0-9-]*$/', $tag) === 1 ? $tag : null;
+    }
+
+    private function miComLocale(string $url): string
+    {
+        $path = trim((string) (parse_url($url, PHP_URL_PATH) ?? ''), '/');
+        $firstSegment = explode('/', $path, 2)[0] ?? '';
+
+        return preg_match('/^[a-z]{2}(?:-[a-z]{2})?$/i', $firstSegment) === 1
+            ? strtolower($firstSegment)
+            : 'vn';
+    }
+
+    private function fetchMiComProductInfo(string $url, string $tag): ?array
+    {
+        $locale = $this->miComLocale($url);
+        $apiUrl = 'https://go.buy.mi.com/'.$locale.'/v2/item/productinfo';
+
+        try {
+            $response = Http::withHeaders([
+                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept' => 'application/json',
+                'Referer' => $this->originUrl($url) ?? 'https://www.mi.com/',
+            ])->timeout(25)->retry(2, 250)->get($apiUrl, [
+                'tag' => $tag,
+                'is_bundle' => 'undefined',
+            ]);
+
+            $response->throw();
+            $body = $response->json();
+
+            return is_array($body) ? $body : null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function miComApiPrice(?array $apiData): ?int
+    {
+        if (! is_array($apiData) || (int) ($apiData['errno'] ?? -1) !== 0 || ! is_array($apiData['data'] ?? null)) {
+            return null;
+        }
+
+        foreach (['item_min_price', 'sale_price', 'price', 'market_price', 'rrp'] as $key) {
+            if (! array_key_exists($key, $apiData['data'])) {
+                continue;
+            }
+
+            $price = $this->normalizeNumericPrice((string) $apiData['data'][$key]);
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        return null;
+    }
+
+    private function miComProductName(string $html): ?string
+    {
+        $product = $this->jsonLdProduct($html);
+        $name = $this->cleanText((string) ($product['name'] ?? ''));
+        if ($name) {
+            return $name;
+        }
+
+        $name = $this->cleanText($this->extractFirstByXPath($html, '//h1'));
+        if ($name) {
+            return preg_replace('/\s+Tổng quan$/iu', '', $name) ?? $name;
+        }
+
+        $title = $this->cleanText($this->metaContent($html, 'og:title') ?? $this->extractTitle($html));
+        if (! $title) {
+            return null;
+        }
+
+        $title = preg_replace('/^Tất cả thông số và tính năng của\s+/iu', '', $title) ?? $title;
+        $title = preg_replace('/\s*\|\s*Xiaomi.*$/iu', '', $title) ?? $title;
+
+        return $this->cleanText($title);
+    }
+
+    private function jsonLdProduct(string $html): ?array
+    {
+        if (preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(?<json>.*?)<\/script>/isu', $html, $matches) !== 1) {
+            return null;
+        }
+
+        foreach ($matches['json'] as $rawJson) {
+            $data = json_decode(trim((string) $rawJson), true);
+            $product = $this->findJsonLdProduct($data);
+            if (is_array($product)) {
+                return $product;
+            }
+        }
+
+        return null;
+    }
+
+    private function nameFromSlug(string $slug): string
+    {
+        $words = array_values(array_filter(explode('-', $slug), fn ($word) => $word !== ''));
+        $words = array_map(function (string $word): string {
+            return preg_match('/^[a-z]+$/i', $word) === 1 && mb_strlen($word) <= 4
+                ? mb_strtoupper($word)
+                : ucfirst($word);
+        }, $words);
+
+        return implode(' ', $words);
     }
 
     private function attributeNumber(string $tag, string $attribute): ?int

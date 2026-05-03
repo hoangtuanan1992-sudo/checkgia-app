@@ -85,4 +85,38 @@ class ProductCrudTest extends TestCase
             'product_url' => $url,
         ]);
     }
+
+    public function test_dashboard_can_add_mi_com_product_without_manual_xpath(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://www.mi.com/vn/product/poco-pad-x1/';
+
+        Http::fake([
+            $url => Http::response(
+                '<html><body><script type="application/ld+json">{"@context":"http://schema.org/","@type":"Product","name":"POCO Pad X1","brand":{"@type":"Brand","name":"Xiaomi"}}</script><div class="xm-price"><p class="xm-price--items"></p></div></body></html>',
+                200
+            ),
+            'https://go.buy.mi.com/vn/v2/item/productinfo*' => Http::response([
+                'errno' => 0,
+                'errmsg' => '',
+                'data' => [
+                    'item_min_price' => 10290000,
+                    'rrp' => 11290000,
+                ],
+            ], 200),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'POCO Pad X1',
+            'price' => 10290000,
+            'product_url' => $url,
+        ]);
+    }
 }
