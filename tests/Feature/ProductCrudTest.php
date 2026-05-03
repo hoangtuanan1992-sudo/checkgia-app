@@ -171,4 +171,30 @@ class ProductCrudTest extends TestCase
             'product_url' => $url,
         ]);
     }
+
+    public function test_dashboard_can_add_minhtuanmobile_short_slug_product_without_manual_xpath(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://minhtuanmobile.com/iphone-15-128gb/';
+
+        Http::fake([
+            $url => Http::response(
+                '<html><head><script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","name":"iPhone 15 128GB - Chinh hang VN A","sku":"MTP13VN/A","offers":{"@type":"Offer","url":"'.$url.'","priceCurrency":"VND","price":17490000,"priceSpecification":{"@type":"UnitPriceSpecification","price":19990000}}}</script></head><body><h1>iPhone 15 128GB - Chinh hang VN/A</h1><div class="prodetail_pricebox_main"><p class="prodetail__price prodetail__price--buynow mb-1"><b class="price">17,490,000&#x0111;</b><s>19,990,000&#x0111;</s></p></div></body></html>',
+                200
+            ),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'iPhone 15 128GB - Chinh hang VN/A',
+            'price' => 17490000,
+            'product_url' => $url,
+        ]);
+    }
 }

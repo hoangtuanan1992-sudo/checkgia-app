@@ -274,4 +274,47 @@ class PriceScraperTest extends TestCase
             'price' => 24190000,
         ], $result);
     }
+
+    public function test_extracts_minhtuanmobile_short_slug_product_url_without_xpath(): void
+    {
+        $html = <<<'HTML'
+            <html><head>
+                <script type="application/ld+json">
+                {
+                    "@context": "https://schema.org/",
+                    "@type": "Product",
+                    "name": "iPhone 15 128GB - Chinh hang VN A",
+                    "sku": "MTP13VN/A",
+                    "offers": {
+                        "@type": "Offer",
+                        "url": "https://minhtuanmobile.com/iphone-15-128gb/",
+                        "priceCurrency": "VND",
+                        "price": 17490000,
+                        "priceSpecification": {
+                            "@type": "UnitPriceSpecification",
+                            "price": 19990000
+                        }
+                    }
+                }
+                </script>
+            </head><body>
+                <h1>iPhone 15 128GB - Chinh hang VN/A</h1>
+                <div class="prodetail_pricebox_main">
+                    <p class="prodetail__price prodetail__price--buynow mb-1">
+                        <b class="price">17,490,000&#x0111;</b><s>19,990,000&#x0111;</s>
+                    </p>
+                </div>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeMinhTuanMobilePriceAndName(
+            'https://minhtuanmobile.com/iphone-15-128gb/',
+            $html
+        );
+
+        $this->assertSame([
+            'name' => 'iPhone 15 128GB - Chinh hang VN/A',
+            'price' => 17490000,
+        ], $result);
+    }
 }
