@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -127,6 +128,7 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
+            'allow_shopee_check' => ['nullable', 'boolean'],
         ]);
 
         $canonical = User::canonicalEmail($data['email']);
@@ -147,7 +149,7 @@ class AdminUserController extends Controller
             $parentUserId = null;
         }
 
-        User::create([
+        $createData = [
             'name' => $data['name'],
             'email' => $data['email'],
             'role' => $data['role'],
@@ -156,7 +158,13 @@ class AdminUserController extends Controller
             'service_start_date' => $data['service_start_date'] ?? null,
             'service_end_date' => $data['service_end_date'] ?? null,
             'admin_note' => $data['admin_note'] ?? null,
-        ]);
+        ];
+
+        if (Schema::hasColumn('users', 'allow_shopee_check')) {
+            $createData['allow_shopee_check'] = (bool) ($data['allow_shopee_check'] ?? false);
+        }
+
+        User::create($createData);
 
         return redirect()->route('admin.users.index')->with('status', 'Đã tạo tài khoản');
     }
@@ -197,6 +205,7 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
+            'allow_shopee_check' => ['nullable', 'boolean'],
         ]);
 
         $canonical = User::canonicalEmail($data['email']);
@@ -216,6 +225,10 @@ class AdminUserController extends Controller
             'service_end_date' => $data['service_end_date'] ?? null,
             'admin_note' => $data['admin_note'] ?? null,
         ];
+
+        if (Schema::hasColumn('users', 'allow_shopee_check')) {
+            $updates['allow_shopee_check'] = (bool) ($data['allow_shopee_check'] ?? false);
+        }
 
         if ($updates['role'] === 'viewer') {
             $parentUserId = (int) ($data['parent_user_id'] ?? 0);

@@ -11,9 +11,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'allow_shopee_check'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -32,6 +33,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'service_start_date' => 'date',
             'service_end_date' => 'date',
+            'allow_shopee_check' => 'boolean',
         ];
     }
 
@@ -96,6 +98,17 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
+    }
+
+    public static function shopeeCheckEnabledForId(int $userId): bool
+    {
+        if ($userId <= 0 || ! Schema::hasColumn('users', 'allow_shopee_check')) {
+            return false;
+        }
+
+        return (bool) static::query()
+            ->whereKey($userId)
+            ->value('allow_shopee_check');
     }
 
     public function products(): HasMany

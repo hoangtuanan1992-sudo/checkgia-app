@@ -94,6 +94,21 @@
                         </div>
                     </div>
 
+                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px" id="permissionCard">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Quyền chức năng</h2>
+                            <p class="card-sub">Bật chức năng riêng cho shop này</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            <label style="display:flex;align-items:center;gap:10px;font-weight:700">
+                                <input type="hidden" name="allow_shopee_check" value="0">
+                                <input type="checkbox" name="allow_shopee_check" value="1" @checked(old('allow_shopee_check', (bool) $user->allow_shopee_check)) style="width:20px;height:20px">
+                                Hiện nút Check Giá Shopee
+                            </label>
+                            @error('allow_shopee_check')<div class="error">{{ $message }}</div>@enderror
+                        </div>
+                    </div>
+
                     <div class="actions" style="justify-content:flex-end">
                         <button class="btn" type="submit">Lưu</button>
                     </div>
@@ -108,6 +123,7 @@
             const parentField = document.getElementById('parentField');
             const serviceCard = document.getElementById('serviceCard');
             const noteCard = document.getElementById('noteCard');
+            const permissionCard = document.getElementById('permissionCard');
 
             function sync() {
                 if (!role || !parentField) return;
@@ -115,6 +131,7 @@
                 const showForShop = role.value === 'owner';
                 if (serviceCard) serviceCard.style.display = showForShop ? '' : 'none';
                 if (noteCard) noteCard.style.display = showForShop ? '' : 'none';
+                if (permissionCard) permissionCard.style.display = showForShop ? '' : 'none';
             }
 
             if (role) role.addEventListener('change', sync);
