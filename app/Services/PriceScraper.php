@@ -172,6 +172,10 @@ class PriceScraper
             return $this->scrapeLgComPriceAndName($url);
         }
 
+        if ($this->isSamsungComUrl($url)) {
+            return $this->scrapeSamsungComPriceAndName($url);
+        }
+
         return null;
     }
 
@@ -221,6 +225,132 @@ class PriceScraper
         $host = preg_replace('/^www\./', '', $host) ?? $host;
 
         return $host === 'lg.com';
+    }
+
+    public function isSamsungComUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        return $host === 'samsung.com';
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeSamsungComPriceAndName(string $url, ?string $html = null): ?array
+    {
+        $html = $html ?? $this->fetchHtml($url);
+        $product = $this->jsonLdProduct($html);
+
+        $name = $this->samsungComProductName($html, $product);
+        $price = $this->samsungComProductPrice($html, $product);
+
+        if (! $name || is_null($price)) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'price' => $price,
+        ];
+    }
+
+    private function samsungComProductName(string $html, ?array $product): ?string
+    {
+        $name = $this->cleanText((string) ($product['name'] ?? ''));
+        if (! $name) {
+            $name = $this->cleanText($this->samsungComJsString($html, 'digitalData\.product\.displayName'));
+        }
+        if (! $name) {
+            $name = $this->cleanSamsungComTitle($this->metaContent($html, 'og:title') ?? $this->metaContent($html, 'twitter:title') ?? $this->extractTitle($html));
+        }
+
+        $sku = $this->cleanText((string) ($product['sku'] ?? '')) ?: $this->cleanText($this->samsungComJsString($html, 'digitalData\.product\.model_code')) ?: $this->attributeText($html, 'data-model-code') ?: $this->attributeText($html, 'data-modelcode');
+        if ($name && $sku && ! str_contains(mb_strtolower($name), mb_strtolower($sku))) {
+            $name .= ' '.$sku;
+        }
+
+        return $this->cleanText($name);
+    }
+
+    private function samsungComProductPrice(string $html, ?array $product): ?int
+    {
+        $shopInfo = $this->samsungComGlobalShopInfo($html);
+        foreach (['promotionPrice', 'priceDisplay'] as $key) {
+            if (array_key_exists($key, $shopInfo)) {
+                $price = $this->normalizeNumericPrice((string) $shopInfo[$key]);
+                if (! is_null($price) && $price > 0) {
+                    return $price;
+                }
+            }
+        }
+
+        $modelPrice = $this->samsungComJsString($html, 'digitalData\.product\.model_price');
+        if ($modelPrice) {
+            $price = $this->normalizeNumericPrice($modelPrice);
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        $jsonLdPrice = $this->jsonLdProductPrice($product);
+        if (! is_null($jsonLdPrice) && $jsonLdPrice > 0) {
+            return $jsonLdPrice;
+        }
+
+        foreach (['data-sale-price', 'data-price'] as $attribute) {
+            $price = $this->attributeNumber($html, $attribute);
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        foreach (['price', 'taxPrice'] as $key) {
+            if (array_key_exists($key, $shopInfo)) {
+                $price = $this->normalizeNumericPrice((string) $shopInfo[$key]);
+                if (! is_null($price) && $price > 0) {
+                    return $price;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function samsungComGlobalShopInfo(string $html): array
+    {
+        if (preg_match('/var\s+globalShopInfo\s*=\s*(?<json>\{.*?\})\s*;/isu', $html, $match) !== 1) {
+            return [];
+        }
+
+        $data = json_decode((string) ($match['json'] ?? ''), true);
+
+        return is_array($data) ? $data : [];
+    }
+
+    private function samsungComJsString(string $html, string $expression): ?string
+    {
+        if (preg_match('/'.$expression.'\s*=\s*["\'](?<value>[^"\']*)["\']/iu', $html, $match) !== 1) {
+            return null;
+        }
+
+        $decoded = json_decode('"'.str_replace('"', '\"', (string) ($match['value'] ?? '')).'"');
+
+        return $this->cleanText(is_string($decoded) ? $decoded : (string) ($match['value'] ?? ''));
+    }
+
+    private function cleanSamsungComTitle(?string $title): ?string
+    {
+        $title = $this->cleanText($title);
+        if (! $title) {
+            return null;
+        }
+
+        $title = preg_replace('/\s*\|\s*Samsung.*$/iu', '', $title) ?? $title;
+        $title = preg_replace('/\s+-\s*Gia\s*&.*$/iu', '', $title) ?? $title;
+
+        return $this->cleanText($title);
     }
 
     /**

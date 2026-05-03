@@ -223,4 +223,30 @@ class ProductCrudTest extends TestCase
             'product_url' => $url,
         ]);
     }
+
+    public function test_dashboard_can_add_samsung_com_product_without_manual_xpath(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://www.samsung.com/vn/tvs/qled-tv/qn950f-85-inch-neo-qled-8k-mini-led-smart-tv-qa85qn950fkxxv/';
+
+        Http::fake([
+            $url => Http::response(
+                '<html><head><title>85 Inch Neo QLED QN950F 8K Samsung Vision AI Smart TV (2025) QA85QN950FKXXV | Samsung VN</title><script>digitalData = {product: {}}; digitalData.product.model_code = "QA85QN950FKXXV"; digitalData.product.displayName = "85 Inch Neo QLED QN950F 8K Samsung Vision AI Smart TV (2025)"; digitalData.product.model_price = "195690000"; digitalData.product.list_price = "215018182";</script><script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","url":"'.$url.'","name":"85 Inch Neo QLED QN950F 8K Samsung Vision AI Smart TV (2025)","sku":"QA85QN950FKXXV","offers":{"@type":"Offer","priceCurrency":"VND","price":"195690000"}}</script></head><body><script type="text/javascript">var globalShopInfo = {"price":"215018182","priceDisplay":"195.690.000 VND","promotionPrice":"195690000"};</script></body></html>',
+                200
+            ),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => '85 Inch Neo QLED QN950F 8K Samsung Vision AI Smart TV (2025) QA85QN950FKXXV',
+            'price' => 195690000,
+            'product_url' => $url,
+        ]);
+    }
 }

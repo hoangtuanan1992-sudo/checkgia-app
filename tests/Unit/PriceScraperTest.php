@@ -361,4 +361,49 @@ class PriceScraperTest extends TestCase
             'price' => 39990000,
         ], $result);
     }
+
+    public function test_extracts_samsung_com_price_and_name_without_xpath(): void
+    {
+        $html = <<<'HTML'
+            <html><head>
+                <title>85 Inch Neo QLED QN950F 8K Samsung Vision AI Smart TV (2025) QA85QN950FKXXV | Samsung VN</title>
+                <meta name="twitter:title" content="2025 QN950F 85 inch 8K Neo QLED Mini LED Samsung Vision AI Tivi - Gia & Danh Gia | Samsung VN" />
+                <script>
+                    digitalData = {product: {}};
+                    digitalData.product.model_code = "QA85QN950FKXXV";
+                    digitalData.product.displayName = "85 Inch Neo QLED QN950F 8K Samsung Vision AI Smart TV (2025)";
+                    digitalData.product.model_price = "195690000";
+                    digitalData.product.list_price = "215018182";
+                </script>
+            </head><body>
+                <script type="application/ld+json">
+                {
+                    "@context": "https://schema.org/",
+                    "@type": "Product",
+                    "url": "https://www.samsung.com/vn/tvs/qled-tv/qn950f-85-inch-neo-qled-8k-mini-led-smart-tv-qa85qn950fkxxv/",
+                    "name": "85 Inch Neo QLED QN950F 8K Samsung Vision AI Smart TV (2025)",
+                    "sku": "QA85QN950FKXXV",
+                    "offers": {
+                        "@type": "Offer",
+                        "priceCurrency": "VND",
+                        "price": "195690000"
+                    }
+                }
+                </script>
+                <script type="text/javascript">
+                    var globalShopInfo = {"price":"215018182","priceDisplay":"195.690.000 VND","promotionPrice":"195690000"};
+                </script>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeSamsungComPriceAndName(
+            'https://www.samsung.com/vn/tvs/qled-tv/qn950f-85-inch-neo-qled-8k-mini-led-smart-tv-qa85qn950fkxxv/',
+            $html
+        );
+
+        $this->assertSame([
+            'name' => '85 Inch Neo QLED QN950F 8K Samsung Vision AI Smart TV (2025) QA85QN950FKXXV',
+            'price' => 195690000,
+        ], $result);
+    }
 }
