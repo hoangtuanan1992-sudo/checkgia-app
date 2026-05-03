@@ -25,8 +25,9 @@ class ScannedProductFullPageTest extends TestCase
             ->assertOk()
             ->assertSee('Sản phẩm đã quét')
             ->assertSee('Tu lanh Toshiba GR-RS780WI-PGV(22)-XK')
-            ->assertSee('14.500.000đ')
-            ->assertSee('https://dienmaydo.vn/tu-lanh-toshiba-gr-rs780wi-pgv-22-xk');
+            ->assertSee('https://dienmaydo.vn/tu-lanh-toshiba-gr-rs780wi-pgv-22-xk')
+            ->assertDontSee('14.500.000đ')
+            ->assertDontSee('Cập nhật');
     }
 
     public function test_public_full_products_page_accepts_raw_website_query(): void
@@ -43,7 +44,8 @@ class ScannedProductFullPageTest extends TestCase
         $this->get('/san-pham-full?https://phongvu.vn/')
             ->assertOk()
             ->assertSee('Man hinh LCD LG 27 inch')
-            ->assertSee('2.590.000đ');
+            ->assertSee('https://phongvu.vn/man-hinh-lcd-lg-27-inch')
+            ->assertDontSee('2.590.000đ');
     }
 
     /**
