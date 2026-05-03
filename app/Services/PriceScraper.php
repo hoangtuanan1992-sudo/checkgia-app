@@ -268,18 +268,35 @@ class PriceScraper
 
     private function lgComProductPrice(string $html): ?int
     {
-        foreach (['data-price', 'data-pim-price', 'data-promotion-price', 'data-msrp', 'data-pim-msrp'] as $attribute) {
+        $jsonLdPrice = $this->jsonLdProductPrice($this->jsonLdProduct($html));
+        if (! is_null($jsonLdPrice) && $jsonLdPrice > 0) {
+            return $jsonLdPrice;
+        }
+
+        foreach (['data-promotion-price', 'data-sale-price', 'data-final-price', 'data-online-price', 'data-discount-price', 'data-price', 'data-pim-price'] as $attribute) {
             $price = $this->attributeNumber($html, $attribute);
             if (! is_null($price) && $price > 0) {
                 return $price;
             }
         }
 
-        foreach (['promotionPrice', 'salePrice', 'finalPrice', 'onlinePrice', 'msrp'] as $field) {
+        foreach (['promotionPrice', 'salePrice', 'finalPrice', 'onlinePrice'] as $field) {
             $price = $this->lgComNumericField($html, $field);
             if (! is_null($price) && $price > 0) {
                 return $price;
             }
+        }
+
+        foreach (['data-msrp', 'data-pim-msrp'] as $attribute) {
+            $price = $this->attributeNumber($html, $attribute);
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        $msrp = $this->lgComNumericField($html, 'msrp');
+        if (! is_null($msrp) && $msrp > 0) {
+            return $msrp;
         }
 
         return null;
@@ -422,7 +439,8 @@ class PriceScraper
 
     private function viettelStoreJsonLdProduct(string $html): ?array
     {
-        if (preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(?<json>.*?)<\/script>/isu', $html, $matches) !== 1) {
+        $matched = preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(?<json>.*?)<\/script>/isu', $html, $matches);
+        if ($matched === false || $matched === 0) {
             return null;
         }
 
@@ -660,7 +678,8 @@ class PriceScraper
 
     private function jsonLdProduct(string $html): ?array
     {
-        if (preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(?<json>.*?)<\/script>/isu', $html, $matches) !== 1) {
+        $matched = preg_match_all('/<script[^>]*type=["\']application\/ld\+json["\'][^>]*>(?<json>.*?)<\/script>/isu', $html, $matches);
+        if ($matched === false || $matched === 0) {
             return null;
         }
 

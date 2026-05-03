@@ -205,7 +205,7 @@ class ProductCrudTest extends TestCase
 
         Http::fake([
             $url => Http::response(
-                '<html><head><title data-id="pdp-title">Tu lanh LG Instaview UV nano 635L mau be GR-X257BG | LG Viet Nam</title></head><body><div class="price-area hidden" data-sku="GR-X257BG.AEEPEVN.EAVH.VN.C" data-msrp="55990000" data-pim-model-name="Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG"></div></body></html>',
+                '<html><head><title data-id="pdp-title">Tu lanh LG Instaview UV nano 635L mau be GR-X257BG | LG Viet Nam</title><script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG","offers":{"@type":"Offer","priceCurrency":"VND","price":"39990000"}}</script></head><body><div class="price-area hidden" data-sku="GR-X257BG.AEEPEVN.EAVH.VN.C" data-msrp="55990000" data-pim-model-name="Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG"></div></body></html>',
                 200
             ),
         ]);
@@ -219,7 +219,7 @@ class ProductCrudTest extends TestCase
         $this->assertDatabaseHas('products', [
             'user_id' => $user->id,
             'name' => 'Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG',
-            'price' => 55990000,
+            'price' => 39990000,
             'product_url' => $url,
         ]);
     }

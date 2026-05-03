@@ -327,6 +327,18 @@ class PriceScraperTest extends TestCase
             </head><body>
                 <div class="price-area hidden" data-sku="GR-X257BG.AEEPEVN.EAVH.VN.C" data-msrp="55990000"></div>
                 <h2 class="pdp-title">Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG</h2>
+                <script type="application/ld+json">
+                    {
+                        "@context": "https://schema.org",
+                        "@type": "Product",
+                        "name": "Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG",
+                        "offers": {
+                            "@type": "Offer",
+                            "priceCurrency": "VND",
+                            "price": "39990000"
+                        }
+                    }
+                </script>
                 <script>
                     var ga4_dataset = {
                         "product": {
@@ -346,7 +358,7 @@ class PriceScraperTest extends TestCase
 
         $this->assertSame([
             'name' => 'Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG',
-            'price' => 55990000,
+            'price' => 39990000,
         ], $result);
     }
 }
