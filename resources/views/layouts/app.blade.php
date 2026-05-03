@@ -127,8 +127,12 @@
             <div style="display:flex;gap:8px;align-items:center">
                 <a class="btn btn-secondary" href="{{ route('dashboard') }}">Dashboard</a>
                 <a class="btn btn-secondary" href="{{ route('dashboard.reports') }}">Báo cáo</a>
-                <a class="btn btn-secondary" href="{{ route('shopee.dashboard') }}">Check Giá Shopee</a>
-                <a class="btn btn-secondary" href="{{ route('dashboard.competitors') }}">Cài đặt</a>
+                @if(\App\Models\User::shopeeCheckEnabledForId(auth()->user()->effectiveUserId()))
+                    <a class="btn btn-secondary" href="{{ route('shopee.dashboard') }}">Check Giá Shopee</a>
+                @endif
+                @if(! auth()->user()->isViewer())
+                    <a class="btn btn-secondary" href="{{ route('dashboard.competitors') }}">Cài đặt</a>
+                @endif
                 <a class="btn btn-secondary" href="{{ route('account') }}">Tài khoản</a>
                 @if(auth()->user()->isAdmin())
                     <a class="btn btn-secondary" href="{{ route('admin.users.index') }}">Admin</a>

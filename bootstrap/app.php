@@ -3,6 +3,7 @@
 use App\Http\Middleware\CorsForShopeeApi;
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureOwner;
+use App\Http\Middleware\EnsureShopeeCheckEnabled;
 use App\Http\Middleware\VerifyShopeeAgentToken;
 use App\Http\Middleware\VerifyShopeeExtensionToken;
 use Illuminate\Foundation\Application;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'owner' => EnsureOwner::class,
             'admin' => EnsureAdmin::class,
+            'shopee.check' => EnsureShopeeCheckEnabled::class,
             'shopee.token' => VerifyShopeeExtensionToken::class,
             'shopee.agent' => VerifyShopeeAgentToken::class,
             'shopee.cors' => CorsForShopeeApi::class,

@@ -59,20 +59,22 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard/export/products', [DashboardExportController::class, 'products'])->name('dashboard.export.products');
     Route::post('/dashboard/scrape-now', [DashboardScrapeNowController::class, 'run'])->name('dashboard.scrape.now');
 
-    Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->name('shopee.dashboard');
-    Route::get('/shopee/poll', [ShopeeDashboardController::class, 'poll'])->name('shopee.poll');
-    Route::get('/shopee/history/{product}', [ShopeeDashboardController::class, 'history'])->name('shopee.history');
-    Route::middleware('owner')->group(function () {
-        Route::get('/shopee/settings', [ShopeeSettingsController::class, 'index'])->name('shopee.settings');
-        Route::post('/shopee/shops', [ShopeeSettingsController::class, 'storeShop'])->name('shopee.shops.store');
-        Route::delete('/shopee/shops/{shop}', [ShopeeSettingsController::class, 'destroyShop'])->name('shopee.shops.destroy');
-        Route::post('/shopee/shops/{shop}/move', [ShopeeSettingsController::class, 'moveShop'])->name('shopee.shops.move');
-        Route::post('/shopee/products', [ShopeeSettingsController::class, 'storeProduct'])->name('shopee.products.store');
-        Route::post('/shopee/products/{product}/toggle', [ShopeeSettingsController::class, 'toggleProduct'])->name('shopee.products.toggle');
-        Route::delete('/shopee/products/{product}', [ShopeeSettingsController::class, 'destroyProduct'])->name('shopee.products.destroy');
-        Route::put('/shopee/products/{product}/url', [ShopeeSettingsController::class, 'updateOwnUrl'])->name('shopee.products.url.update');
-        Route::match(['put', 'post'], '/shopee/products/{product}/shops/{shop}', [ShopeeSettingsController::class, 'upsertCompetitorUrl'])->name('shopee.products.competitors.upsert');
-        Route::match(['put', 'post'], '/shopee/competitors/{competitor}/adjustment', [ShopeeSettingsController::class, 'updateCompetitorAdjustment'])->name('shopee.competitors.adjustment.update');
+    Route::middleware('shopee.check')->group(function () {
+        Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->name('shopee.dashboard');
+        Route::get('/shopee/poll', [ShopeeDashboardController::class, 'poll'])->name('shopee.poll');
+        Route::get('/shopee/history/{product}', [ShopeeDashboardController::class, 'history'])->name('shopee.history');
+        Route::middleware('owner')->group(function () {
+            Route::get('/shopee/settings', [ShopeeSettingsController::class, 'index'])->name('shopee.settings');
+            Route::post('/shopee/shops', [ShopeeSettingsController::class, 'storeShop'])->name('shopee.shops.store');
+            Route::delete('/shopee/shops/{shop}', [ShopeeSettingsController::class, 'destroyShop'])->name('shopee.shops.destroy');
+            Route::post('/shopee/shops/{shop}/move', [ShopeeSettingsController::class, 'moveShop'])->name('shopee.shops.move');
+            Route::post('/shopee/products', [ShopeeSettingsController::class, 'storeProduct'])->name('shopee.products.store');
+            Route::post('/shopee/products/{product}/toggle', [ShopeeSettingsController::class, 'toggleProduct'])->name('shopee.products.toggle');
+            Route::delete('/shopee/products/{product}', [ShopeeSettingsController::class, 'destroyProduct'])->name('shopee.products.destroy');
+            Route::put('/shopee/products/{product}/url', [ShopeeSettingsController::class, 'updateOwnUrl'])->name('shopee.products.url.update');
+            Route::match(['put', 'post'], '/shopee/products/{product}/shops/{shop}', [ShopeeSettingsController::class, 'upsertCompetitorUrl'])->name('shopee.products.competitors.upsert');
+            Route::match(['put', 'post'], '/shopee/competitors/{competitor}/adjustment', [ShopeeSettingsController::class, 'updateCompetitorAdjustment'])->name('shopee.competitors.adjustment.update');
+        });
     });
 
     Route::middleware('admin')->group(function () {

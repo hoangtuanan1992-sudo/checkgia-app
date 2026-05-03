@@ -95,6 +95,21 @@
                                     </span>
                                 </label>
                             @endif
+                            @if(\App\Models\User::hasShopeeCheckColumn())
+                                <label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px">
+                                    <input
+                                        type="checkbox"
+                                        name="allow_shopee_check"
+                                        value="1"
+                                        @checked((bool) old('allow_shopee_check', (bool) ($user->allow_shopee_check ?? false)))
+                                        style="width:20px;height:20px;margin-top:2px"
+                                    >
+                                    <span>
+                                        <span style="display:block;font-weight:700">Bật Check Giá Shopee</span>
+                                        <span class="hint" style="display:block;margin-top:4px">Khi bật, tài khoản này mới thấy nút Check Giá Shopee và truy cập được trang Shopee.</span>
+                                    </span>
+                                </label>
+                            @endif
                             <div class="hint" style="margin-top:10px">
                                 {{ $user->serviceRemainingText() ?: '---' }}
                             </div>

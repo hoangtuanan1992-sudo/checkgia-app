@@ -13,7 +13,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'visible_product_group_ids', 'visible_competitor_site_group_ids', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit', 'allow_compare_match'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'visible_product_group_ids', 'visible_competitor_site_group_ids', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit', 'allow_compare_match', 'allow_shopee_check'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -31,6 +31,7 @@ class User extends Authenticatable
             'visible_product_group_ids' => 'array',
             'visible_competitor_site_group_ids' => 'array',
             'allow_compare_match' => 'boolean',
+            'allow_shopee_check' => 'boolean',
         ];
     }
 
@@ -123,6 +124,24 @@ class User extends Authenticatable
         }
 
         return (bool) static::query()->whereKey($userId)->value('allow_compare_match');
+    }
+
+    public static function hasShopeeCheckColumn(): bool
+    {
+        try {
+            return Schema::hasColumn('users', 'allow_shopee_check');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    public static function shopeeCheckEnabledForId(int $userId): bool
+    {
+        if (! static::hasShopeeCheckColumn()) {
+            return false;
+        }
+
+        return (bool) static::query()->whereKey($userId)->value('allow_shopee_check');
     }
 
     public static function hasSubUserVisibilityColumns(): bool

@@ -207,6 +207,7 @@ class AdminUserController extends Controller
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'product_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'allow_compare_match' => ['nullable', 'boolean'],
+            'allow_shopee_check' => ['nullable', 'boolean'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
             'scrape_schedule_times' => ['nullable', 'string', 'max:10000'],
         ]);
@@ -246,6 +247,12 @@ class AdminUserController extends Controller
         if (User::hasCompareMatchColumn()) {
             $updates['allow_compare_match'] = $updates['role'] === 'owner'
                 ? $request->boolean('allow_compare_match')
+                : false;
+        }
+
+        if (User::hasShopeeCheckColumn()) {
+            $updates['allow_shopee_check'] = $updates['role'] === 'owner'
+                ? $request->boolean('allow_shopee_check')
                 : false;
         }
 
