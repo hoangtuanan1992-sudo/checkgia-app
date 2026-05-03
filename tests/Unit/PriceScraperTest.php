@@ -207,4 +207,30 @@ class PriceScraperTest extends TestCase
             'price' => 10290000,
         ], $result);
     }
+
+    public function test_extracts_hoanghamobile_price_and_name_without_xpath(): void
+    {
+        $html = <<<'HTML'
+            <html><head>
+                <meta property="og:title" content="May Tinh Bang Redmi Pad SE 8.7 4G 6GB/128GB" />
+                <script>
+                    window.insider_object = {};
+                    window.insider_object.product = {"id":"5520","name":"May Tinh Bang Redmi Pad SE 8.7 4G 6GB/128GB","currency":"VND","unit_price":5490000.0,"unit_sale_price":3790000.0,"url":"https://hoanghamobile.com/may-tinh-bang/may-tinh-bang-redmi-pad-se-8-7-4g-6gb-128gb","stock":212,"is_available":true,"custom":{"sku":[{"sku":"PASE8R6XD","name":"Xanh Duong","price":3790000.0}]}};
+                </script>
+            </head><body>
+                <div class="product-detail"><h1>May Tinh Bang Redmi Pad SE 8.7 4G 6GB/128GB</h1></div>
+                <div class="box-price"><strong class="price">3.790.000 &#x20AB;</strong></div>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeHoangHaMobilePriceAndName(
+            'https://hoanghamobile.com/may-tinh-bang/may-tinh-bang-redmi-pad-se-8-7-4g-6gb-128gb',
+            $html
+        );
+
+        $this->assertSame([
+            'name' => 'May Tinh Bang Redmi Pad SE 8.7 4G 6GB/128GB',
+            'price' => 3790000,
+        ], $result);
+    }
 }

@@ -160,6 +160,10 @@ class PriceScraper
             return $this->scrapeMiComPriceAndName($url);
         }
 
+        if ($this->isHoangHaMobileUrl($url)) {
+            return $this->scrapeHoangHaMobilePriceAndName($url);
+        }
+
         return null;
     }
 
@@ -185,6 +189,14 @@ class PriceScraper
         $host = preg_replace('/^www\./', '', $host) ?? $host;
 
         return $host === 'mi.com';
+    }
+
+    public function isHoangHaMobileUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        return $host === 'hoanghamobile.com';
     }
 
     /**
@@ -510,6 +522,91 @@ class PriceScraper
         }, $words);
 
         return implode(' ', $words);
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeHoangHaMobilePriceAndName(string $url, ?string $html = null): ?array
+    {
+        $html = $html ?? $this->fetchHtml($url);
+        $product = $this->hoangHaMobileInsiderProduct($html);
+
+        $name = $this->cleanText((string) ($product['name'] ?? ''));
+        if (! $name) {
+            $name = $this->cleanText($this->extractFirstByXPath($html, '//div[contains(@class, "product-detail")]//h1'));
+        }
+        if (! $name) {
+            $name = $this->cleanText($this->metaContent($html, 'og:title') ?? $this->extractTitle($html));
+        }
+
+        $price = $this->hoangHaMobileProductPrice($product);
+        if (is_null($price)) {
+            $price = $this->extractHoangHaMobileVisiblePrice($html);
+        }
+
+        if (! $name || is_null($price)) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'price' => $price,
+        ];
+    }
+
+    private function hoangHaMobileInsiderProduct(string $html): ?array
+    {
+        if (preg_match('/window\.insider_object\.product\s*=\s*(?<json>\{.*?\})\s*;/isu', $html, $match) !== 1) {
+            return null;
+        }
+
+        $product = json_decode((string) ($match['json'] ?? ''), true);
+
+        return is_array($product) ? $product : null;
+    }
+
+    private function hoangHaMobileProductPrice(?array $product): ?int
+    {
+        if (! $product) {
+            return null;
+        }
+
+        foreach (['unit_sale_price', 'price', 'unit_price'] as $key) {
+            if (! array_key_exists($key, $product)) {
+                continue;
+            }
+
+            $price = $this->normalizeNumericPrice((string) $product[$key]);
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        foreach ((array) data_get($product, 'custom.sku', []) as $sku) {
+            if (! is_array($sku) || ! array_key_exists('price', $sku)) {
+                continue;
+            }
+
+            $price = $this->normalizeNumericPrice((string) $sku['price']);
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        return null;
+    }
+
+    private function extractHoangHaMobileVisiblePrice(string $html): ?int
+    {
+        if (preg_match('/<div[^>]*class=["\'][^"\']*\bbox-price\b[^"\']*["\'][^>]*>\s*<strong[^>]*class=["\'][^"\']*\bprice\b[^"\']*["\'][^>]*>(?<price>.*?)<\/strong>/isu', $html, $match) === 1) {
+            $price = $this->parsePriceToInt($this->cleanText((string) ($match['price'] ?? '')));
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        return null;
     }
 
     private function attributeNumber(string $tag, string $attribute): ?int
