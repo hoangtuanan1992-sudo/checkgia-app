@@ -164,6 +164,10 @@ class PriceScraper
             return $this->scrapeHoangHaMobilePriceAndName($url);
         }
 
+        if ($this->isMinhTuanMobileUrl($url)) {
+            return $this->scrapeMinhTuanMobilePriceAndName($url);
+        }
+
         return null;
     }
 
@@ -197,6 +201,14 @@ class PriceScraper
         $host = preg_replace('/^www\./', '', $host) ?? $host;
 
         return $host === 'hoanghamobile.com';
+    }
+
+    public function isMinhTuanMobileUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        return $host === 'minhtuanmobile.com';
     }
 
     /**
@@ -266,7 +278,7 @@ class PriceScraper
             $name = $this->cleanViettelStoreTitle($this->metaContent($html, 'og:title') ?? $this->extractTitle($html));
         }
 
-        $price = $this->viettelStoreJsonLdPrice($jsonProduct);
+        $price = $this->jsonLdProductPrice($jsonProduct);
         if (is_null($price)) {
             $price = $this->extractViettelStoreVisiblePrice($html);
         }
@@ -341,7 +353,7 @@ class PriceScraper
         return null;
     }
 
-    private function viettelStoreJsonLdPrice(?array $product): ?int
+    private function jsonLdProductPrice(?array $product): ?int
     {
         if (! $product) {
             return null;
@@ -361,6 +373,49 @@ class PriceScraper
                         return $price;
                     }
                 }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeMinhTuanMobilePriceAndName(string $url, ?string $html = null): ?array
+    {
+        $html = $html ?? $this->fetchHtml($url);
+        $jsonProduct = $this->jsonLdProduct($html);
+
+        $name = $this->cleanText($this->extractFirstByXPath($html, '//h1'));
+        if (! $name) {
+            $name = $this->cleanText((string) ($jsonProduct['name'] ?? ''));
+        }
+        if (! $name) {
+            $name = $this->cleanMinhTuanMobileTitle($this->metaContent($html, 'og:title') ?? $this->extractTitle($html));
+        }
+
+        $price = $this->jsonLdProductPrice($jsonProduct);
+        if (is_null($price)) {
+            $price = $this->extractMinhTuanMobileVisiblePrice($html);
+        }
+
+        if (! $name || is_null($price)) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'price' => $price,
+        ];
+    }
+
+    private function extractMinhTuanMobileVisiblePrice(string $html): ?int
+    {
+        if (preg_match('/<p[^>]*class=["\'][^"\']*\bprodetail__price\b[^"\']*\bprodetail__price--buynow\b[^"\']*["\'][^>]*>\s*<b[^>]*class=["\'][^"\']*\bprice\b[^"\']*["\'][^>]*>(?<price>.*?)<\/b>/isu', $html, $match) === 1) {
+            $price = $this->parsePriceToInt($this->cleanText((string) ($match['price'] ?? '')));
+            if (! is_null($price) && $price > 0) {
+                return $price;
             }
         }
 
@@ -687,6 +742,19 @@ class PriceScraper
 
         $title = preg_replace('/\s+chính hãng\s+-\s+ViettelStore\.vn\s*$/iu', '', $title) ?? $title;
         $title = preg_replace('/\s+-\s+ViettelStore\.vn\s*$/iu', '', $title) ?? $title;
+
+        return $this->cleanText($title);
+    }
+
+    private function cleanMinhTuanMobileTitle(?string $title): ?string
+    {
+        $title = $this->cleanText($title);
+        if (! $title) {
+            return null;
+        }
+
+        $title = preg_replace('/\s*\|\s*Có trả góp.*$/iu', '', $title) ?? $title;
+        $title = preg_replace('/\s+chính hãng\s+VN\/?A\s*$/iu', ' chính hãng VN/A', $title) ?? $title;
 
         return $this->cleanText($title);
     }

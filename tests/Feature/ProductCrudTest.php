@@ -145,4 +145,30 @@ class ProductCrudTest extends TestCase
             'product_url' => $url,
         ]);
     }
+
+    public function test_dashboard_can_add_minhtuanmobile_product_without_manual_xpath(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://minhtuanmobile.com/iphone-17-25091002335142/';
+
+        Http::fake([
+            $url => Http::response(
+                '<html><head><script type="application/ld+json">{"@context":"https://schema.org/","@type":"Product","name":"iPhone 17 256GB - Chinh hang VN - MG6L4ZP A","sku":"MG6L4ZP/A","offers":{"@type":"Offer","priceCurrency":"VND","price":24190000,"priceSpecification":{"@type":"UnitPriceSpecification","price":24990000}}}</script></head><body><h1>iPhone 17 256GB - Chinh hang VN - MG6L4ZP/A</h1><p class="prodetail__price prodetail__price--buynow mb-1"><b class="price">24,190,000&#x0111;</b><s>24,990,000&#x0111;</s></p></body></html>',
+                200
+            ),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'iPhone 17 256GB - Chinh hang VN - MG6L4ZP/A',
+            'price' => 24190000,
+            'product_url' => $url,
+        ]);
+    }
 }

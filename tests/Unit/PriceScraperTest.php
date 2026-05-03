@@ -233,4 +233,45 @@ class PriceScraperTest extends TestCase
             'price' => 3790000,
         ], $result);
     }
+
+    public function test_extracts_minhtuanmobile_price_and_name_without_xpath(): void
+    {
+        $html = <<<'HTML'
+            <html><head>
+                <meta property="og:title" content="iPhone 17 256GB chinh hang VN A | Co tra gop 3 khong" />
+                <script type="application/ld+json">
+                {
+                    "@context": "https://schema.org/",
+                    "@type": "Product",
+                    "name": "iPhone 17 256GB - Chinh hang VN - MG6L4ZP A",
+                    "sku": "MG6L4ZP/A",
+                    "offers": {
+                        "@type": "Offer",
+                        "priceCurrency": "VND",
+                        "price": 24190000,
+                        "priceSpecification": {
+                            "@type": "UnitPriceSpecification",
+                            "price": 24990000
+                        }
+                    }
+                }
+                </script>
+            </head><body>
+                <h1>iPhone 17 256GB - Chinh hang VN - MG6L4ZP/A</h1>
+                <p class="prodetail__price prodetail__price--buynow mb-1">
+                    <b class="price">24,190,000&#x0111;</b><s>24,990,000&#x0111;</s>
+                </p>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeMinhTuanMobilePriceAndName(
+            'https://minhtuanmobile.com/iphone-17-25091002335142/',
+            $html
+        );
+
+        $this->assertSame([
+            'name' => 'iPhone 17 256GB - Chinh hang VN - MG6L4ZP/A',
+            'price' => 24190000,
+        ], $result);
+    }
 }
