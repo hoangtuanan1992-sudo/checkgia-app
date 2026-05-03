@@ -7,18 +7,15 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\CompetitorController;
 use App\Http\Controllers\CompetitorHistoryController;
-use App\Http\Controllers\DashboardCompareMatchController;
 use App\Http\Controllers\DashboardCompetitorSetupController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardExportController;
 use App\Http\Controllers\DashboardProductController;
-use App\Http\Controllers\DashboardQuickScanController;
 use App\Http\Controllers\DashboardScrapeNowController;
 use App\Http\Controllers\DemoController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductHistoryController;
 use App\Http\Controllers\ReportController;
-use App\Http\Controllers\ScannedProductFullController;
 use App\Http\Controllers\Shopee\ShopeeAdminController;
 use App\Http\Controllers\Shopee\ShopeeDashboardController;
 use App\Http\Controllers\Shopee\ShopeeSettingsController;
@@ -33,7 +30,6 @@ Route::get('/', function () {
 })->name('home');
 
 Route::get('/demo', DemoController::class)->name('demo');
-Route::get('/san-pham-full', ScannedProductFullController::class)->name('scanner.full-products');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -44,44 +40,29 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::post('/dashboard/compare-table/column-widths', [DashboardController::class, 'updateCompareColumnWidths'])->name('dashboard.compare-table.column-widths.update');
-    Route::get('/dashboard/quick-scan', [DashboardQuickScanController::class, 'index'])->name('dashboard.quick-scan');
-    Route::post('/dashboard/quick-scan/request', [DashboardQuickScanController::class, 'requestScan'])->name('dashboard.quick-scan.request');
-    Route::post('/dashboard/quick-scan/add-to-compare', [DashboardQuickScanController::class, 'addToCompare'])->name('dashboard.quick-scan.add-to-compare');
-    Route::post('/dashboard/quick-scan/scan', [DashboardQuickScanController::class, 'scan'])->name('dashboard.quick-scan.scan');
-    Route::post('/dashboard/quick-scan/import', [DashboardQuickScanController::class, 'import'])->name('dashboard.quick-scan.import');
-    Route::post('/dashboard/quick-scan/clear-runs', [DashboardQuickScanController::class, 'clearRuns'])->name('dashboard.quick-scan.clear-runs');
-    Route::post('/dashboard/quick-scan/{run}/tick', [DashboardQuickScanController::class, 'tick'])->name('dashboard.quick-scan.tick');
-    Route::post('/dashboard/quick-scan/{run}/pause', [DashboardQuickScanController::class, 'pause'])->name('dashboard.quick-scan.pause');
-    Route::post('/dashboard/quick-scan/{run}/resume', [DashboardQuickScanController::class, 'resume'])->name('dashboard.quick-scan.resume');
     Route::get('/dashboard/reports', [ReportController::class, 'index'])->name('dashboard.reports');
     Route::get('/dashboard/competitors', [DashboardCompetitorSetupController::class, 'index'])->name('dashboard.competitors');
     Route::get('/dashboard/export/products', [DashboardExportController::class, 'products'])->name('dashboard.export.products');
     Route::post('/dashboard/scrape-now', [DashboardScrapeNowController::class, 'run'])->name('dashboard.scrape.now');
 
-    Route::middleware('shopee.check')->group(function () {
-        Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->name('shopee.dashboard');
-        Route::get('/shopee/poll', [ShopeeDashboardController::class, 'poll'])->name('shopee.poll');
-        Route::get('/shopee/history/{product}', [ShopeeDashboardController::class, 'history'])->name('shopee.history');
-        Route::middleware('owner')->group(function () {
-            Route::get('/shopee/settings', [ShopeeSettingsController::class, 'index'])->name('shopee.settings');
-            Route::post('/shopee/shops', [ShopeeSettingsController::class, 'storeShop'])->name('shopee.shops.store');
-            Route::delete('/shopee/shops/{shop}', [ShopeeSettingsController::class, 'destroyShop'])->name('shopee.shops.destroy');
-            Route::post('/shopee/shops/{shop}/move', [ShopeeSettingsController::class, 'moveShop'])->name('shopee.shops.move');
-            Route::post('/shopee/products', [ShopeeSettingsController::class, 'storeProduct'])->name('shopee.products.store');
-            Route::post('/shopee/products/{product}/toggle', [ShopeeSettingsController::class, 'toggleProduct'])->name('shopee.products.toggle');
-            Route::delete('/shopee/products/{product}', [ShopeeSettingsController::class, 'destroyProduct'])->name('shopee.products.destroy');
-            Route::put('/shopee/products/{product}/url', [ShopeeSettingsController::class, 'updateOwnUrl'])->name('shopee.products.url.update');
-            Route::match(['put', 'post'], '/shopee/products/{product}/shops/{shop}', [ShopeeSettingsController::class, 'upsertCompetitorUrl'])->name('shopee.products.competitors.upsert');
-            Route::match(['put', 'post'], '/shopee/competitors/{competitor}/adjustment', [ShopeeSettingsController::class, 'updateCompetitorAdjustment'])->name('shopee.competitors.adjustment.update');
-        });
+    Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->name('shopee.dashboard');
+    Route::middleware('owner')->group(function () {
+        Route::get('/shopee/settings', [ShopeeSettingsController::class, 'index'])->name('shopee.settings');
+        Route::post('/shopee/shops', [ShopeeSettingsController::class, 'storeShop'])->name('shopee.shops.store');
+        Route::delete('/shopee/shops/{shop}', [ShopeeSettingsController::class, 'destroyShop'])->name('shopee.shops.destroy');
+        Route::post('/shopee/shops/{shop}/move', [ShopeeSettingsController::class, 'moveShop'])->name('shopee.shops.move');
+        Route::post('/shopee/products', [ShopeeSettingsController::class, 'storeProduct'])->name('shopee.products.store');
+        Route::post('/shopee/products/{product}/toggle', [ShopeeSettingsController::class, 'toggleProduct'])->name('shopee.products.toggle');
+        Route::delete('/shopee/products/{product}', [ShopeeSettingsController::class, 'destroyProduct'])->name('shopee.products.destroy');
+        Route::put('/shopee/products/{product}/url', [ShopeeSettingsController::class, 'updateOwnUrl'])->name('shopee.products.url.update');
+        Route::match(['put', 'post'], '/shopee/products/{product}/shops/{shop}', [ShopeeSettingsController::class, 'upsertCompetitorUrl'])->name('shopee.products.competitors.upsert');
+        Route::match(['put', 'post'], '/shopee/competitors/{competitor}/adjustment', [ShopeeSettingsController::class, 'updateCompetitorAdjustment'])->name('shopee.competitors.adjustment.update');
     });
 
     Route::middleware('admin')->group(function () {
         Route::get('/shopee/admin-settings', [ShopeeAdminController::class, 'edit'])->name('shopee.admin-settings');
-        Route::match(['put', 'post'], '/shopee/admin-settings', [ShopeeAdminController::class, 'update'])->name('shopee.admin-settings.update');
+        Route::put('/shopee/admin-settings', [ShopeeAdminController::class, 'update'])->name('shopee.admin-settings.update');
         Route::post('/shopee/admin-settings/agents/{agent}', [ShopeeAdminController::class, 'updateAgent'])->name('shopee.admin-settings.agent.update');
-        Route::delete('/shopee/admin-settings/agents/{agent}', [ShopeeAdminController::class, 'destroyAgent'])->name('shopee.admin-settings.agent.destroy');
         Route::post('/shopee/admin-settings/agents/{agent}/approve', [ShopeeAdminController::class, 'approveAgent'])->name('shopee.admin-settings.agent.approve');
     });
 
@@ -105,39 +86,22 @@ Route::middleware('auth')->group(function () {
         Route::get('/impersonate/stop', [AdminUserController::class, 'stopImpersonate'])->name('impersonate.stop.get');
         Route::get('/settings', [AdminSettingController::class, 'edit'])->name('settings.edit');
         Route::put('/settings', [AdminSettingController::class, 'update'])->name('settings.update');
-        Route::post('/settings/ai/{provider}/test', [AdminSettingController::class, 'testAiProvider'])->name('settings.ai.test');
-        Route::post('/settings/ai/{provider}/models', [AdminSettingController::class, 'scanAiProviderModels'])->name('settings.ai.models');
-        Route::post('/xpath-templates', [AdminSettingController::class, 'upsertXpathTemplate'])->name('xpath-templates.upsert');
-        Route::delete('/xpath-templates/{competitorSiteTemplate}', [AdminSettingController::class, 'destroyXpathTemplate'])->name('xpath-templates.destroy');
-        Route::post('/xpath-users/{user}', [AdminSettingController::class, 'updateUserXPaths'])->name('xpath-users.update');
-        Route::post('/xpath-users/{user}/promote-site/{competitorSite}', [AdminSettingController::class, 'promoteUserSiteToTemplate'])->name('xpath-users.promote-site');
     });
 
-    Route::post('/dashboard/products', [DashboardProductController::class, 'store'])->name('dashboard.products.store');
-
     Route::middleware('owner')->group(function () {
-        Route::get('/dashboard/products/import-template', [DashboardProductController::class, 'downloadImportTemplate'])->name('dashboard.products.import-template');
-        Route::post('/dashboard/products/import', [DashboardProductController::class, 'importExcel'])->name('dashboard.products.import');
-        Route::post('/dashboard/compare-match', [DashboardCompareMatchController::class, 'run'])->name('dashboard.compare-match.run');
-        Route::post('/dashboard/compare-match/{compareMatchRun}/tick', [DashboardCompareMatchController::class, 'tick'])->name('dashboard.compare-match.tick');
+        Route::post('/dashboard/products', [DashboardProductController::class, 'store'])->name('dashboard.products.store');
         Route::put('/dashboard/products/{product}/url', [ProductController::class, 'updateUrl'])->name('dashboard.products.url.update');
         Route::delete('/dashboard/products/{product}', [ProductController::class, 'destroyFromDashboard'])->name('dashboard.products.destroy');
         Route::match(['put', 'post', 'get'], '/dashboard/products/{product}/competitor-sites/{competitorSite}', [CompetitorController::class, 'upsertUrl'])->name('dashboard.products.competitors.upsert');
-        Route::match(['put', 'post', 'get'], '/dashboard/products/{product}/competitors/by-url', [CompetitorController::class, 'upsertUrlByUrl'])->name('dashboard.products.competitors.upsert-by-url');
         Route::post('/dashboard/competitor-sites', [DashboardCompetitorSetupController::class, 'storeSite'])->name('dashboard.competitors.sites.store');
         Route::match(['delete', 'post'], '/dashboard/competitor-sites/{competitorSite}', [DashboardCompetitorSetupController::class, 'destroySite'])->name('dashboard.competitors.sites.destroy');
         Route::post('/dashboard/competitor-sites/{competitorSite}/move', [DashboardCompetitorSetupController::class, 'moveSite'])->name('dashboard.competitors.sites.move');
         Route::post('/dashboard/scrape-settings', [DashboardCompetitorSetupController::class, 'updateScrapeSettings'])->name('dashboard.scrape-settings.update');
         Route::put('/account/notifications', [AccountController::class, 'updateNotifications'])->name('account.notifications');
         Route::post('/account/subusers', [AccountController::class, 'createSubUser'])->name('account.subusers.store');
-        Route::put('/account/subusers/{user}', [AccountController::class, 'updateSubUser'])->name('account.subusers.update');
         Route::delete('/account/subusers/{user}', [AccountController::class, 'destroySubUser'])->name('account.subusers.destroy');
         Route::post('/account/product-groups', [AccountController::class, 'createGroup'])->name('account.product-groups.store');
-        Route::put('/account/product-groups/{productGroup}', [AccountController::class, 'updateGroup'])->name('account.product-groups.update');
         Route::delete('/account/product-groups/{productGroup}', [AccountController::class, 'destroyGroup'])->name('account.product-groups.destroy');
-        Route::post('/account/competitor-site-groups', [AccountController::class, 'createCompetitorSiteGroup'])->name('account.competitor-site-groups.store');
-        Route::put('/account/competitor-site-groups/{competitorSiteGroup}', [AccountController::class, 'updateCompetitorSiteGroup'])->name('account.competitor-site-groups.update');
-        Route::delete('/account/competitor-site-groups/{competitorSiteGroup}', [AccountController::class, 'destroyCompetitorSiteGroup'])->name('account.competitor-site-groups.destroy');
         Route::resource('products', ProductController::class)->except(['show', 'index'])->names('products');
         Route::post('/products/{product}/competitors', [CompetitorController::class, 'store'])->name('products.competitors.store');
         Route::put('/products/{product}/competitors/{competitor}', [CompetitorController::class, 'update'])->name('products.competitors.update');

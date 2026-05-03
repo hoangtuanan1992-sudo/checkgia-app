@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Product;
 use App\Models\User;
 use App\Models\UserScrapeSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,27 +35,28 @@ class ProductCrudTest extends TestCase
         $this->get('/dashboard')->assertSee('iPhone 15');
     }
 
-    public function test_dashboard_search_filters_products_across_pages(): void
+    public function test_dashboard_can_add_topzone_product_without_manual_xpath(): void
     {
         $user = User::factory()->create();
-        $this->actingAs($user);
 
-        Product::create([
-            'user_id' => $user->id,
-            'name' => 'Máy lạnh Daikin FTKM25AVMV',
-            'price' => 10900000,
-            'product_url' => 'https://example.com/p1',
-        ]);
-        Product::create([
-            'user_id' => $user->id,
-            'name' => 'Tủ lạnh Panasonic',
-            'price' => 12000000,
-            'product_url' => 'https://example.com/p2',
+        Http::fake([
+            'https://www.topzone.vn/iphone/iphone-17-pro-max' => Http::response(
+                '<html><body><h1>iPhone 17 Pro Max 256GB</h1><strong class="price box_normal" data-price="37990000.0" data-disprice="37990000.0">37.990.000&#x20AB;</strong></body></html>',
+                200
+            ),
         ]);
 
-        $this->get('/dashboard?q=Daikin')
-            ->assertOk()
-            ->assertSee('Máy lạnh Daikin FTKM25AVMV')
-            ->assertDontSee('Tủ lạnh Panasonic');
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => 'https://www.topzone.vn/iphone/iphone-17-pro-max',
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'iPhone 17 Pro Max 256GB',
+            'price' => 37990000,
+            'product_url' => 'https://www.topzone.vn/iphone/iphone-17-pro-max',
+        ]);
     }
 }

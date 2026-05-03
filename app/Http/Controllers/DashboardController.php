@@ -2,138 +2,71 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Competitor;
 use App\Models\CompetitorSite;
-use App\Models\CompetitorSiteGroup;
 use App\Models\Product;
 use App\Models\ProductGroup;
-use App\Models\User;
-use Illuminate\Http\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
     public function index(Request $request): View
     {
-        $authUser = $request->user();
-        $userId = $authUser->effectiveUserId();
-        $q = trim((string) $request->query('q', ''));
-        $qId = ($q !== '' && ctype_digit($q)) ? (int) $q : null;
-        $perPage = 50;
-        if (! $authUser->isViewer()) {
-            $perPageRaw = trim((string) $request->query('per_page', ''));
-            $perPageInt = ($perPageRaw !== '' && ctype_digit($perPageRaw)) ? (int) $perPageRaw : null;
-            if (in_array($perPageInt, [25, 50, 100, 200], true)) {
-                $perPage = $perPageInt;
-            }
-        }
+        $userId = $request->user()->effectiveUserId();
 
-        $productGroupRestrictionIds = $authUser->isViewer() ? $authUser->visibleProductGroupIds() : [];
-        $hasProductGroupRestriction = $authUser->isViewer() && $productGroupRestrictionIds !== [];
-        $restrictedCompetitorSiteIds = $authUser->isViewer()
-            ? $this->competitorSiteIdsForGroups($userId, $authUser->visibleCompetitorSiteGroupIds())
-            : null;
-
-        $competitorSitesQuery = CompetitorSite::query()
+        $competitorSites = CompetitorSite::query()
             ->where('user_id', $userId)
             ->orderBy('position')
-            ->orderBy('name');
-        $this->constrainToIds($competitorSitesQuery, $restrictedCompetitorSiteIds, 'id');
-        $competitorSites = $competitorSitesQuery
+            ->orderBy('name')
             ->get(['id', 'name', 'position']);
 
         $productGroups = ProductGroup::query()
             ->where('user_id', $userId)
-            ->when($hasProductGroupRestriction, fn ($query) => $query->whereIn('id', $productGroupRestrictionIds))
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $competitorSiteGroups = collect();
-        if (Schema::hasTable('competitor_site_groups') && Schema::hasTable('competitor_site_group_sites')) {
-            $competitorSiteGroups = CompetitorSiteGroup::query()
-                ->where('user_id', $userId)
-                ->when($authUser->isViewer() && $authUser->visibleCompetitorSiteGroupIds() !== [], fn ($query) => $query->whereIn('id', $authUser->visibleCompetitorSiteGroupIds()))
-                ->with(['competitorSites:id'])
-                ->orderBy('name')
-                ->get(['id', 'name']);
-        }
-
         $products = Product::query()
-            ->with(['group:id,name', 'competitors' => function ($q) use ($restrictedCompetitorSiteIds) {
-                $this->constrainToIds($q, $restrictedCompetitorSiteIds, 'competitor_site_id');
+            ->with(['group:id,name', 'competitors' => function ($q) {
                 $q->with(['prices' => function ($p) {
                     $p->latest('fetched_at')->limit(2);
                 }, 'competitorSite']);
             }])
             ->where('user_id', $userId)
-            ->when($hasProductGroupRestriction, fn ($query) => $query->whereIn('product_group_id', $productGroupRestrictionIds))
-            ->when($q !== '', function ($qq) use ($q, $qId) {
-                $qq->where(function ($inner) use ($q, $qId) {
-                    if (! is_null($qId)) {
-                        $inner->where('id', $qId);
-                    }
-                    $inner->orWhere('name', 'like', '%'.$q.'%');
-                });
-            })
             ->latest()
-            ->paginate($perPage, ['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at'])
-            ->withQueryString();
-
-        $competitorsForEvents = Competitor::query()
-            ->whereHas('product', function ($q) use ($userId, $hasProductGroupRestriction, $productGroupRestrictionIds) {
-                $q->where('user_id', $userId);
-                if ($hasProductGroupRestriction) {
-                    $q->whereIn('product_group_id', $productGroupRestrictionIds);
-                }
-            })
-            ->tap(fn ($query) => $this->constrainToIds($query, $restrictedCompetitorSiteIds, 'competitor_site_id'))
-            ->with([
-                'product:id,name',
-                'competitorSite:id,name',
-                'prices' => function ($p) {
-                    $p->latest('fetched_at')->limit(2);
-                },
-            ])
-            ->get(['id', 'product_id', 'competitor_site_id', 'name']);
+            ->get(['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at']);
 
         $tz = 'Asia/Ho_Chi_Minh';
         $now = Carbon::now($tz);
         $priceEvents = [];
-        foreach ($competitorsForEvents as $competitor) {
-            $product = $competitor->product;
-            if (! $product) {
-                continue;
-            }
+        foreach ($products as $product) {
+            foreach ($product->competitors as $competitor) {
+                $latest = $competitor->prices->get(0);
+                $prev = $competitor->prices->get(1);
+                if (! $latest || ! $prev) {
+                    continue;
+                }
+                $delta = (int) $latest->price - (int) $prev->price;
+                if ($delta === 0) {
+                    continue;
+                }
 
-            $latest = $competitor->prices->get(0);
-            $prev = $competitor->prices->get(1);
-            if (! $latest || ! $prev) {
-                continue;
-            }
-            $delta = (int) $latest->price - (int) $prev->price;
-            if ($delta === 0) {
-                continue;
-            }
+                $eventTime = $latest->fetched_at ? Carbon::parse($latest->fetched_at)->setTimezone($tz) : null;
+                if (! $eventTime) {
+                    continue;
+                }
 
-            $eventTime = $latest->fetched_at ? Carbon::parse($latest->fetched_at)->setTimezone($tz) : null;
-            if (! $eventTime) {
-                continue;
+                $priceEvents[] = [
+                    'at' => $eventTime,
+                    'ago' => $this->agoText($eventTime, $now),
+                    'product_id' => (int) $product->id,
+                    'product_name' => (string) $product->name,
+                    'competitor_id' => (int) $competitor->id,
+                    'site_name' => (string) ($competitor->competitorSite?->name ?? $competitor->name),
+                    'delta' => $delta,
+                    'delta_text' => $this->deltaText($delta),
+                ];
             }
-
-            $priceEvents[] = [
-                'at' => $eventTime,
-                'ago' => $this->agoText($eventTime, $now),
-                'product_id' => (int) $product->id,
-                'product_name' => (string) $product->name,
-                'competitor_id' => (int) $competitor->id,
-                'site_name' => (string) ($competitor->competitorSite?->name ?? $competitor->name),
-                'delta' => $delta,
-                'delta_text' => $this->deltaText($delta),
-            ];
         }
 
         usort($priceEvents, function ($a, $b) {
@@ -141,75 +74,12 @@ class DashboardController extends Controller
         });
         $priceEvents = array_slice($priceEvents, 0, 6);
 
-        $compareColumnWidths = [];
-        if (Schema::hasColumn('users', 'dashboard_compare_column_widths')) {
-            $raw = (string) (User::query()->whereKey($authUser->id)->value('dashboard_compare_column_widths') ?? '');
-            if ($raw !== '') {
-                $decoded = json_decode($raw, true);
-                if (is_array($decoded)) {
-                    foreach ($decoded as $k => $v) {
-                        if (! is_string($k) || $k === '') {
-                            continue;
-                        }
-                        if (! is_int($v) && ! is_float($v) && ! (is_string($v) && is_numeric($v))) {
-                            continue;
-                        }
-                        $n = (int) round((float) $v);
-                        if ($n < 40 || $n > 2000) {
-                            continue;
-                        }
-                        $compareColumnWidths[$k] = $n;
-                    }
-                }
-            }
-        }
-
-        $compareMatchEnabled = ! $authUser->isViewer() && User::compareMatchEnabledForId($userId);
-
         return view('dashboard.index', [
             'products' => $products,
             'competitorSites' => $competitorSites,
             'productGroups' => $productGroups,
-            'competitorSiteGroups' => $competitorSiteGroups,
             'priceEvents' => $priceEvents,
-            'compareColumnWidths' => $compareColumnWidths,
-            'compareMatchEnabled' => $compareMatchEnabled,
         ]);
-    }
-
-    public function updateCompareColumnWidths(Request $request): Response
-    {
-        $authUser = $request->user();
-        if (! Schema::hasColumn('users', 'dashboard_compare_column_widths')) {
-            return response()->noContent();
-        }
-
-        $validated = $request->validate([
-            'widths' => ['required', 'array'],
-            'widths.*' => ['nullable', 'numeric', 'min:40', 'max:2000'],
-        ]);
-
-        $widths = [];
-        foreach (($validated['widths'] ?? []) as $k => $v) {
-            if (! is_string($k) || $k === '') {
-                continue;
-            }
-            if (is_null($v)) {
-                continue;
-            }
-            $n = (int) round((float) $v);
-            if ($n < 40 || $n > 2000) {
-                continue;
-            }
-            $widths[$k] = $n;
-        }
-
-        $payload = $widths ? json_encode($widths, JSON_UNESCAPED_UNICODE) : null;
-        User::query()->whereKey($authUser->id)->update([
-            'dashboard_compare_column_widths' => $payload,
-        ]);
-
-        return response()->noContent();
     }
 
     private function agoText(Carbon $at, Carbon $now): string
@@ -250,48 +120,5 @@ class DashboardController extends Controller
         }
 
         return (string) $abs;
-    }
-
-    /**
-     * @param array<int, int> $groupIds
-     * @return array<int, int>|null
-     */
-    private function competitorSiteIdsForGroups(int $userId, array $groupIds): ?array
-    {
-        if ($groupIds === []) {
-            return null;
-        }
-
-        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
-            return [];
-        }
-
-        return DB::table('competitor_site_group_sites')
-            ->join('competitor_site_groups', 'competitor_site_groups.id', '=', 'competitor_site_group_sites.competitor_site_group_id')
-            ->where('competitor_site_groups.user_id', $userId)
-            ->whereIn('competitor_site_group_sites.competitor_site_group_id', $groupIds)
-            ->pluck('competitor_site_group_sites.competitor_site_id')
-            ->map(fn ($id): int => (int) $id)
-            ->unique()
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @param array<int, int>|null $ids
-     */
-    private function constrainToIds($query, ?array $ids, string $column): void
-    {
-        if (! is_array($ids)) {
-            return;
-        }
-
-        if ($ids === []) {
-            $query->whereRaw('1 = 0');
-
-            return;
-        }
-
-        $query->whereIn($column, $ids);
     }
 }

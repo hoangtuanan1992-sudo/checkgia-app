@@ -20,13 +20,81 @@ class PriceScraperTest extends TestCase
         $this->assertSame(37790000, $scraper->parsePriceToInt($value));
     }
 
-    public function test_extract_first_by_xpath_supports_normalize_space_and_utf8(): void
+    public function test_extract_first_by_xpath_supports_string_expressions(): void
     {
-        $html = '<html><head><meta charset="utf-8"></head><body><div class="box-product-name"><h1>Giá Samsung Galaxy Z Flip 7 tốt, Ưu đãi đến 12 triệu</h1></div></body></html>';
+        $html = '<html><body><h1>  iPhone 17   Pro Max  </h1></body></html>';
         $scraper = new PriceScraper;
 
-        $value = $scraper->extractFirstByXPath($html, "normalize-space(//div[contains(@class, 'box-product-name')]/h1)");
+        $value = $scraper->extractFirstByXPath($html, 'normalize-space(//h1)');
 
-        $this->assertSame('Giá Samsung Galaxy Z Flip 7 tốt, Ưu đãi đến 12 triệu', $value);
+        $this->assertSame('iPhone 17 Pro Max', $value);
+    }
+
+    public function test_extracts_topzone_normal_price_and_name_without_xpath(): void
+    {
+        $html = <<<'HTML'
+            <html><body>
+                <h1>iPhone 17 256GB</h1>
+                <div class="box_saving olgr v2">
+                    <div class="bs_price" data-price="24990000.0" data-disprice="24890000.0">
+                        <strong>24.890.000&#x20AB;</strong>
+                    </div>
+                </div>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeTopzonePriceAndName('https://www.topzone.vn/iphone/iphone-17', $html);
+
+        $this->assertSame([
+            'name' => 'iPhone 17 256GB',
+            'price' => 24890000,
+        ], $result);
+    }
+
+    public function test_extracts_topzone_json_ld_price_when_visible_price_is_missing(): void
+    {
+        $html = <<<'HTML'
+            <html><head>
+                <meta property="og:title" content="iPhone 17 Pro Max giá tốt" />
+            </head><body>
+                <h1>iPhone 17 Pro Max 256GB</h1>
+                <script type="application/ld+json">
+                {
+                    "potentialAction": {
+                        "priceSpecification": {
+                            "priceCurrency": "VND",
+                            "name": "Giá iPhone 17 Pro Max 256GB",
+                            "price": "37990000.0"
+                        }
+                    }
+                }
+                </script>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeTopzonePriceAndName('https://www.topzone.vn/iphone/iphone-17-pro-max', $html);
+
+        $this->assertSame([
+            'name' => 'iPhone 17 Pro Max 256GB',
+            'price' => 37990000,
+        ], $result);
+    }
+
+    public function test_topzone_price_uses_main_product_price_before_accessory_prices(): void
+    {
+        $html = <<<'HTML'
+            <html><body>
+                <h1>iPhone 17 Pro Max 256GB</h1>
+                <strong class="price" data-price="37990000.0" data-disprice="37990000.0">37.990.000&#x20AB;</strong>
+                <div class="accessory-price" data-price="540000.0" data-disprice="500000.0">500.000&#x20AB;</div>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeTopzonePriceAndName('https://www.topzone.vn/iphone/iphone-17-pro-max', $html);
+
+        $this->assertSame([
+            'name' => 'iPhone 17 Pro Max 256GB',
+            'price' => 37990000,
+        ], $result);
     }
 }

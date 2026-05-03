@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'shopee_product_id',
     'shopee_shop_id',
     'url',
-    'price_pick',
     'is_enabled',
     'price_adjustment',
     'last_price',
@@ -26,8 +25,6 @@ class ShopeeCompetitor extends Model
             'price_adjustment' => 'integer',
             'last_price' => 'integer',
             'last_scraped_at' => 'datetime',
-            'lease_expires_at' => 'datetime',
-            'last_assigned_at' => 'datetime',
         ];
     }
 

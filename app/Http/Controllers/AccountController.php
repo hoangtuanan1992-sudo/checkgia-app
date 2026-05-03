@@ -2,17 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CompetitorSite;
-use App\Models\CompetitorSiteGroup;
 use App\Models\ProductGroup;
 use App\Models\User;
 use App\Models\UserNotificationSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -33,16 +28,10 @@ class AccountController extends Controller
 
         $subUsers = collect();
         if (! $user->isViewer()) {
-            $subUserColumns = ['id', 'name', 'email', 'created_at'];
-            if (User::hasSubUserVisibilityColumns()) {
-                $subUserColumns[] = 'visible_product_group_ids';
-                $subUserColumns[] = 'visible_competitor_site_group_ids';
-            }
-
             $subUsers = User::query()
                 ->where('parent_user_id', $ownerId)
                 ->orderBy('name')
-                ->get($subUserColumns);
+                ->get(['id', 'name', 'email', 'created_at']);
         }
 
         $groups = collect();
@@ -53,24 +42,6 @@ class AccountController extends Controller
                 ->get(['id', 'name', 'created_at']);
         }
 
-        $competitorSites = collect();
-        $competitorSiteGroups = collect();
-        if (! $user->isViewer()) {
-            $competitorSites = CompetitorSite::query()
-                ->where('user_id', $ownerId)
-                ->orderBy('position')
-                ->orderBy('name')
-                ->get(['id', 'name', 'position']);
-
-            if (Schema::hasTable('competitor_site_groups') && Schema::hasTable('competitor_site_group_sites')) {
-                $competitorSiteGroups = CompetitorSiteGroup::query()
-                    ->where('user_id', $ownerId)
-                    ->with(['competitorSites:id'])
-                    ->orderBy('name')
-                    ->get(['id', 'name', 'created_at']);
-            }
-        }
-
         return view('account.index', [
             'user' => $user,
             'authUser' => $authUser,
@@ -79,8 +50,6 @@ class AccountController extends Controller
             'notification' => $notification,
             'subUsers' => $subUsers,
             'groups' => $groups,
-            'competitorSites' => $competitorSites,
-            'competitorSiteGroups' => $competitorSiteGroups,
         ]);
     }
 
@@ -158,14 +127,11 @@ class AccountController extends Controller
 
         $ownerId = $owner->effectiveUserId();
 
-        $rules = [
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ];
-        $rules = array_merge($rules, $this->subUserVisibilityRules($ownerId));
-
-        $data = $request->validate($rules);
+        ]);
 
         $canonical = User::canonicalEmail($data['email']);
         $existsCanonical = User::query()->where('email_canonical', $canonical)->exists();
@@ -173,65 +139,15 @@ class AccountController extends Controller
             return back()->withInput()->withErrors(['email' => 'Email này đã được dùng để tạo tài khoản (theo quy tắc Gmail).']);
         }
 
-        User::create(array_merge([
+        User::create([
             'parent_user_id' => $ownerId,
             'role' => 'viewer',
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => $data['password'],
-        ], $this->subUserVisibilityAttributes($data)));
+        ]);
 
         return back()->with('status', 'Đã tạo tài khoản con');
-    }
-
-    public function updateSubUser(Request $request, User $user): RedirectResponse
-    {
-        $owner = $request->user();
-        abort_if($owner->isViewer(), 403);
-
-        $ownerId = $owner->effectiveUserId();
-        abort_unless((int) $user->parent_user_id === (int) $ownerId && $user->role === 'viewer', 404);
-
-        $validator = Validator::make($request->all(), array_merge([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
-        ], $this->subUserVisibilityRules($ownerId)));
-        if ($validator->fails()) {
-            return back()
-                ->withErrors($validator)
-                ->withInput()
-                ->with('edit_subuser_id', $user->id);
-        }
-
-        $validated = $validator->validated();
-        $canonical = User::canonicalEmail($validated['email']);
-        $existsCanonical = User::query()
-            ->where('email_canonical', $canonical)
-            ->whereKeyNot($user->id)
-            ->exists();
-        if ($existsCanonical) {
-            return back()
-                ->withErrors(['email' => 'Email này đã được dùng để tạo tài khoản (theo quy tắc Gmail).'])
-                ->withInput()
-                ->with('edit_subuser_id', $user->id);
-        }
-
-        $updates = array_merge([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-        ], $this->subUserVisibilityAttributes($validated));
-
-        $password = trim((string) ($validated['password'] ?? ''));
-        if ($password !== '') {
-            $updates['password'] = $password;
-        }
-
-        if ($updates !== []) {
-            $user->update($updates);
-        }
-
-        return back()->with('status', 'Đã cập nhật tài khoản con');
     }
 
     public function destroySubUser(Request $request, User $user): RedirectResponse
@@ -240,80 +156,11 @@ class AccountController extends Controller
         abort_if($owner->isViewer(), 403);
 
         $ownerId = $owner->effectiveUserId();
-        abort_unless((int) $user->parent_user_id === (int) $ownerId && $user->role === 'viewer', 404);
+        abort_unless($user->parent_user_id === $ownerId && $user->role === 'viewer', 404);
 
         $user->delete();
 
         return back()->with('status', 'Đã xoá tài khoản con');
-    }
-
-    /**
-     * @return array<string, array<int, mixed>>
-     */
-    private function subUserVisibilityRules(int $ownerId): array
-    {
-        if (! User::hasSubUserVisibilityColumns()) {
-            return [];
-        }
-
-        $rules = [];
-        if (Schema::hasTable('product_groups')) {
-            $rules['product_group_ids'] = ['nullable', 'array'];
-            $rules['product_group_ids.*'] = [
-                'integer',
-                Rule::exists('product_groups', 'id')->where(fn ($q) => $q->where('user_id', $ownerId)),
-            ];
-        }
-
-        if (Schema::hasTable('competitor_site_groups')) {
-            $rules['competitor_site_group_ids'] = ['nullable', 'array'];
-            $rules['competitor_site_group_ids.*'] = [
-                'integer',
-                Rule::exists('competitor_site_groups', 'id')->where(fn ($q) => $q->where('user_id', $ownerId)),
-            ];
-        }
-
-        return $rules;
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     * @return array<string, mixed>
-     */
-    private function subUserVisibilityAttributes(array $data): array
-    {
-        if (! User::hasSubUserVisibilityColumns()) {
-            return [];
-        }
-
-        return [
-            'visible_product_group_ids' => $this->normalizeSubUserVisibilityIds($data['product_group_ids'] ?? []),
-            'visible_competitor_site_group_ids' => $this->normalizeSubUserVisibilityIds($data['competitor_site_group_ids'] ?? []),
-        ];
-    }
-
-    /**
-     * @return array<int, int>|null
-     */
-    private function normalizeSubUserVisibilityIds(mixed $value): ?array
-    {
-        if (! is_array($value)) {
-            return null;
-        }
-
-        $ids = [];
-        foreach ($value as $id) {
-            if (is_int($id) || (is_string($id) && ctype_digit($id))) {
-                $id = (int) $id;
-                if ($id > 0) {
-                    $ids[] = $id;
-                }
-            }
-        }
-
-        $ids = array_values(array_unique($ids));
-
-        return $ids === [] ? null : $ids;
     }
 
     public function createGroup(Request $request): RedirectResponse
@@ -335,161 +182,15 @@ class AccountController extends Controller
         return back()->with('status', 'Đã thêm nhóm sản phẩm');
     }
 
-    public function updateGroup(Request $request, ProductGroup $productGroup): RedirectResponse
-    {
-        $owner = $request->user();
-        abort_if($owner->isViewer(), 403);
-
-        $ownerId = $owner->effectiveUserId();
-        $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
-        abort_unless(in_array((int) $productGroup->user_id, $allowedUserIds, true), 404);
-        $groupOwnerId = (int) $productGroup->user_id;
-
-        $validator = Validator::make($request->all(), [
-            'group_name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('product_groups', 'name')
-                    ->where(fn ($q) => $q->where('user_id', $groupOwnerId))
-                    ->ignore($productGroup->id),
-            ],
-        ]);
-
-        if ($validator->fails()) {
-            return back()
-                ->withErrors($validator)
-                ->withInput()
-                ->with('edit_group_id', $productGroup->id);
-        }
-
-        $productGroup->name = trim((string) $validator->validated()['group_name']);
-        $productGroup->save();
-
-        return back()->with('status', 'Đã cập nhật tên nhóm');
-    }
-
     public function destroyGroup(Request $request, ProductGroup $productGroup): RedirectResponse
     {
         $owner = $request->user();
         abort_if($owner->isViewer(), 403);
 
-        $ownerId = $owner->effectiveUserId();
-        $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
-        abort_unless(in_array((int) $productGroup->user_id, $allowedUserIds, true), 404);
+        abort_unless($productGroup->user_id === $owner->effectiveUserId(), 404);
 
         $productGroup->delete();
 
-        return redirect()->route('account')->with('status', 'Đã xoá nhóm sản phẩm');
-    }
-
-    public function createCompetitorSiteGroup(Request $request): RedirectResponse
-    {
-        $owner = $request->user();
-        abort_if($owner->isViewer(), 403);
-
-        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
-            return redirect()->route('account')->with('status', 'Hệ thống chưa cập nhật tính năng Nhóm đối thủ. Vui lòng chạy migrate trên server.');
-        }
-
-        $ownerId = $owner->effectiveUserId();
-
-        $data = $request->validate([
-            'competitor_group_name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('competitor_site_groups', 'name')->where(fn ($q) => $q->where('user_id', $ownerId)),
-            ],
-            'competitor_site_ids' => ['nullable', 'array'],
-            'competitor_site_ids.*' => [
-                'integer',
-                Rule::exists('competitor_sites', 'id')->where(fn ($q) => $q->where('user_id', $ownerId)),
-            ],
-        ]);
-
-        $siteIds = array_values(array_unique(array_map('intval', $data['competitor_site_ids'] ?? [])));
-        $name = trim((string) $data['competitor_group_name']);
-
-        DB::transaction(function () use ($ownerId, $name, $siteIds) {
-            $group = CompetitorSiteGroup::create([
-                'user_id' => $ownerId,
-                'name' => $name,
-            ]);
-
-            if (! empty($siteIds)) {
-                $group->competitorSites()->sync($siteIds);
-            }
-        });
-
-        return redirect()->route('account')->with('status', 'Đã thêm nhóm đối thủ');
-    }
-
-    public function updateCompetitorSiteGroup(Request $request, CompetitorSiteGroup $competitorSiteGroup): RedirectResponse
-    {
-        $owner = $request->user();
-        abort_if($owner->isViewer(), 403);
-
-        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
-            return redirect()->route('account')->with('status', 'Hệ thống chưa cập nhật tính năng Nhóm đối thủ. Vui lòng chạy migrate trên server.');
-        }
-
-        $ownerId = $owner->effectiveUserId();
-        $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
-        abort_unless(in_array((int) $competitorSiteGroup->user_id, $allowedUserIds, true), 404);
-        $groupOwnerId = (int) $competitorSiteGroup->user_id;
-
-        $validator = Validator::make($request->all(), [
-            'competitor_group_name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('competitor_site_groups', 'name')
-                    ->where(fn ($q) => $q->where('user_id', $groupOwnerId))
-                    ->ignore($competitorSiteGroup->id),
-            ],
-            'competitor_site_ids' => ['nullable', 'array'],
-            'competitor_site_ids.*' => [
-                'integer',
-                Rule::exists('competitor_sites', 'id')->where(fn ($q) => $q->where('user_id', $groupOwnerId)),
-            ],
-        ]);
-
-        if ($validator->fails()) {
-            return back()
-                ->withErrors($validator)
-                ->withInput()
-                ->with('edit_competitor_site_group_id', $competitorSiteGroup->id);
-        }
-
-        $validated = $validator->validated();
-        $siteIds = array_values(array_unique(array_map('intval', $validated['competitor_site_ids'] ?? [])));
-        $name = trim((string) $validated['competitor_group_name']);
-
-        DB::transaction(function () use ($competitorSiteGroup, $name, $siteIds) {
-            $competitorSiteGroup->name = $name;
-            $competitorSiteGroup->save();
-            $competitorSiteGroup->competitorSites()->sync($siteIds);
-        });
-
-        return redirect()->route('account')->with('status', 'Đã cập nhật nhóm đối thủ');
-    }
-
-    public function destroyCompetitorSiteGroup(Request $request, CompetitorSiteGroup $competitorSiteGroup): RedirectResponse
-    {
-        $owner = $request->user();
-        abort_if($owner->isViewer(), 403);
-
-        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
-            return redirect()->route('account')->with('status', 'Hệ thống chưa cập nhật tính năng Nhóm đối thủ. Vui lòng chạy migrate trên server.');
-        }
-
-        $ownerId = $owner->effectiveUserId();
-        $allowedUserIds = array_unique(array_filter([(int) $ownerId, (int) $owner->id, (int) $owner->parent_user_id]));
-        abort_unless(in_array((int) $competitorSiteGroup->user_id, $allowedUserIds, true), 404);
-
-        $competitorSiteGroup->delete();
-
-        return redirect()->route('account')->with('status', 'Đã xoá nhóm đối thủ');
+        return back()->with('status', 'Đã xoá nhóm sản phẩm');
     }
 }

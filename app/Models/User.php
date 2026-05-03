@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -11,27 +12,26 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Schema;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'visible_product_group_ids', 'visible_competitor_site_group_ids', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit', 'allow_compare_match', 'allow_shopee_check'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'parent_user_id' => 'integer',
             'service_start_date' => 'date',
             'service_end_date' => 'date',
-            'visible_product_group_ids' => 'array',
-            'visible_competitor_site_group_ids' => 'array',
-            'allow_compare_match' => 'boolean',
-            'allow_shopee_check' => 'boolean',
         ];
     }
 
@@ -88,123 +88,6 @@ class User extends Authenticatable
         return (int) ($this->parent_user_id ?: $this->id);
     }
 
-    public static function hasProductLimitColumn(): bool
-    {
-        try {
-            return Schema::hasColumn('users', 'product_limit');
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    public static function resolveProductLimitById(int $userId): int
-    {
-        if (! static::hasProductLimitColumn()) {
-            return 100;
-        }
-
-        $limit = (int) (static::query()->whereKey($userId)->value('product_limit') ?? 100);
-
-        return $limit > 0 ? $limit : 100;
-    }
-
-    public static function hasCompareMatchColumn(): bool
-    {
-        try {
-            return Schema::hasColumn('users', 'allow_compare_match');
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    public static function compareMatchEnabledForId(int $userId): bool
-    {
-        if (! static::hasCompareMatchColumn()) {
-            return false;
-        }
-
-        return (bool) static::query()->whereKey($userId)->value('allow_compare_match');
-    }
-
-    public static function hasShopeeCheckColumn(): bool
-    {
-        try {
-            return Schema::hasColumn('users', 'allow_shopee_check');
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    public static function shopeeCheckEnabledForId(int $userId): bool
-    {
-        if (! static::hasShopeeCheckColumn()) {
-            return false;
-        }
-
-        return (bool) static::query()->whereKey($userId)->value('allow_shopee_check');
-    }
-
-    public static function hasSubUserVisibilityColumns(): bool
-    {
-        try {
-            return Schema::hasColumn('users', 'visible_product_group_ids')
-                && Schema::hasColumn('users', 'visible_competitor_site_group_ids');
-        } catch (\Throwable) {
-            return false;
-        }
-    }
-
-    /**
-     * @return array<int, int>
-     */
-    public function visibleProductGroupIds(): array
-    {
-        if (! self::hasSubUserVisibilityColumns()) {
-            return [];
-        }
-
-        return self::normalizeStoredIds($this->visible_product_group_ids ?? null);
-    }
-
-    /**
-     * @return array<int, int>
-     */
-    public function visibleCompetitorSiteGroupIds(): array
-    {
-        if (! self::hasSubUserVisibilityColumns()) {
-            return [];
-        }
-
-        return self::normalizeStoredIds($this->visible_competitor_site_group_ids ?? null);
-    }
-
-    /**
-     * @return array<int, int>
-     */
-    private static function normalizeStoredIds(mixed $value): array
-    {
-        if (is_string($value)) {
-            $decoded = json_decode($value, true);
-            $value = is_array($decoded) ? $decoded : [];
-        }
-
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $ids = [];
-        foreach ($value as $id) {
-            if (is_int($id) || (is_string($id) && ctype_digit($id))) {
-                $id = (int) $id;
-                if ($id > 0) {
-                    $ids[] = $id;
-                }
-            }
-        }
-
-        return array_values(array_unique($ids));
-    }
-
     public function isViewer(): bool
     {
         return $this->role === 'viewer';
@@ -213,11 +96,6 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
-    }
-
-    public function shopeeProducts(): HasMany
-    {
-        return $this->hasMany(ShopeeProduct::class);
     }
 
     public function products(): HasMany

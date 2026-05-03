@@ -2,19 +2,16 @@
 
 @section('content')
     <div style="width:100%;max-width:1500px">
-        <div class="card" id="addProductCard" style="max-width:none;margin-bottom:16px">
+        <div class="card" style="max-width:none;margin-bottom:16px">
             <div id="addProductHeader" style="display:flex;justify-content:space-between;gap:12px;align-items:center;cursor:pointer;user-select:none;padding:16px 16px 6px">
                 <div>
                     <h1 class="card-title">Nhập link sản phẩm</h1>
                     <p class="card-sub">Thêm nhanh sản phẩm và link đối thủ để so sánh</p>
                 </div>
-                <div style="display:flex;gap:10px;align-items:center">
-                    <a class="btn btn-secondary" href="{{ route('dashboard.quick-scan') }}" onclick="event.stopPropagation()">Quét nhanh</a>
-                    <div id="addProductChevron" style="width:28px;height:28px;border-radius:999px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
+                <div id="addProductChevron" style="width:28px;height:28px;border-radius:999px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
                 </div>
             </div>
             <div id="addProductBody" class="card-body">
@@ -26,24 +23,18 @@
                         @error('product_url')<div class="error">{{ $message }}</div>@enderror
                     </div>
 
-                    @php($oldCompetitorUrls = old('competitor_urls', []))
-                    @php($oldCompetitorUrls = is_array($oldCompetitorUrls) ? array_values($oldCompetitorUrls) : [])
-                    @php($competitorUrlCount = max(3, count($oldCompetitorUrls)))
-
-                    <div style="margin-top:12px">
-                        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
-                            <div class="hint" style="margin-top:0">Link đối thủ (tuỳ chọn)</div>
-                            <button type="button" class="btn btn-secondary" id="addCompetitorUrlBtn" style="height:32px;padding:0 10px">+ Thêm</button>
-                        </div>
-                        <div id="competitorUrlGrid" style="margin-top:10px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
-                            @for($i = 0; $i < $competitorUrlCount; $i++)
+                    @if($competitorSites->isNotEmpty())
+                        <div style="margin-top:12px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+                            @foreach($competitorSites as $site)
                                 <div class="field" style="margin-top:0">
-                                    <label class="label">Link đối thủ {{ $i + 1 }}</label>
-                                    <input class="input" name="competitor_urls[{{ $i }}]" type="url" value="{{ old('competitor_urls.'.$i) }}" placeholder="https://..." @if($i === 0) data-tour="competitor-url" @endif>
+                                    <label class="label">Link {{ $site->name }}</label>
+                                    <input class="input" name="competitor_urls[{{ $site->id }}]" type="url" value="{{ old('competitor_urls.'.$site->id) }}" placeholder="https://...">
                                 </div>
-                            @endfor
+                            @endforeach
                         </div>
-                    </div>
+                    @else
+                        <div class="hint">Chưa có đối thủ nào. Hãy bấm “Cài đặt” để tạo cột so sánh.</div>
+                    @endif
 
                     <div class="field">
                         <label class="label">Nhóm sản phẩm (tuỳ chọn)</label>
@@ -67,7 +58,7 @@
                     </div>
 
                     <div class="actions">
-                        <button class="btn" type="submit" id="addProductSubmit">Thêm vào danh sách</button>
+                        <button class="btn" type="submit">Thêm vào danh sách</button>
                     </div>
                 </form>
             </div>
@@ -113,19 +104,19 @@
             </div>
         </div>
 
-        <div class="card" id="comparisonCard" style="max-width:none">
+        <div class="card" style="max-width:none">
             <div class="card-header" style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
                 <div>
                     <h2 class="card-title">Kết quả so sánh</h2>
                     <p class="card-sub">Giá chênh = Giá đối thủ - Giá của bạn</p>
                 </div>
-                <div class="pill">Tổng sản phẩm: {{ $products->total() }}</div>
+                <div class="pill">Tổng sản phẩm: {{ $products->count() }}</div>
             </div>
             <div class="card-body">
                 <div id="dashboardToolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
                     <div class="field" style="margin-top:0;min-width:240px;flex:1">
                         <label class="label" for="filterSearch">Tìm kiếm</label>
-                        <input class="input" id="filterSearch" type="text" value="{{ request('q') }}" placeholder="Nhập tên sản phẩm hoặc ID...">
+                        <input class="input" id="filterSearch" type="text" placeholder="Nhập tên sản phẩm hoặc ID...">
                     </div>
                     <div class="field" style="margin-top:0;min-width:220px">
                         <label class="label" for="filterGroup">Nhóm</label>
@@ -137,17 +128,6 @@
                             @endforeach
                         </select>
                     </div>
-                    @if($competitorSites->count() >= 6 && ($competitorSiteGroups ?? collect())->isNotEmpty())
-                        <div class="field" style="margin-top:0;min-width:220px">
-                            <label class="label" for="filterCompetitorGroup">Nhóm đối thủ</label>
-                            <select class="input" id="filterCompetitorGroup">
-                                <option value="">Tất cả</option>
-                                @foreach($competitorSiteGroups as $g)
-                                    <option value="{{ $g->id }}">{{ $g->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    @endif
                     <div class="field" style="margin-top:0;min-width:240px">
                         <label class="label" for="sortSelect">Sắp xếp</label>
                         <select class="input" id="sortSelect">
@@ -162,39 +142,31 @@
                     </div>
                     <div class="actions" style="margin-top:0">
                         <a class="btn btn-secondary" id="exportAll" href="{{ route('dashboard.export.products') }}">Xuất Excel</a>
-                        @if(!auth()->user()->isViewer())
-                            <button class="btn btn-secondary" type="button" id="importExcelBtn">Nhập Excel</button>
-                        @endif
                         <a class="btn btn-secondary" id="exportGroup" href="{{ route('dashboard.export.products') }}">Xuất theo nhóm</a>
-                        @if(!auth()->user()->isViewer())
-                            <form method="POST" action="{{ route('dashboard.scrape.now') }}" style="display:inline">
-                                @csrf
-                                <button class="btn btn-secondary" type="submit">Cập nhật</button>
-                            </form>
-                        @endif
+                        <form method="POST" action="{{ route('dashboard.scrape.now') }}" style="display:inline">
+                            @csrf
+                            <button class="btn btn-secondary" type="submit">Cập nhật</button>
+                        </form>
                         <button class="btn btn-secondary" type="button" id="compareViewToggle" style="display:none">Dạng thẻ</button>
-                        @if($compareMatchEnabled ?? false)
-                            <button class="btn btn-secondary" type="button" id="compareMatchOpen">So Khớp</button>
-                        @endif
+                        <button class="btn btn-secondary" type="button" id="filterReset">Reset</button>
                     </div>
                 </div>
                 <div class="table-wrap" id="comparisonTableView">
                     <table class="table">
                         <thead>
                             <tr>
-                                <th data-col-key="row" data-default-width="52" style="width:52px">#</th>
-                                <th data-col-key="product_name" data-default-width="340" class="sticky-col sticky-name">Tên sản phẩm</th>
-                                <th data-col-key="own_price" data-default-width="150" class="sticky-own">Giá của bạn</th>
+                                <th style="width:52px">#</th>
+                                <th style="min-width:340px">Tên sản phẩm</th>
+                                <th style="min-width:150px">Giá của bạn</th>
                                 @foreach($competitorSites as $site)
-                                    <th data-col-key="site:{{ $site->id }}" data-default-width="160" data-competitor-site-id="{{ $site->id }}">{{ $site->name }}</th>
+                                    <th style="min-width:160px">{{ $site->name }}</th>
                                 @endforeach
-                                <th data-col-key="updated_at" data-default-width="160">Thời gian</th>
-                                <th data-col-key="actions" data-default-width="110" style="width:110px">Hành động</th>
+                                <th style="min-width:160px">Thời gian</th>
+                                <th style="width:110px">Hành động</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($products as $idx => $product)
-                                @php($rowNumber = (int) ($products->firstItem() ?? 1) + (int) $idx)
                                 @php($own = (int) $product->price)
                                 @php($map = $product->competitors->keyBy('competitor_site_id'))
                                 @php($latestTimes = $product->competitors->map(fn($c) => $c->prices->first()?->fetched_at)->filter())
@@ -210,7 +182,7 @@
                                 })->filter(fn ($v) => ! is_null($v))->min())
                                 <tr
                                     data-product-row="{{ $product->id }}"
-                                    data-row-order="{{ $rowNumber - 1 }}"
+                                    data-row-order="{{ $idx }}"
                                     data-product-name="{{ $product->name }}"
                                     data-product-id="{{ $product->id }}"
                                     data-group-id="{{ $product->product_group_id ?? '' }}"
@@ -218,8 +190,8 @@
                                     data-last-updated="{{ $lastUpdated?->timestamp ?? 0 }}"
                                     data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
                                 >
-                                    <td>{{ $rowNumber }}</td>
-                                    <td class="sticky-col sticky-name">
+                                    <td>{{ $idx+1 }}</td>
+                                    <td>
                                         <div style="display:flex;gap:10px;align-items:center">
                                             <div style="display:flex;flex-direction:column;gap:4px">
                                                 <span style="font-weight:600">{{ $product->name }}</span>
@@ -230,34 +202,30 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="sticky-own">
+                                    <td>
                                         <div style="display:flex;flex-direction:column;gap:4px;padding-top:0px">
                                             <div style="display:flex;align-items:center;gap:8px">
-                                                    @if(!auth()->user()->isViewer())
-                                                        <button
-                                                            type="button"
-                                                            class="icon-btn icon-btn-sm js-edit-url"
-                                                            data-action="{{ route('dashboard.products.url.update', $product) }}"
-                                                            data-product-id="{{ $product->id }}"
-                                                            data-field="product_url"
-                                                            data-value="{{ $product->product_url }}"
-                                                            data-tour="edit-own-url"
-                                                            title="Sửa link sản phẩm của bạn"
-                                                        >
-                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                                <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            </svg>
-                                                        </button>
-                                                    @endif
+                                                <button
+                                                    type="button"
+                                                    class="icon-btn icon-btn-sm js-edit-url"
+                                                    data-action="{{ route('dashboard.products.url.update', $product) }}"
+                                                    data-field="product_url"
+                                                    data-value="{{ $product->product_url }}"
+                                                    title="Sửa link sản phẩm của bạn"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    </svg>
+                                                </button>
                                                 @if($product->product_url)
-                                                    <a href="{{ $product->product_url }}" target="_blank" style="font-size:13px" data-tour="open-own-link">link sản phẩm</a>
+                                                    <a href="{{ $product->product_url }}" target="_blank" style="font-size:13px">link sản phẩm</a>
                                                 @else
                                                     <span class="hint" style="margin-top:0">chưa có link</span>
                                                 @endif
                                             </div>
                                             <div style="font-weight:600">
-                                                <a href="{{ route('products.history', $product) }}" style="color:#111827" data-tour="price-history-own">
+                                                <a href="{{ route('products.history', $product) }}" style="color:#111827">
                                                     {{ number_format($own, 0, ',', '.') }}đ
                                                 </a>
                                             </div>
@@ -273,18 +241,18 @@
                                         @php($adj = (int) ($c?->price_adjustment ?? 0))
                                         @php($adjDiff = is_null($cPrice) ? null : ((int) $cPrice + $adj - $own))
                                         @php($delta = (! is_null($cPrice) && ! is_null($prevPrice)) ? ((int) $cPrice - (int) $prevPrice) : null)
-                                        <td data-competitor-site-id="{{ $site->id }}">
+                                        <td>
                                             @if($c)
                                                 <div style="display:flex;flex-direction:column;gap:4px;padding-top:6px">
                                                     <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
                                                         @if(is_null($diff))
                                                             <span class="hint" style="margin-top:0">---</span>
                                                         @elseif($diff === 0)
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:#6b7280" data-tour="open-competitor-link">không chênh</a>
+                                                            <a href="{{ $c->url }}" target="_blank" style="color:#6b7280">không chênh</a>
                                                         @elseif($diff > 0)
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--success)" data-tour="open-competitor-link">+{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--success)">+{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @else
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)" data-tour="open-competitor-link">{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)">{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @endif
 
                                                         @if(! is_null($adjDiff))
@@ -298,46 +266,38 @@
                                                                     0đ
                                                                 @endif
                                                             </a>
-                                                            @if(!auth()->user()->isViewer())
-                                                                <button
-                                                                    type="button"
-                                                                    class="icon-btn icon-btn-sm js-edit-adjustment"
-                                                                    data-product-id="{{ $product->id }}"
-                                                                    data-action="{{ route('competitors.adjustment.update', $c) }}"
-                                                                    data-value="{{ $adj }}"
-                                                                    data-span-id="adjDiff-{{ $c->id }}"
-                                                                    data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
-                                                                    data-own="{{ $own }}"
-                                                                    data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
-                                                                    data-tour="price-adjustment"
-                                                                    title="Điều chỉnh giá (+/-)"
-                                                                >
-                                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                                                    </svg>
-                                                                </button>
-                                                            @endif
-                                                        @endif
-                                                    </div>
-                                                    <div style="display:flex;align-items:center;gap:8px">
-                                                        @if(!auth()->user()->isViewer())
-                                                            <button type="button"
-                                                                    class="icon-btn icon-btn-sm js-edit-url"
-                                                                    data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
-                                                                    data-product-id="{{ $product->id }}"
-                                                                    data-field="url"
-                                                                    data-value="{{ $c->url }}"
-                                                                    data-tour="edit-competitor-url"
-                                                                    title="Sửa URL">
+                                                            <button
+                                                                type="button"
+                                                                class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                                data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                                data-value="{{ $adj }}"
+                                                                data-span-id="adjDiff-{{ $c->id }}"
+                                                                data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
+                                                                data-own="{{ $own }}"
+                                                                data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                                title="Điều chỉnh giá (+/-)"
+                                                            >
                                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                                    <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                    <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
                                                                 </svg>
                                                             </button>
                                                         @endif
+                                                    </div>
+                                                    <div style="display:flex;align-items:center;gap:8px">
+                                                        <button type="button"
+                                                                class="icon-btn icon-btn-sm js-edit-url"
+                                                                data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                                data-field="url"
+                                                                data-value="{{ $c->url }}"
+                                                                title="Sửa URL">
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                                <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                                <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        </button>
                                                         @if($cPrice)
-                                                            <a href="{{ route('competitors.history', $c) }}" title="{{ $product->name }}" data-tour="price-history-competitor">{{ number_format($cPrice, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ route('competitors.history', $c) }}" title="{{ $product->name }}">{{ number_format($cPrice, 0, ',', '.') }}đ</a>
                                                             @if(! is_null($delta) && $delta !== 0)
                                                                 <span title="{{ $delta > 0 ? 'Tăng' : 'Giảm' }} {{ number_format(abs($delta), 0, ',', '.') }}đ" style="display:inline-flex;align-items:center">
                                                                     @if($delta > 0)
@@ -359,22 +319,19 @@
                                             @else
                                                 <div style="display:flex;flex-direction:column;gap:6px;padding-top:15px">
                                                     <span class="hint" style="margin-top:0">---</span>
-                                                    @if(!auth()->user()->isViewer())
-                                                        <button
-                                                            type="button"
-                                                            class="icon-btn icon-btn-sm js-edit-url"
-                                                            data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
-                                                            data-product-id="{{ $product->id }}"
-                                                            data-field="url"
-                                                            data-value=""
-                                                            title="Thêm URL"
-                                                        >
-                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                                <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                                <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                            </svg>
-                                                        </button>
-                                                    @endif
+                                                    <button
+                                                        type="button"
+                                                        class="icon-btn icon-btn-sm js-edit-url"
+                                                        data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                        data-field="url"
+                                                        data-value=""
+                                                        title="Thêm URL"
+                                                    >
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                            <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        </svg>
+                                                    </button>
                                                 </div>
                                             @endif
                                         </td>
@@ -387,18 +344,14 @@
                                         @endif
                                     </td>
                                     <td style="text-align:right">
-                                        @if(!auth()->user()->isViewer())
-                                            <button
-                                                type="button"
-                                                class="btn js-delete-product"
-                                                data-action="{{ route('dashboard.products.destroy', $product) }}"
-                                                data-product-id="{{ $product->id }}"
-                                            >
-                                                Xoá
-                                            </button>
-                                        @else
-                                            <span class="hint" style="margin-top:0">---</span>
-                                        @endif
+                                        <button
+                                            type="button"
+                                            class="btn js-delete-product"
+                                            data-action="{{ route('dashboard.products.destroy', $product) }}"
+                                            data-product-id="{{ $product->id }}"
+                                        >
+                                            Xoá
+                                        </button>
                                     </td>
                                 </tr>
                             @empty
@@ -412,7 +365,6 @@
 
                 <div id="comparisonCardView" style="display:none;flex-direction:column;gap:12px;width:100%">
                     @forelse($products as $idx => $product)
-                        @php($rowNumber = (int) ($products->firstItem() ?? 1) + (int) $idx)
                         @php($own = (int) $product->price)
                         @php($map = $product->competitors->keyBy('competitor_site_id'))
                         @php($latestTimes = $product->competitors->map(fn($c) => $c->prices->first()?->fetched_at)->filter())
@@ -426,11 +378,12 @@
 
                             return (int) $p + (int) ($c->price_adjustment ?? 0) - $own;
                         })->filter(fn ($v) => ! is_null($v))->min())
+                        @php($missingSites = $competitorSites->filter(fn ($s) => ! $map->has($s->id)))
 
                         <div
                             class="card compare-card"
                             data-product-card="{{ $product->id }}"
-                            data-row-order="{{ $rowNumber - 1 }}"
+                            data-row-order="{{ $idx }}"
                             data-product-name="{{ $product->name }}"
                             data-product-id="{{ $product->id }}"
                             data-group-id="{{ $product->product_group_id ?? '' }}"
@@ -439,63 +392,35 @@
                             data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
                             style="max-width:none;border-radius:16px;margin-top:0;overflow:hidden"
                         >
-                            @if(!auth()->user()->isViewer())
-                                <button
-                                    type="button"
-                                    class="compare-card-delete js-delete-product"
-                                    data-action="{{ route('dashboard.products.destroy', $product) }}"
-                                    data-product-id="{{ $product->id }}"
-                                    title="Xoá"
-                                >
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                        <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                        <path d="M8 6V4h8v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                        <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                        <path d="M10 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                        <path d="M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                    </svg>
-                                </button>
-                            @endif
+                            <button
+                                type="button"
+                                class="compare-card-delete js-delete-product"
+                                data-action="{{ route('dashboard.products.destroy', $product) }}"
+                                data-product-id="{{ $product->id }}"
+                                title="Xoá"
+                            >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M3 6h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <path d="M8 6V4h8v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <path d="M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                    <path d="M10 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                    <path d="M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </button>
 
                             <div class="compare-card-header">
                                 <div class="compare-card-title">
                                     <span class="compare-card-title-full">{{ $product->name }}</span>
                                     <span class="compare-card-title-mobile">{{ \Illuminate\Support\Str::limit($product->name, 117) }}</span>
                                 </div>
-                                <div class="hint" style="margin-top:4px">#{{ $rowNumber }}</div>
                                 <div class="hint" style="margin-top:4px">ID: {{ $product->id }}</div>
                             </div>
 
                             <div class="compare-card-own-row">
                                 <div class="compare-card-own-label">Giá bạn</div>
-                                <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-                                    <a href="{{ route('products.history', $product) }}" class="compare-card-own-price" data-tour="price-history-own">
-                                        {{ number_format($own, 0, ',', '.') }}đ
-                                    </a>
-                                    <div style="display:flex;gap:8px;align-items:center">
-                                        @if(!auth()->user()->isViewer())
-                                            <button
-                                                type="button"
-                                                class="icon-btn icon-btn-sm js-edit-url"
-                                                data-product-id="{{ $product->id }}"
-                                                data-action="{{ route('dashboard.products.url.update', $product) }}"
-                                                data-field="product_url"
-                                                data-value="{{ $product->product_url }}"
-                                                title="Sửa link sản phẩm của bạn"
-                                            >
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                    <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                    <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                </svg>
-                                            </button>
-                                        @endif
-                                        @if($product->product_url)
-                                            <a href="{{ $product->product_url }}" target="_blank" class="hint" style="margin-top:0;text-decoration:none">link sản phẩm</a>
-                                        @else
-                                            <span class="hint" style="margin-top:0">chưa có link</span>
-                                        @endif
-                                    </div>
-                                </div>
+                                <a href="{{ route('products.history', $product) }}" class="compare-card-own-price">
+                                    {{ number_format($own, 0, ',', '.') }}đ
+                                </a>
                             </div>
 
                             <div>
@@ -521,11 +446,11 @@
                                     @php($diffSign = is_null($adjDiff) ? 'na' : ($adjDiff > 0 ? 'pos' : ($adjDiff < 0 ? 'neg' : 'zero')))
                                     @php($diffArrow = is_null($adjDiff) ? '' : ($adjDiff > 0 ? '↑' : ($adjDiff < 0 ? '↓' : '←')))
 
-                                    <div class="compare-card-table-row" data-competitor-site-id="{{ $site->id }}">
+                                    <div class="compare-card-table-row">
                                         <div class="compare-card-cell-site">{{ $site->name }}</div>
                                         <div class="compare-card-cell-price">
                                             @if($cPrice)
-                                                <a href="{{ route('competitors.history', $c) }}" style="color:#6b7280" data-tour="price-history-competitor">
+                                                <a href="{{ route('competitors.history', $c) }}" style="color:#6b7280">
                                                     {{ number_format($cPrice, 0, ',', '.') }}
                                                 </a>
                                             @else
@@ -545,53 +470,52 @@
                                             @endif
                                         </div>
                                         <div class="compare-card-cell-actions">
-                                            @if(!auth()->user()->isViewer())
-                                                <button
-                                                    type="button"
-                                                    class="icon-btn icon-btn-sm js-edit-url"
-                                                    data-product-id="{{ $product->id }}"
-                                                    data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
-                                                    data-field="url"
-                                                    data-value="{{ $c->url }}"
-                                                    title="Sửa URL"
-                                                >
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                        <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                        <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                                    </svg>
-                                                </button>
+                                            <button
+                                                type="button"
+                                                class="icon-btn icon-btn-sm js-edit-url"
+                                                data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
+                                                data-field="url"
+                                                data-value="{{ $c->url }}"
+                                                title="Sửa URL"
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                    <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                    <path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                </svg>
+                                            </button>
 
-                                                <button
-                                                    type="button"
-                                                    class="icon-btn icon-btn-sm js-edit-adjustment"
-                                                    data-product-id="{{ $product->id }}"
-                                                    data-action="{{ route('competitors.adjustment.update', $c) }}"
-                                                    data-value="{{ $adj }}"
-                                                    data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
-                                                    data-own="{{ $own }}"
-                                                    data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
-                                                    title="Điều chỉnh giá (+/-)"
-                                                >
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                                        <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-                                                    </svg>
-                                                </button>
-                                            @endif
+                                            <button
+                                                type="button"
+                                                class="icon-btn icon-btn-sm js-edit-adjustment"
+                                                data-action="{{ route('competitors.adjustment.update', $c) }}"
+                                                data-value="{{ $adj }}"
+                                                data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
+                                                data-own="{{ $own }}"
+                                                data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                title="Điều chỉnh giá (+/-)"
+                                            >
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                    <path d="M12 20h9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                                                </svg>
+                                            </button>
                                         </div>
                                     </div>
                                 @endforeach
 
-                                @if(!auth()->user()->isViewer())
+                                @if($missingSites->isNotEmpty())
                                     <div style="padding:12px 16px 16px">
-                                        <button
-                                            type="button"
-                                            class="compare-card-addlink js-add-link"
-                                            data-action="{{ route('dashboard.products.competitors.upsert-by-url', $product) }}"
-                                            data-product-id="{{ $product->id }}"
-                                        >
-                                            + Thêm link đối thủ
+                                        <button type="button" class="compare-card-addlink js-add-link" data-target="addLink-{{ $product->id }}">
+                                            + Thêm link
                                         </button>
+                                    </div>
+                                    <div id="addLink-{{ $product->id }}" style="display:none;padding:0 16px 16px">
+                                        <select class="input js-add-link-select" data-target="addLink-{{ $product->id }}">
+                                            <option value="">Chọn đối thủ...</option>
+                                            @foreach($missingSites as $site)
+                                                <option value="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}">{{ $site->name }}</option>
+                                            @endforeach
+                                        </select>
                                     </div>
                                 @endif
                             </div>
@@ -600,101 +524,9 @@
                         <div class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm trước.</div>
                     @endforelse
                 </div>
-                @if($products->total() > 0)
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:nowrap;overflow-x:auto;margin-top:12px">
-                        <div style="display:flex;gap:12px;align-items:center;flex-wrap:nowrap">
-                            <div class="hint" style="margin-top:0;white-space:nowrap">
-                                Trang {{ $products->currentPage() }}/{{ $products->lastPage() }} • Hiển thị {{ $products->count() }}/{{ $products->total() }}
-                            </div>
-                            @if(!auth()->user()->isViewer())
-                                <div style="display:flex;align-items:center;gap:8px;white-space:nowrap">
-                                    <span class="hint" style="margin:0">Số dòng</span>
-                                    <select class="input" id="perPageSelect" style="width:90px">
-                                        @foreach([25, 50, 100, 200] as $pp)
-                                            <option value="{{ $pp }}" @selected(((int) request('per_page', 50)) === $pp)>{{ $pp }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            @endif
-                        </div>
-                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap;justify-content:flex-end;white-space:nowrap">
-                            @if($products->lastPage() > 1)
-                                <div style="display:flex;align-items:center;gap:8px;white-space:nowrap">
-                                    <span class="hint" style="margin:0">Bạn muốn xem trang:</span>
-                                    <input
-                                        class="input"
-                                        id="pageJumpInput"
-                                        type="number"
-                                        min="1"
-                                        max="{{ $products->lastPage() }}"
-                                        value="{{ $products->currentPage() }}"
-                                        data-last-page="{{ $products->lastPage() }}"
-                                        style="width:96px;padding:10px 12px"
-                                    >
-                                </div>
-
-                                @if($products->onFirstPage())
-                                    <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Trước</span>
-                                @else
-                                    <a class="btn btn-secondary" href="{{ $products->previousPageUrl() }}">Trước</a>
-                                @endif
-
-                                @php($firstPageUrls = $products->getUrlRange(1, min(4, $products->lastPage())))
-                                <div style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap;max-width:100%">
-                                    @foreach($firstPageUrls as $p => $url)
-                                        @if((int) $p === (int) $products->currentPage())
-                                            <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $p }}</span>
-                                        @else
-                                            <a class="btn btn-secondary" href="{{ $url }}">{{ $p }}</a>
-                                        @endif
-                                    @endforeach
-                                    @if($products->lastPage() > 4)
-                                        <span style="display:inline-flex;align-items:center;color:var(--muted);font-weight:700;padding:0 4px">.....</span>
-                                        @if((int) $products->lastPage() === (int) $products->currentPage())
-                                            <span class="btn btn-secondary" style="background:#111827;color:#fff;border-color:#111827;pointer-events:none">{{ $products->lastPage() }}</span>
-                                        @else
-                                            <a class="btn btn-secondary" href="{{ $products->url($products->lastPage()) }}">{{ $products->lastPage() }}</a>
-                                        @endif
-                                    @endif
-                                </div>
-
-                                @if($products->hasMorePages())
-                                    <a class="btn btn-secondary" href="{{ $products->nextPageUrl() }}">Sau</a>
-                                @else
-                                    <span class="btn btn-secondary" style="opacity:0.5;pointer-events:none">Sau</span>
-                                @endif
-                            @endif
-                        </div>
-                    </div>
-                @endif
             </div>
         </div>
     </div>
-
-    <dialog id="importDialog" class="dialog" data-open-on-load="{{ $errors->has('file') ? '1' : '0' }}">
-        <div class="dialog-header">
-            <h3 class="card-title" style="font-size:18px">Nhập Excel</h3>
-            <p class="card-sub">Cột A là link sản phẩm của bạn, các cột tiếp theo là link đối thủ</p>
-        </div>
-        <div class="dialog-body">
-            <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">
-                <a class="btn btn-secondary" href="{{ route('dashboard.products.import-template') }}">Tải file mẫu</a>
-            </div>
-            <form method="POST" action="{{ route('dashboard.products.import') }}" enctype="multipart/form-data">
-                @csrf
-                <div class="field" style="margin-top:0">
-                    <label class="label" for="import_file_dialog">File Excel</label>
-                    <input class="input" id="import_file_dialog" name="file" type="file" accept=".xlsx,.xls,.csv" required>
-                    @error('file')<div class="error">{{ $message }}</div>@enderror
-                    <div class="hint" style="margin-top:6px">Import xong hệ thống sẽ tự chạy cập nhật giá cho các sản phẩm vừa thêm.</div>
-                </div>
-                <div class="actions" style="justify-content:flex-end">
-                    <button class="btn btn-secondary" type="button" id="importDialogCancel">Huỷ</button>
-                    <button class="btn" type="submit">Nhập</button>
-                </div>
-            </form>
-        </div>
-    </dialog>
 
     <dialog id="urlDialog" class="dialog">
         <div class="dialog-header">
@@ -753,65 +585,6 @@
             </div>
         </div>
     </dialog>
-
-    <dialog id="compareMatchDialog" class="dialog">
-        <div class="dialog-header">
-            <h3 class="card-title" style="font-size:18px">So khớp link đối thủ</h3>
-            <p class="card-sub">Tìm ứng viên từ dữ liệu scanner rồi dùng AI đang chọn trong Admin để xác nhận sản phẩm trùng.</p>
-        </div>
-        <div class="dialog-body">
-            <div id="compareMatchActions" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
-                <button class="btn js-compare-match-start" type="button" data-mode="all" style="width:100%">So khớp toàn bộ</button>
-                <button class="btn btn-secondary js-compare-match-start" type="button" data-mode="empty" style="width:100%">So khớp ô trống</button>
-                <button class="btn btn-secondary js-compare-match-start" type="button" data-mode="empty_skip_checked" style="width:100%;grid-column:1 / -1">So khớp ô trống & bỏ qua ô trống đã so khớp</button>
-            </div>
-            <div id="compareMatchProgress" style="display:none;margin-top:14px">
-                <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px">
-                    <div style="font-weight:800" id="compareMatchProgressTitle">Đang chuẩn bị...</div>
-                    <div class="pill" id="compareMatchProgressPercent">0%</div>
-                </div>
-                <div style="height:12px;border-radius:999px;background:#eef2ff;border:1px solid #dbeafe;overflow:hidden">
-                    <div id="compareMatchProgressBar" style="width:0%;height:100%;background:var(--accent);transition:width .2s ease"></div>
-                </div>
-                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px">
-                    <div class="pill" style="justify-content:space-between;border-radius:10px">
-                        <span>Sản phẩm</span>
-                        <strong id="compareMatchProducts">0/0</strong>
-                    </div>
-                    <div class="pill" style="justify-content:space-between;border-radius:10px">
-                        <span>Ô đối thủ</span>
-                        <strong id="compareMatchCells">0/0</strong>
-                    </div>
-                    <div class="pill" style="justify-content:space-between;border-radius:10px">
-                        <span>Còn lại</span>
-                        <strong id="compareMatchRemaining">0</strong>
-                    </div>
-                    <div class="pill" style="justify-content:space-between;border-radius:10px">
-                        <span>Đã điền</span>
-                        <strong id="compareMatchMatched">0</strong>
-                    </div>
-                </div>
-                <div class="hint" id="compareMatchCurrent" style="margin-top:10px">Đang tạo danh sách...</div>
-                <div class="error" id="compareMatchError" style="display:none"></div>
-            </div>
-            <div class="actions" style="justify-content:flex-end;margin-top:12px">
-                <button class="btn btn-secondary" type="button" id="compareMatchCancel">Huỷ</button>
-                <button class="btn" type="button" id="compareMatchReload" style="display:none">Tải lại bảng</button>
-            </div>
-        </div>
-    </dialog>
-
-    <style>
-        .sticky-col{position:sticky;left:0;z-index:4;background:#fff}
-        .sticky-own{position:sticky;left:var(--sticky-own-left, 340px);z-index:4;background:#fff}
-        .table thead .sticky-col{z-index:6}
-        .table tbody .sticky-col{z-index:5}
-        .table thead .sticky-own{z-index:6}
-        .table tbody .sticky-own{z-index:5}
-        .cg-resize-handle{position:absolute;top:0;right:-4px;height:100%;width:10px;cursor:col-resize;z-index:20}
-        .cg-resize-handle::after{content:'';position:absolute;top:20%;bottom:20%;left:4px;width:2px;border-radius:2px;background:rgba(255,255,255,.55);opacity:.65}
-        .table thead th.cg-resizing{user-select:none}
-    </style>
 
     <script>
         (function () {
@@ -881,34 +654,6 @@
                 });
             }
 
-            const competitorUrlGrid = document.getElementById('competitorUrlGrid');
-            const addCompetitorUrlBtn = document.getElementById('addCompetitorUrlBtn');
-
-            function addCompetitorUrlField(value) {
-                if (!competitorUrlGrid) return null;
-                const index = competitorUrlGrid.querySelectorAll('input[name^="competitor_urls["]').length;
-                const wrap = document.createElement('div');
-                wrap.className = 'field';
-                wrap.style.marginTop = '0';
-                wrap.innerHTML = `
-                    <label class="label">Link đối thủ ${index + 1}</label>
-                    <input class="input" name="competitor_urls[${index}]" type="url" placeholder="https://...">
-                `;
-                competitorUrlGrid.appendChild(wrap);
-                const input = wrap.querySelector('input');
-                if (input) {
-                    input.value = value || '';
-                }
-                return input;
-            }
-
-            if (addCompetitorUrlBtn) {
-                addCompetitorUrlBtn.addEventListener('click', () => {
-                    const i = addCompetitorUrlField('');
-                    if (i) i.focus();
-                });
-            }
-
             const dialog = document.getElementById('urlDialog');
             const form = document.getElementById('urlDialogForm');
             const input = document.getElementById('urlDialogInput');
@@ -916,8 +661,6 @@
             const del = document.getElementById('urlDialogDelete');
             const clear = document.getElementById('urlDialogClear');
             const openButtons = document.querySelectorAll('.js-edit-url');
-            const scrollRestoreKey = 'checkgia:dashboard:scroll_restore';
-            let lastEditedProductId = null;
 
             function showDialog(el) {
                 if (!el) return false;
@@ -939,33 +682,12 @@
                 return true;
             }
 
-            const importDialog = document.getElementById('importDialog');
-            const importBtn = document.getElementById('importExcelBtn');
-            const importCancel = document.getElementById('importDialogCancel');
-            const importFile = document.getElementById('import_file_dialog');
-
-            if (importBtn) {
-                importBtn.addEventListener('click', (e) => {
-                    if (e) e.preventDefault();
-                    showDialog(importDialog);
-                    if (importFile) importFile.focus();
-                });
-            }
-            if (importCancel) {
-                importCancel.addEventListener('click', () => closeDialog(importDialog));
-            }
-            if (importDialog && (importDialog.dataset.openOnLoad || '0') === '1') {
-                showDialog(importDialog);
-            }
-
-            function open(action, value, fieldName, productId, allowDelete) {
+            function open(action, value, fieldName) {
                 form.action = action;
                 input.value = value || '';
                 input.name = fieldName || 'url';
                 input.required = true;
                 if (clear) clear.value = '0';
-                if (del) del.style.display = allowDelete === false ? 'none' : '';
-                lastEditedProductId = productId ? String(productId) : null;
                 showDialog(dialog);
                 input.focus();
             }
@@ -976,23 +698,9 @@
                         e.preventDefault();
                         e.stopPropagation();
                     }
-                    open(btn.dataset.action, btn.dataset.value, btn.dataset.field, btn.dataset.productId, (btn.dataset.allowDelete || '1') !== '0');
+                    open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
                 });
             });
-
-            if (form) {
-                form.addEventListener('submit', () => {
-                    try {
-                        const payload = {
-                            y: window.scrollY || 0,
-                            productId: lastEditedProductId,
-                            at: Date.now(),
-                        };
-                        sessionStorage.setItem(scrollRestoreKey, JSON.stringify(payload));
-                    } catch (e) {
-                    }
-                });
-            }
 
             cancel.addEventListener('click', () => closeDialog(dialog));
             dialog.addEventListener('click', (e) => {
@@ -1008,57 +716,13 @@
                 });
             }
 
-            window.addEventListener('load', () => {
-                try {
-                    const raw = sessionStorage.getItem(scrollRestoreKey);
-                    if (!raw) {
-                        return;
-                    }
-                    sessionStorage.removeItem(scrollRestoreKey);
-
-                    const data = JSON.parse(raw);
-                    const productId = data && typeof data.productId === 'string' ? data.productId : null;
-                    if (productId) {
-                        const table = document.getElementById('comparisonTableView');
-                        const cards = document.getElementById('comparisonCardView');
-                        const isCards = cards && cards.style.display !== 'none';
-                        const isTable = table && table.style.display !== 'none';
-                        const el = isCards
-                            ? (document.querySelector(`[data-product-card="${productId}"]`) || (isTable ? document.querySelector(`[data-product-row="${productId}"]`) : null))
-                            : (document.querySelector(`[data-product-row="${productId}"]`) || (isCards ? document.querySelector(`[data-product-card="${productId}"]`) : null));
-                        if (el && typeof el.scrollIntoView === 'function') {
-                            el.scrollIntoView({ block: 'center' });
-                            return;
-                        }
-                    }
-
-                    if (data && typeof data.y === 'number' && data.y > 0) {
-                        window.scrollTo(0, data.y);
-                    }
-                } catch (e) {
-                }
-            });
-
             const adjustDialog = document.getElementById('adjustDialog');
             const adjustForm = document.getElementById('adjustDialogForm');
             const adjustInput = document.getElementById('adjustDialogInput');
             const adjustCancel = document.getElementById('adjustDialogCancel');
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
-            const csrfToken = @json(csrf_token());
-            const compareColumnWidthsSaveUrl = @json(route('dashboard.compare-table.column-widths.update'));
-            const initialCompareColumnWidths = @json($compareColumnWidths ?? []);
+            const csrfToken = '{{ csrf_token() }}';
             let lastAdjustButton = null;
-            function saveScrollRestore(productId) {
-                try {
-                    const payload = {
-                        y: window.scrollY || 0,
-                        productId: productId ? String(productId) : null,
-                        at: Date.now(),
-                    };
-                    sessionStorage.setItem(scrollRestoreKey, JSON.stringify(payload));
-                } catch (e) {
-                }
-            }
 
             function openAdjust(action, value) {
                 adjustForm.action = action;
@@ -1225,11 +889,9 @@
                                     span.style.color = effectiveDiff > 0 ? '#166534' : (effectiveDiff < 0 ? '#991b1b' : '#111827');
                                 });
                             } else {
-                                saveScrollRestore(lastAdjustButton ? lastAdjustButton.dataset.productId : null);
                                 window.location.reload();
                             }
                         } else {
-                            saveScrollRestore(null);
                             window.location.reload();
                         }
                     } catch (err) {
@@ -1387,162 +1049,36 @@
                 }
             });
 
-            function normalizeColWidth(v, fallback) {
-                const n = Number(v);
-                if (!Number.isFinite(n)) return fallback;
-                const rounded = Math.round(n);
-                if (rounded < 40) return 40;
-                if (rounded > 2000) return 2000;
-                return rounded;
-            }
-
-            function setColumnWidthByIndex(table, colIndex, widthPx) {
-                const rows = Array.from(table.querySelectorAll('tr'));
-                rows.forEach((tr) => {
-                    const cell = tr.children[colIndex];
-                    if (!cell) return;
-                    cell.style.width = `${widthPx}px`;
-                    cell.style.minWidth = `${widthPx}px`;
-                    cell.style.maxWidth = `${widthPx}px`;
-                });
-            }
-
-            function updateStickyOwnOffset() {
-                const table = comparisonTableView ? comparisonTableView.querySelector('table.table') : null;
-                if (!table) return;
-                const nameTh = table.querySelector('thead th.sticky-name');
-                if (!nameTh) return;
-                const w = Math.round(nameTh.getBoundingClientRect().width);
-                table.style.setProperty('--sticky-own-left', `${w}px`);
-            }
-
-            async function saveCompareColumnWidths(widths) {
-                if (!compareColumnWidthsSaveUrl) return;
-                try {
-                    await fetch(compareColumnWidthsSaveUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify({ widths }),
-                    });
-                } catch (e) {
-                }
-            }
-
-            function initResizableCompareTable() {
-                const table = comparisonTableView ? comparisonTableView.querySelector('table.table') : null;
-                if (!table) return;
-                const headRow = table.querySelector('thead tr');
-                if (!headRow) return;
-
-                const ths = Array.from(headRow.children).filter((n) => n && n.tagName === 'TH');
-                if (ths.length === 0) return;
-
-                const stored = initialCompareColumnWidths && typeof initialCompareColumnWidths === 'object' ? initialCompareColumnWidths : {};
-                const widths = {};
-
-                ths.forEach((th, idx) => {
-                    const key = String(th.dataset.colKey || '');
-                    const defaultWidth = normalizeColWidth(th.dataset.defaultWidth, 160);
-                    const w = normalizeColWidth(stored[key], defaultWidth);
-                    if (key) widths[key] = w;
-                    setColumnWidthByIndex(table, idx, w);
-
-                    if (th.querySelector('.cg-resize-handle')) return;
-
-                    const handle = document.createElement('span');
-                    handle.className = 'cg-resize-handle';
-                    handle.setAttribute('role', 'separator');
-                    handle.setAttribute('aria-orientation', 'vertical');
-                    th.appendChild(handle);
-
-                    handle.addEventListener('mousedown', (e) => {
-                        if (e) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                        }
-                        const startX = e.clientX;
-                        const startWidth = Math.round(th.getBoundingClientRect().width);
-                        const minWidth = normalizeColWidth(th.dataset.minWidth, 60);
-                        const maxWidth = normalizeColWidth(th.dataset.maxWidth, 2000);
-
-                        th.classList.add('cg-resizing');
-                        document.body.style.cursor = 'col-resize';
-                        document.body.style.userSelect = 'none';
-
-                        const onMove = (ev) => {
-                            const dx = ev.clientX - startX;
-                            const next = Math.max(minWidth, Math.min(maxWidth, startWidth + dx));
-                            setColumnWidthByIndex(table, idx, next);
-                            if (key) widths[key] = next;
-                            if (th.classList.contains('sticky-name')) updateStickyOwnOffset();
-                        };
-                        const onUp = () => {
-                            th.classList.remove('cg-resizing');
-                            document.body.style.cursor = '';
-                            document.body.style.userSelect = '';
-                            window.removeEventListener('mousemove', onMove);
-                            window.removeEventListener('mouseup', onUp);
-                            if (key) saveCompareColumnWidths(widths);
-                        };
-
-                        window.addEventListener('mousemove', onMove);
-                        window.addEventListener('mouseup', onUp);
-                    });
-                });
-
-                updateStickyOwnOffset();
-                window.addEventListener('resize', updateStickyOwnOffset);
-            }
-
-            initResizableCompareTable();
-
             document.querySelectorAll('.js-add-link').forEach((btn) => {
-                btn.addEventListener('click', (e) => {
-                    if (e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }
-                    const action = btn.dataset.action || '';
+                btn.addEventListener('click', () => {
+                    const targetId = btn.dataset.target || '';
+                    const target = targetId ? document.getElementById(targetId) : null;
+                    if (!target) return;
+                    target.style.display = target.style.display === 'none' ? '' : 'none';
+                    const select = target.querySelector('select');
+                    if (select) select.focus();
+                });
+            });
+
+            document.querySelectorAll('.js-add-link-select').forEach((select) => {
+                select.addEventListener('change', () => {
+                    const action = select.value || '';
                     if (!action) return;
-                    open(action, '', 'url', btn.dataset.productId, false);
+                    open(action, '', 'url');
+                    const wrapId = select.dataset.target || '';
+                    const wrap = wrapId ? document.getElementById(wrapId) : null;
+                    if (wrap) wrap.style.display = 'none';
+                    select.value = '';
                 });
             });
 
             const filterSearch = document.getElementById('filterSearch');
             const filterGroup = document.getElementById('filterGroup');
-            const filterCompetitorGroup = document.getElementById('filterCompetitorGroup');
             const sortSelect = document.getElementById('sortSelect');
-            const compareMatchOpen = document.getElementById('compareMatchOpen');
-            const compareMatchDialog = document.getElementById('compareMatchDialog');
-            const compareMatchCancel = document.getElementById('compareMatchCancel');
-            const compareMatchActions = document.getElementById('compareMatchActions');
-            const compareMatchProgress = document.getElementById('compareMatchProgress');
-            const compareMatchProgressTitle = document.getElementById('compareMatchProgressTitle');
-            const compareMatchProgressPercent = document.getElementById('compareMatchProgressPercent');
-            const compareMatchProgressBar = document.getElementById('compareMatchProgressBar');
-            const compareMatchProducts = document.getElementById('compareMatchProducts');
-            const compareMatchCells = document.getElementById('compareMatchCells');
-            const compareMatchRemaining = document.getElementById('compareMatchRemaining');
-            const compareMatchMatched = document.getElementById('compareMatchMatched');
-            const compareMatchCurrent = document.getElementById('compareMatchCurrent');
-            const compareMatchError = document.getElementById('compareMatchError');
-            const compareMatchReload = document.getElementById('compareMatchReload');
+            const filterReset = document.getElementById('filterReset');
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
-            const perPageSelect = document.getElementById('perPageSelect');
-            const pageJumpInput = document.getElementById('pageJumpInput');
             const tbody = document.querySelector('table.table tbody');
-            const filterCompetitorGroupKey = 'checkgia_compare_competitor_group';
-            const competitorGroupMap = @json(($competitorSiteGroups ?? collect())->mapWithKeys(fn($g) => [(string) $g->id => $g->competitorSites->pluck('id')->values()])->all());
-            const compareMatchStartUrl = @json(route('dashboard.compare-match.run'));
-            const compareMatchTickUrlTemplate = @json(route('dashboard.compare-match.tick', ['compareMatchRun' => '__RUN__']));
-            let compareMatchRunning = false;
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1553,14 +1089,20 @@
             }
 
             function applyFiltersAndSort() {
+                const q = (filterSearch?.value || '').trim().toLowerCase();
                 const group = filterGroup?.value || '';
                 const sort = sortSelect?.value || 'row_asc';
 
                 function applyToItems(items, appendTo) {
                     items.forEach((el) => {
+                        const name = (el.dataset.productName || '').toLowerCase();
+                        const id = String(el.dataset.productId || '');
                         const groupId = String(el.dataset.groupId || '');
 
                         let visible = true;
+                        if (q) {
+                            visible = name.includes(q) || id.includes(q);
+                        }
                         if (visible && group) {
                             if (group === '__none__') {
                                 visible = !groupId;
@@ -1611,310 +1153,16 @@
                 }
             }
 
-            function applyServerSearch() {
-                if (!filterSearch) return;
-                const v = (filterSearch.value || '').trim();
-                const url = new URL(window.location.href);
-                const current = (url.searchParams.get('q') || '').trim();
-                if (v === current) return;
-
-                if (v) {
-                    url.searchParams.set('q', v);
-                } else {
-                    url.searchParams.delete('q');
-                }
-                url.searchParams.delete('page');
-                try {
-                    sessionStorage.setItem('checkgia_focus_search', '1');
-                    sessionStorage.setItem('checkgia_scroll_y', String(window.scrollY || 0));
-                } catch (e) {
-                }
-                window.location.assign(url.toString());
-            }
-
-            function applyCompetitorGroupFilter() {
-                if (!filterCompetitorGroup) return;
-                const groupId = filterCompetitorGroup.value || '';
-                const ids = competitorGroupMap[groupId] || null;
-                const allowed = Array.isArray(ids) ? ids.map(String) : null;
-                const scopes = [comparisonTableView, comparisonCardView].filter(Boolean);
-                scopes.forEach((root) => {
-                    root.querySelectorAll('[data-competitor-site-id]').forEach((el) => {
-                        const id = String(el.dataset.competitorSiteId || '');
-                        const show = !allowed || allowed.includes(id);
-                        el.style.display = show ? '' : 'none';
-                    });
-                });
-            }
-
-            if (filterSearch) {
-                try {
-                    const syRaw = sessionStorage.getItem('checkgia_scroll_y');
-                    const sy = syRaw === null ? null : Number(syRaw);
-                    if (syRaw !== null) {
-                        sessionStorage.removeItem('checkgia_scroll_y');
-                        if (Number.isFinite(sy) && sy >= 0) {
-                            if ('scrollRestoration' in history) {
-                                history.scrollRestoration = 'manual';
-                            }
-                            requestAnimationFrame(() => {
-                                requestAnimationFrame(() => {
-                                    window.scrollTo(0, sy);
-                                });
-                            });
-                        }
-                    }
-
-                    if (sessionStorage.getItem('checkgia_focus_search') === '1') {
-                        sessionStorage.removeItem('checkgia_focus_search');
-                        try {
-                            filterSearch.focus({ preventScroll: true });
-                        } catch (e) {
-                            filterSearch.focus();
-                        }
-                        const v = filterSearch.value || '';
-                        filterSearch.setSelectionRange(v.length, v.length);
-                    }
-                } catch (e) {
-                }
-
-                let timer = null;
-                filterSearch.addEventListener('input', () => {
-                    if (timer) clearTimeout(timer);
-                    const v = (filterSearch.value || '').trim();
-                    if (!v) {
-                        timer = setTimeout(applyServerSearch, 0);
-
-                        return;
-                    }
-                    if (v.length < 2) {
-                        return;
-                    }
-                    timer = setTimeout(applyServerSearch, 1500);
-                });
-                filterSearch.addEventListener('keydown', (e) => {
-                    if (e && e.key === 'Enter') {
-                        e.preventDefault();
-                        if (timer) clearTimeout(timer);
-                        applyServerSearch();
-                    }
-                });
-            }
+            if (filterSearch) filterSearch.addEventListener('input', applyFiltersAndSort);
             if (filterGroup) filterGroup.addEventListener('change', applyFiltersAndSort);
-            if (perPageSelect) {
-                perPageSelect.addEventListener('change', () => {
-                    const v = String(perPageSelect.value || '').trim();
-                    const url = new URL(window.location.href);
-                    if (v) {
-                        url.searchParams.set('per_page', v);
-                    } else {
-                        url.searchParams.delete('per_page');
-                    }
-                    url.searchParams.delete('page');
-                    window.location.assign(url.toString());
-                });
-            }
-            if (pageJumpInput) {
-                const goToPage = () => {
-                    const last = Math.max(1, Number(pageJumpInput.dataset.lastPage || '1') || 1);
-                    const raw = Number(pageJumpInput.value || '1');
-                    const page = Math.max(1, Math.min(last, Math.floor(raw || 1)));
-                    pageJumpInput.value = String(page);
-                    const url = new URL(window.location.href);
-                    if (page <= 1) {
-                        url.searchParams.delete('page');
-                    } else {
-                        url.searchParams.set('page', String(page));
-                    }
-                    window.location.assign(url.toString());
-                };
-                pageJumpInput.addEventListener('keydown', (e) => {
-                    if (e && e.key === 'Enter') {
-                        e.preventDefault();
-                        goToPage();
-                    }
-                });
-                pageJumpInput.addEventListener('change', goToPage);
-            }
-            if (filterCompetitorGroup) {
-                try {
-                    const saved = localStorage.getItem(filterCompetitorGroupKey);
-                    if (saved && filterCompetitorGroup.querySelector(`option[value="${saved}"]`)) {
-                        filterCompetitorGroup.value = saved;
-                    }
-                } catch (e) {
-                }
-
-                filterCompetitorGroup.addEventListener('change', () => {
-                    try {
-                        const v = filterCompetitorGroup.value || '';
-                        if (v) {
-                            localStorage.setItem(filterCompetitorGroupKey, v);
-                        } else {
-                            localStorage.removeItem(filterCompetitorGroupKey);
-                        }
-                    } catch (e) {
-                    }
-                    applyCompetitorGroupFilter();
-                });
-            }
             if (sortSelect) sortSelect.addEventListener('change', applyFiltersAndSort);
-            if (compareMatchOpen && compareMatchDialog) {
-                function resetCompareMatchDialog() {
-                    compareMatchRunning = false;
-                    if (compareMatchActions) compareMatchActions.style.display = 'grid';
-                    if (compareMatchProgress) compareMatchProgress.style.display = 'none';
-                    if (compareMatchReload) compareMatchReload.style.display = 'none';
-                    if (compareMatchCancel) {
-                        compareMatchCancel.style.display = '';
-                        compareMatchCancel.textContent = 'Huỷ';
-                    }
-                    if (compareMatchError) {
-                        compareMatchError.style.display = 'none';
-                        compareMatchError.textContent = '';
-                    }
-                    compareMatchDialog.querySelectorAll('button').forEach((button) => {
-                        button.disabled = false;
-                    });
-                }
-
-                function renderCompareMatchProgress(run) {
-                    if (!run) return;
-                    const percent = Math.max(0, Math.min(100, Number(run.percent || 0)));
-                    if (compareMatchProgressTitle) {
-                        compareMatchProgressTitle.textContent = run.status === 'done'
-                            ? 'Hoàn tất so khớp'
-                            : 'Đang so khớp';
-                    }
-                    if (compareMatchProgressPercent) compareMatchProgressPercent.textContent = `${percent}%`;
-                    if (compareMatchProgressBar) compareMatchProgressBar.style.width = `${percent}%`;
-                    if (compareMatchProducts) compareMatchProducts.textContent = `${run.processedProducts || 0}/${run.totalProducts || 0}`;
-                    if (compareMatchCells) compareMatchCells.textContent = `${run.processedCells || 0}/${run.totalCells || 0}`;
-                    if (compareMatchRemaining) compareMatchRemaining.textContent = String(run.remainingCells || 0);
-                    if (compareMatchMatched) compareMatchMatched.textContent = String(run.matched || 0);
-                    if (compareMatchCurrent) {
-                        const current = run.currentProductName ? `Đang xử lý: ${run.currentProductName}` : (run.message || '');
-                        compareMatchCurrent.textContent = current || 'Đang chạy...';
-                    }
-                }
-
-                async function postCompareMatchJson(url, payload) {
-                    const res = await fetch(url, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify(payload || {}),
-                    });
-                    const data = await res.json().catch(() => ({}));
-                    if (!res.ok || data.ok === false) {
-                        throw new Error(data.message || 'Không chạy được tiến trình so khớp.');
-                    }
-
-                    return data;
-                }
-
-                function showCompareMatchError(e) {
-                    compareMatchRunning = false;
-                    if (compareMatchError) {
-                        compareMatchError.style.display = '';
-                        compareMatchError.textContent = e && e.message ? e.message : 'Không chạy được tiến trình so khớp.';
-                    }
-                    if (compareMatchCancel) {
-                        compareMatchCancel.disabled = false;
-                        compareMatchCancel.textContent = 'Đóng';
-                    }
-                    if (compareMatchReload) {
-                        compareMatchReload.style.display = '';
-                    }
-                }
-
-                async function tickCompareMatch(runId) {
-                    const tickUrl = compareMatchTickUrlTemplate.replace('__RUN__', encodeURIComponent(runId));
-                    const data = await postCompareMatchJson(tickUrl, {});
-                    renderCompareMatchProgress(data.run);
-
-                    if (data.run && data.run.status === 'done') {
-                        compareMatchRunning = false;
-                        if (compareMatchCancel) {
-                            compareMatchCancel.style.display = 'none';
-                        }
-                        if (compareMatchReload) {
-                            compareMatchReload.style.display = '';
-                        }
-                        setTimeout(() => window.location.reload(), 1200);
-
-                        return;
-                    }
-
-                    if (data.run && data.run.status === 'failed') {
-                        throw new Error(data.run.message || 'Tiến trình so khớp bị lỗi.');
-                    }
-
-                    setTimeout(() => {
-                        tickCompareMatch(runId).catch(showCompareMatchError);
-                    }, 250);
-                }
-
-                async function startCompareMatch(mode) {
-                    compareMatchRunning = true;
-                    if (compareMatchActions) compareMatchActions.style.display = 'none';
-                    if (compareMatchProgress) compareMatchProgress.style.display = '';
-                    if (compareMatchReload) compareMatchReload.style.display = 'none';
-                    if (compareMatchError) {
-                        compareMatchError.style.display = 'none';
-                        compareMatchError.textContent = '';
-                    }
-                    if (compareMatchCancel) {
-                        compareMatchCancel.textContent = 'Đang chạy';
-                        compareMatchCancel.disabled = true;
-                    }
-                    if (compareMatchProgressTitle) compareMatchProgressTitle.textContent = 'Đang chuẩn bị...';
-
-                    try {
-                        const data = await postCompareMatchJson(compareMatchStartUrl, { mode });
-                        renderCompareMatchProgress(data.run);
-                        if (!data.run || !data.run.id) {
-                            throw new Error('Không nhận được mã tiến trình so khớp.');
-                        }
-                        await tickCompareMatch(data.run.id);
-                    } catch (e) {
-                        showCompareMatchError(e);
-                    }
-                }
-
-                compareMatchOpen.addEventListener('click', () => {
-                    resetCompareMatchDialog();
-                    if (typeof compareMatchDialog.showModal === 'function') {
-                        compareMatchDialog.showModal();
-                    } else {
-                        compareMatchDialog.setAttribute('open', 'open');
-                    }
+            if (filterReset) {
+                filterReset.addEventListener('click', () => {
+                    if (filterSearch) filterSearch.value = '';
+                    if (filterGroup) filterGroup.value = '';
+                    if (sortSelect) sortSelect.value = 'row_asc';
+                    applyFiltersAndSort();
                 });
-                compareMatchDialog.addEventListener('click', (e) => {
-                    if (e.target === compareMatchDialog && !compareMatchRunning) {
-                        compareMatchDialog.close();
-                    }
-                });
-                compareMatchDialog.querySelectorAll('.js-compare-match-start').forEach((button) => {
-                    button.addEventListener('click', () => {
-                        startCompareMatch(button.dataset.mode || 'empty');
-                    });
-                });
-            }
-            if (compareMatchCancel && compareMatchDialog) {
-                compareMatchCancel.addEventListener('click', () => {
-                    if (!compareMatchRunning) {
-                        compareMatchDialog.close();
-                    }
-                });
-            }
-            if (compareMatchReload) {
-                compareMatchReload.addEventListener('click', () => window.location.reload());
             }
 
             function syncExportLinks() {
@@ -1932,7 +1180,6 @@
             if (filterGroup) filterGroup.addEventListener('change', syncExportLinks);
             syncExportLinks();
             applyFiltersAndSort();
-            applyCompetitorGroupFilter();
         })();
     </script>
 @endsection

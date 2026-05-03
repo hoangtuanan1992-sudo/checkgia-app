@@ -9,10 +9,8 @@ use App\Models\ShopeeCompetitor;
 use App\Models\ShopeeCompetitorPrice;
 use App\Models\ShopeeProduct;
 use App\Models\ShopeeProductPrice;
-use App\Services\AlertNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ShopeeAgentApiController extends Controller
@@ -52,28 +50,6 @@ class ShopeeAgentApiController extends Controller
             $agent->pair_code = strtoupper(Str::random(8));
         }
         $agent->save();
-
-        $err = strtolower((string) ($agent->last_error ?? ''));
-        if (
-            $err !== '' &&
-            (str_contains($err, 'verify/traffic') || str_contains($err, 'captcha') || str_contains($err, 'unusual traffic') || str_contains($err, 'xác minh'))
-        ) {
-            ShopeeProduct::query()
-                ->where('lease_agent_id', (int) $agent->id)
-                ->update([
-                    'lease_agent_id' => null,
-                    'lease_token' => null,
-                    'lease_expires_at' => null,
-                ]);
-
-            ShopeeCompetitor::query()
-                ->where('lease_agent_id', (int) $agent->id)
-                ->update([
-                    'lease_agent_id' => null,
-                    'lease_token' => null,
-                    'lease_expires_at' => null,
-                ]);
-        }
 
         $setting = AppSetting::current();
 
@@ -118,204 +94,84 @@ class ShopeeAgentApiController extends Controller
         $interval = max(10, (int) ($setting->shopee_scrape_interval_seconds ?? 300));
         $minRest = max(0, (int) ($setting->shopee_rest_seconds_min ?? 5));
         $maxRest = max($minRest, (int) ($setting->shopee_rest_seconds_max ?? 15));
-        $maxChecks = (int) ($setting->shopee_max_checks_per_day ?? 24);
-        $now = now();
-        $leaseTtlSeconds = 300;
 
         if ($agent->last_scrape_at) {
             $nextAt = $agent->last_scrape_at->copy()->addSeconds($interval);
-            if ($now->lt($nextAt)) {
-                $today = $now->toDateString();
+            if (now()->lt($nextAt)) {
+                return response()->json(['sleep_seconds' => max(1, now()->diffInSeconds($nextAt))]);
+            }
+        }
 
-                $urgentProduct = ShopeeProduct::query()
-                    ->where('is_enabled', true)
-                    ->where('own_url', '!=', '')
-                    ->whereNull('last_scraped_at')
-                    ->whereRaw('(select count(*) from shopee_product_prices where shopee_product_prices.shopee_product_id = shopee_products.id and date(scraped_at) = ?) < ?', [$today, $maxChecks])
-                    ->where(function ($q) use ($now) {
-                        $q->whereNull('lease_expires_at')->orWhere('lease_expires_at', '<', $now);
-                    });
+        $productQuery = ShopeeProduct::query()->where('is_enabled', true);
+        if ($agent->mode === 'user' && $agent->assigned_user_id) {
+            $productQuery->where('user_id', (int) $agent->assigned_user_id);
+        }
 
+        $product = $productQuery
+            ->orderByRaw('last_scraped_at is null desc')
+            ->orderBy('last_scraped_at')
+            ->orderBy('id')
+            ->first();
+
+        $competitorQuery = ShopeeCompetitor::query()
+            ->where('is_enabled', true)
+            ->whereHas('product', function ($q) use ($agent) {
+                $q->where('is_enabled', true);
                 if ($agent->mode === 'user' && $agent->assigned_user_id) {
-                    $urgentProduct->where('user_id', (int) $agent->assigned_user_id);
+                    $q->where('user_id', (int) $agent->assigned_user_id);
                 }
+            })
+            ->with(['product:id,user_id']);
 
-                $urgentCompetitor = ShopeeCompetitor::query()
-                    ->where('is_enabled', true)
-                    ->where('url', '!=', '')
-                    ->whereNull('last_scraped_at')
-                    ->whereRaw('(select count(*) from shopee_competitor_prices where shopee_competitor_prices.shopee_competitor_id = shopee_competitors.id and date(scraped_at) = ?) < ?', [$today, $maxChecks])
-                    ->where(function ($q) use ($now) {
-                        $q->whereNull('lease_expires_at')->orWhere('lease_expires_at', '<', $now);
-                    })
-                    ->whereHas('product', function ($q) use ($agent) {
-                        $q->where('is_enabled', true);
-                        if ($agent->mode === 'user' && $agent->assigned_user_id) {
-                            $q->where('user_id', (int) $agent->assigned_user_id);
-                        }
-                    });
+        $competitor = $competitorQuery
+            ->orderByRaw('last_scraped_at is null desc')
+            ->orderBy('last_scraped_at')
+            ->orderBy('id')
+            ->first();
 
-                $hasUrgent = $urgentProduct->exists() || $urgentCompetitor->exists();
-                if (! $hasUrgent) {
-                    return response()->json(['sleep_seconds' => max(1, $now->diffInSeconds($nextAt))]);
-                }
-            }
-        }
+        $task = null;
+        if ($product && $competitor) {
+            $pTs = $product->last_scraped_at?->timestamp ?? 0;
+            $cTs = $competitor->last_scraped_at?->timestamp ?? 0;
 
-        $today = $now->toDateString();
-
-        $activeLease = ShopeeProduct::query()
-            ->where('lease_agent_id', (int) $agent->id)
-            ->where('lease_expires_at', '>', $now)
-            ->exists()
-            || ShopeeCompetitor::query()
-                ->where('lease_agent_id', (int) $agent->id)
-                ->where('lease_expires_at', '>', $now)
-                ->exists();
-
-        if ($activeLease) {
-            return response()->json(['sleep_seconds' => 15]);
-        }
-
-        $payload = DB::transaction(function () use ($agent, $today, $maxChecks, $now, $leaseTtlSeconds) {
-            $availableLease = function ($q) use ($now) {
-                $q->whereNull('lease_expires_at')->orWhere('lease_expires_at', '<', $now);
-            };
-
-            $productQuery = ShopeeProduct::query()
-                ->where('is_enabled', true)
-                ->where('own_url', '!=', '')
-                ->whereRaw('(select count(*) from shopee_product_prices where shopee_product_prices.shopee_product_id = shopee_products.id and date(scraped_at) = ?) < ?', [$today, $maxChecks])
-                ->where($availableLease);
-
-            if ($agent->mode === 'user' && $agent->assigned_user_id) {
-                $productQuery->where('user_id', (int) $agent->assigned_user_id);
-            }
-
-            $product = $productQuery
-                ->orderByRaw('last_scraped_at is null desc')
-                ->orderByDesc('created_at')
-                ->orderBy('last_scraped_at')
-                ->orderByDesc('id')
-                ->lockForUpdate()
-                ->first();
-
-            $competitorQuery = ShopeeCompetitor::query()
-                ->where('is_enabled', true)
-                ->where('url', '!=', '')
-                ->whereRaw('(select count(*) from shopee_competitor_prices where shopee_competitor_prices.shopee_competitor_id = shopee_competitors.id and date(scraped_at) = ?) < ?', [$today, $maxChecks])
-                ->where($availableLease)
-                ->whereHas('product', function ($q) use ($agent) {
-                    $q->where('is_enabled', true);
-                    if ($agent->mode === 'user' && $agent->assigned_user_id) {
-                        $q->where('user_id', (int) $agent->assigned_user_id);
-                    }
-                })
-                ->with(['product:id,user_id,price_pick']);
-
-            $competitor = $competitorQuery
-                ->orderByRaw('last_scraped_at is null desc')
-                ->orderByDesc('created_at')
-                ->orderBy('last_scraped_at')
-                ->orderByDesc('id')
-                ->lockForUpdate()
-                ->first();
-
-            $task = null;
-            $leaseToken = null;
-            $leaseExpiresAt = null;
-
-            if ($product && $competitor) {
-                $pTs = $product->last_scraped_at?->timestamp ?? 0;
-                $cTs = $competitor->last_scraped_at?->timestamp ?? 0;
-
-                if ($pTs <= $cTs) {
-                    $leaseToken = Str::random(48);
-                    $leaseExpiresAt = $now->copy()->addSeconds($leaseTtlSeconds);
-                    $product->lease_agent_id = (int) $agent->id;
-                    $product->lease_token = $leaseToken;
-                    $product->lease_expires_at = $leaseExpiresAt;
-                    $product->last_assigned_at = $now;
-                    $product->save();
-
-                    $task = [
-                        'type' => 'product',
-                        'product_id' => (int) $product->id,
-                        'user_id' => (int) $product->user_id,
-                        'url' => (string) $product->own_url,
-                        'price_pick' => (string) ($product->price_pick ?: 'low'),
-                        'lease_token' => $leaseToken,
-                        'lease_expires_at' => $leaseExpiresAt->toIso8601String(),
-                    ];
-                } else {
-                    $leaseToken = Str::random(48);
-                    $leaseExpiresAt = $now->copy()->addSeconds($leaseTtlSeconds);
-                    $competitor->lease_agent_id = (int) $agent->id;
-                    $competitor->lease_token = $leaseToken;
-                    $competitor->lease_expires_at = $leaseExpiresAt;
-                    $competitor->last_assigned_at = $now;
-                    $competitor->save();
-
-                    $task = [
-                        'type' => 'competitor',
-                        'competitor_id' => (int) $competitor->id,
-                        'product_id' => (int) $competitor->shopee_product_id,
-                        'user_id' => (int) ($competitor->product?->user_id ?? 0),
-                        'url' => (string) $competitor->url,
-                        'price_pick' => in_array($competitor->price_pick, ['low', 'high'], true) ? (string) $competitor->price_pick : (string) (($competitor->product?->price_pick ?: 'low')),
-                        'lease_token' => $leaseToken,
-                        'lease_expires_at' => $leaseExpiresAt->toIso8601String(),
-                    ];
-                }
-            } elseif ($competitor) {
-                $leaseToken = Str::random(48);
-                $leaseExpiresAt = $now->copy()->addSeconds($leaseTtlSeconds);
-                $competitor->lease_agent_id = (int) $agent->id;
-                $competitor->lease_token = $leaseToken;
-                $competitor->lease_expires_at = $leaseExpiresAt;
-                $competitor->last_assigned_at = $now;
-                $competitor->save();
-
+            if ($pTs <= $cTs) {
+                $task = [
+                    'type' => 'product',
+                    'product_id' => (int) $product->id,
+                    'user_id' => (int) $product->user_id,
+                    'url' => (string) $product->own_url,
+                ];
+            } else {
                 $task = [
                     'type' => 'competitor',
                     'competitor_id' => (int) $competitor->id,
                     'product_id' => (int) $competitor->shopee_product_id,
                     'user_id' => (int) ($competitor->product?->user_id ?? 0),
                     'url' => (string) $competitor->url,
-                    'price_pick' => in_array($competitor->price_pick, ['low', 'high'], true) ? (string) $competitor->price_pick : (string) (($competitor->product?->price_pick ?: 'low')),
-                    'lease_token' => $leaseToken,
-                    'lease_expires_at' => $leaseExpiresAt->toIso8601String(),
-                ];
-            } elseif ($product) {
-                $leaseToken = Str::random(48);
-                $leaseExpiresAt = $now->copy()->addSeconds($leaseTtlSeconds);
-                $product->lease_agent_id = (int) $agent->id;
-                $product->lease_token = $leaseToken;
-                $product->lease_expires_at = $leaseExpiresAt;
-                $product->last_assigned_at = $now;
-                $product->save();
-
-                $task = [
-                    'type' => 'product',
-                    'product_id' => (int) $product->id,
-                    'user_id' => (int) $product->user_id,
-                    'url' => (string) $product->own_url,
-                    'price_pick' => (string) ($product->price_pick ?: 'low'),
-                    'lease_token' => $leaseToken,
-                    'lease_expires_at' => $leaseExpiresAt->toIso8601String(),
                 ];
             }
-
-            return $task ? ['task' => $task] : null;
-        });
-
-        $task = $payload['task'] ?? null;
+        } elseif ($competitor) {
+            $task = [
+                'type' => 'competitor',
+                'competitor_id' => (int) $competitor->id,
+                'product_id' => (int) $competitor->shopee_product_id,
+                'user_id' => (int) ($competitor->product?->user_id ?? 0),
+                'url' => (string) $competitor->url,
+            ];
+        } elseif ($product) {
+            $task = [
+                'type' => 'product',
+                'product_id' => (int) $product->id,
+                'user_id' => (int) $product->user_id,
+                'url' => (string) $product->own_url,
+            ];
+        }
 
         if (! $task) {
             return response()->json(['sleep_seconds' => 60]);
         }
 
-        $agent->last_scrape_at = $now;
+        $agent->last_scrape_at = now();
         $agent->save();
 
         return response()->json([
@@ -324,14 +180,13 @@ class ShopeeAgentApiController extends Controller
         ]);
     }
 
-    public function report(Request $request, AlertNotifier $notifier): JsonResponse
+    public function report(Request $request): JsonResponse
     {
         $data = $request->validate([
             'agent_key' => ['required', 'string', 'max:128'],
             'task_type' => ['nullable', 'string', 'in:product,competitor'],
             'product_id' => ['nullable', 'integer'],
             'competitor_id' => ['nullable', 'integer'],
-            'lease_token' => ['nullable', 'string', 'max:64'],
             'price' => ['required', 'integer', 'min:0'],
             'scraped_at' => ['nullable', 'date'],
             'raw_text' => ['nullable', 'string', 'max:20000'],
@@ -358,18 +213,6 @@ class ShopeeAgentApiController extends Controller
                 return response()->json(['message' => 'Competitor not found.'], 404);
             }
 
-            $leaseToken = (string) ($data['lease_token'] ?? '');
-            if (
-                $leaseToken === '' ||
-                (int) ($competitor->lease_agent_id ?? 0) !== (int) $agent->id ||
-                ! hash_equals((string) ($competitor->lease_token ?? ''), $leaseToken) ||
-                ($competitor->lease_expires_at && now()->gt($competitor->lease_expires_at))
-            ) {
-                return response()->json(['message' => 'Task lease expired.'], 409);
-            }
-
-            $previousPrice = is_null($competitor->last_price) ? null : (int) $competitor->last_price;
-
             ShopeeCompetitorPrice::create([
                 'shopee_competitor_id' => (int) $competitor->id,
                 'price' => $price,
@@ -379,17 +222,10 @@ class ShopeeAgentApiController extends Controller
 
             $competitor->last_price = $price;
             $competitor->last_scraped_at = $scrapedAt;
-            $competitor->lease_agent_id = null;
-            $competitor->lease_token = null;
-            $competitor->lease_expires_at = null;
             $competitor->save();
 
-            $product = ShopeeProduct::query()->find((int) $competitor->shopee_product_id);
-            if ($product && $product->is_enabled && $competitor->is_enabled) {
-                $notifier->notifyOnShopeeCompetitorPriceChange($product, $competitor->loadMissing('shop'), $price, $previousPrice);
-            }
-
             if ($name) {
+                $product = ShopeeProduct::query()->find((int) $competitor->shopee_product_id);
                 if ($product && ! $product->name) {
                     $product->name = $name;
                     $product->save();
@@ -401,16 +237,6 @@ class ShopeeAgentApiController extends Controller
                 return response()->json(['message' => 'Product not found.'], 404);
             }
 
-            $leaseToken = (string) ($data['lease_token'] ?? '');
-            if (
-                $leaseToken === '' ||
-                (int) ($product->lease_agent_id ?? 0) !== (int) $agent->id ||
-                ! hash_equals((string) ($product->lease_token ?? ''), $leaseToken) ||
-                ($product->lease_expires_at && now()->gt($product->lease_expires_at))
-            ) {
-                return response()->json(['message' => 'Task lease expired.'], 409);
-            }
-
             ShopeeProductPrice::create([
                 'shopee_product_id' => (int) $product->id,
                 'price' => $price,
@@ -420,9 +246,6 @@ class ShopeeAgentApiController extends Controller
 
             $product->last_price = $price;
             $product->last_scraped_at = $scrapedAt;
-            $product->lease_agent_id = null;
-            $product->lease_token = null;
-            $product->lease_expires_at = null;
             if ($name && ! $product->name) {
                 $product->name = $name;
             }

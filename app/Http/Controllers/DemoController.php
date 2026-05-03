@@ -22,13 +22,8 @@ class DemoController extends Controller
 
         $demoUser = User::query()
             ->where('id', $demoUserId)
-            ->where(function ($q) {
-                $q->where(function ($qq) {
-                    $qq->where('role', 'owner')->whereNull('parent_user_id');
-                })->orWhere(function ($qq) {
-                    $qq->where('role', 'viewer')->whereNotNull('parent_user_id');
-                });
-            })
+            ->where('role', 'owner')
+            ->whereNull('parent_user_id')
             ->first();
 
         abort_unless($demoUser, 404);

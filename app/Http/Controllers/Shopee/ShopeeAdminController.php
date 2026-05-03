@@ -48,7 +48,6 @@ class ShopeeAdminController extends Controller
             'shopee_scrape_interval_seconds' => ['required', 'integer', 'min:10', 'max:86400'],
             'shopee_rest_seconds_min' => ['required', 'integer', 'min:0', 'max:3600'],
             'shopee_rest_seconds_max' => ['required', 'integer', 'min:0', 'max:3600'],
-            'shopee_max_checks_per_day' => ['required', 'integer', 'min:1', 'max:1000'],
         ]);
 
         $min = (int) $data['shopee_rest_seconds_min'];
@@ -63,7 +62,6 @@ class ShopeeAdminController extends Controller
             'shopee_scrape_interval_seconds' => (int) $data['shopee_scrape_interval_seconds'],
             'shopee_rest_seconds_min' => $min,
             'shopee_rest_seconds_max' => $max,
-            'shopee_max_checks_per_day' => (int) $data['shopee_max_checks_per_day'],
         ]);
 
         return back()->with('status', 'Đã lưu cài đặt Shopee');
@@ -104,12 +102,5 @@ class ShopeeAdminController extends Controller
         $agent->save();
 
         return back()->with('status', 'Đã duyệt agent');
-    }
-
-    public function destroyAgent(ShopeeAgent $agent): RedirectResponse
-    {
-        $agent->delete();
-
-        return redirect()->route('shopee.admin-settings')->with('success', 'Agent deleted.');
     }
 }

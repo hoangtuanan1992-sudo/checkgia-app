@@ -75,41 +75,6 @@
                                     @error('service_end_date')<div class="error">{{ $message }}</div>@enderror
                                 </div>
                             </div>
-                            <div class="field" style="margin-top:12px">
-                                <label class="label" for="product_limit">Giới hạn sản phẩm so sánh</label>
-                                <input class="input" id="product_limit" name="product_limit" type="number" min="1" max="1000000" value="{{ old('product_limit', (int) ($user->product_limit ?? 100)) }}">
-                                @error('product_limit')<div class="error">{{ $message }}</div>@enderror
-                            </div>
-                            @if(\App\Models\User::hasCompareMatchColumn())
-                                <label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px">
-                                    <input
-                                        type="checkbox"
-                                        name="allow_compare_match"
-                                        value="1"
-                                        @checked((bool) old('allow_compare_match', (bool) ($user->allow_compare_match ?? false)))
-                                        style="width:20px;height:20px;margin-top:2px"
-                                    >
-                                    <span>
-                                        <span style="display:block;font-weight:700">Bật nút So Khớp</span>
-                                        <span class="hint" style="display:block;margin-top:4px">Khi bật, tài khoản này mới thấy nút So Khớp trong bảng Kết quả so sánh.</span>
-                                    </span>
-                                </label>
-                            @endif
-                            @if(\App\Models\User::hasShopeeCheckColumn())
-                                <label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px">
-                                    <input
-                                        type="checkbox"
-                                        name="allow_shopee_check"
-                                        value="1"
-                                        @checked((bool) old('allow_shopee_check', (bool) ($user->allow_shopee_check ?? false)))
-                                        style="width:20px;height:20px;margin-top:2px"
-                                    >
-                                    <span>
-                                        <span style="display:block;font-weight:700">Bật Check Giá Shopee</span>
-                                        <span class="hint" style="display:block;margin-top:4px">Khi bật, tài khoản này mới thấy nút Check Giá Shopee và truy cập được trang Shopee.</span>
-                                    </span>
-                                </label>
-                            @endif
                             <div class="hint" style="margin-top:10px">
                                 {{ $user->serviceRemainingText() ?: '---' }}
                             </div>
@@ -129,34 +94,6 @@
                         </div>
                     </div>
 
-                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px" id="scrapeScheduleCard">
-                        <div class="card-header" style="padding:16px 16px 6px">
-                            <h2 class="card-title" style="font-size:18px">Cài đặt thời gian check sản phẩm</h2>
-                            <p class="card-sub">
-                                @if(($shopUser ?? null))
-                                    Áp dụng cho shop: {{ $shopUser->email }}
-                                @else
-                                    Áp dụng cho shop
-                                @endif
-                            </p>
-                        </div>
-                        <div class="card-body" style="padding:8px 16px 16px">
-                            @php($rawTimes = old('scrape_schedule_times'))
-                            @php($rawTimes = is_null($rawTimes) ? (string) (optional($scrapeSetting)->scrape_schedule_times ?? '') : (string) $rawTimes)
-                            @php($decodedTimes = $rawTimes !== '' ? json_decode($rawTimes, true) : null)
-                            @php($displayTimes = is_array($decodedTimes) ? implode("\n", array_values(array_filter(array_map(fn($v) => trim((string) $v), $decodedTimes)))) : $rawTimes)
-
-                            <div class="field" style="margin-top:0">
-                                <label class="label" for="scrape_schedule_times">Giờ chạy mỗi ngày (mỗi dòng 1 giờ)</label>
-                                <textarea class="input" id="scrape_schedule_times" name="scrape_schedule_times" rows="4" placeholder="05:00&#10;12:00&#10;20:00">{{ $displayTimes }}</textarea>
-                                @error('scrape_schedule_times')<div class="error">{{ $message }}</div>@enderror
-                            </div>
-                            <div class="hint" style="margin-top:10px">
-                                Nhập định dạng: 05:00 hoặc 5h hoặc 5. Mỗi dòng là 1 lần cập nhật trong ngày. Để trống để dùng chế độ cập nhật theo phút như hiện tại.
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="actions" style="justify-content:flex-end">
                         <button class="btn" type="submit">Lưu</button>
                     </div>
@@ -171,7 +108,6 @@
             const parentField = document.getElementById('parentField');
             const serviceCard = document.getElementById('serviceCard');
             const noteCard = document.getElementById('noteCard');
-            const scrapeScheduleCard = document.getElementById('scrapeScheduleCard');
 
             function sync() {
                 if (!role || !parentField) return;
@@ -179,7 +115,6 @@
                 const showForShop = role.value === 'owner';
                 if (serviceCard) serviceCard.style.display = showForShop ? '' : 'none';
                 if (noteCard) noteCard.style.display = showForShop ? '' : 'none';
-                if (scrapeScheduleCard) scrapeScheduleCard.style.display = (role.value === 'owner' || role.value === 'viewer') ? '' : 'none';
             }
 
             if (role) role.addEventListener('change', sync);

@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\ProductPriceHistory;
-use App\Models\ShopeeProduct;
-use App\Models\User;
 use App\Models\UserScrapeSetting;
 use App\Models\UserScrapeXpath;
 use App\Services\PriceScraper;
@@ -41,37 +39,20 @@ class ProductController extends Controller
         ]);
 
         $userId = $request->user()->effectiveUserId();
-        $limit = User::resolveProductLimitById($userId);
-        $used = (int) Product::query()->where('user_id', $userId)->count()
-            + (int) ShopeeProduct::query()->where('user_id', $userId)->count();
-        if ($used >= $limit) {
-            return back()
-                ->withInput()
-                ->with('status', 'Bạn đã đến giới hạn so sánh '.$limit.' sản phẩm, để dùng tiếp hãy xóa bớt sản phẩm so sánh hoặc liên hệ admin để nâng cấp tài khoản');
-        }
-
-        $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
-        if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
-            return redirect()
-                ->route('dashboard.competitors')
-                ->with('status', 'Vui lòng cài đặt XPath lấy tên và giá của bạn trước.');
-        }
-
         $scraper = new PriceScraper;
-        $nameDebug = ['tried' => []];
-        $priceDebug = ['tried' => []];
-
-        $tgdd = $scraper->scrapeTgddPriceAndName((string) $data['product_url']);
-        if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
-            $price = $tgdd['price'];
-            $name = isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '' ? trim($tgdd['name']) : null;
-            if (! $name) {
-                $html = $scraper->fetchHtml($data['product_url']);
-                $name = $scraper->extractTitle($html);
-            }
+        $knownProduct = $scraper->scrapeKnownSitePriceAndName($data['product_url']);
+        if ($knownProduct) {
+            $name = $knownProduct['name'];
+            $price = $knownProduct['price'];
         } else {
-            $html = $scraper->fetchHtml($data['product_url']);
+            $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
+            if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
+                return redirect()
+                    ->route('dashboard.competitors')
+                    ->with('status', 'Vui lòng cài đặt XPath lấy tên và giá của bạn trước.');
+            }
 
+            $html = $scraper->fetchHtml($data['product_url']);
             $nameXpaths = array_merge(
                 [(string) $settings->own_name_xpath],
                 UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
@@ -89,33 +70,13 @@ class ProductController extends Controller
             $priceDebug = $scraper->extractFirstByXPathsWithDebug($html, $priceXpaths);
             $priceRaw = $priceDebug['value'] ?? null;
             $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
-
-            if (! $name || is_null($price)) {
-                $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
-                if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
-                    $name = (string) $structured['name'];
-                }
-                if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
-                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
-                }
-            }
-
-            if (is_null($price) || (int) $price <= 0) {
-                $tgdd = $scraper->scrapeTgddPriceAndName((string) $data['product_url']);
-                if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
-                    $price = $tgdd['price'];
-                    if (! $name && isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '') {
-                        $name = trim($tgdd['name']);
-                    }
-                }
-            }
         }
 
         if (! $name || is_null($price)) {
             $parts = [];
             if (! $name) {
                 $lines = ['Tên: không trích xuất được bằng XPath.'];
-                $lines[] = '- own_name_xpath: '.(string) $settings->own_name_xpath;
+                $lines[] = '- own_name_xpath: '.(string) ($settings->own_name_xpath ?? '');
                 $fallbacks = array_slice($nameDebug['tried'] ?? [], 1);
                 foreach ($fallbacks as $idx => $xp) {
                     $lines[] = '- tên dự phòng #'.($idx + 1).': '.$xp;
@@ -124,12 +85,12 @@ class ProductController extends Controller
             }
             if (is_null($price)) {
                 $lines = ['Giá: không trích xuất được bằng XPath.'];
-                $lines[] = '- own_price_xpath: '.(string) $settings->own_price_xpath;
+                $lines[] = '- own_price_xpath: '.(string) ($settings->own_price_xpath ?? '');
                 $fallbacks = array_slice($priceDebug['tried'] ?? [], 1);
                 foreach ($fallbacks as $idx => $xp) {
                     $lines[] = '- giá dự phòng #'.($idx + 1).': '.$xp;
                 }
-                if ($settings->price_regex) {
+                if (($settings->price_regex ?? null)) {
                     $lines[] = '- Regex lọc giá: '.(string) $settings->price_regex;
                 }
                 $parts[] = implode("\n", $lines);
@@ -197,48 +158,44 @@ class ProductController extends Controller
         ]);
 
         $userId = $request->user()->effectiveUserId();
-        $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
-        if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
-            return redirect()
-                ->route('dashboard.competitors')
-                ->with('status', 'Vui lòng cài đặt XPath lấy tên và giá của bạn trước.');
-        }
-
         $scraper = new PriceScraper;
-        $html = $scraper->fetchHtml($data['product_url']);
-        $nameXpaths = array_merge(
-            [(string) $settings->own_name_xpath],
-            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
-        );
-        $priceXpaths = array_merge(
-            [(string) $settings->own_price_xpath],
-            UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
-        );
-
-        $nameDebug = $scraper->extractFirstByXPathsWithDebug($html, $nameXpaths);
-        $name = $nameDebug['value'] ?? null;
-        if (! $name) {
-            $name = $scraper->extractTitle($html);
-        }
-        $priceDebug = $scraper->extractFirstByXPathsWithDebug($html, $priceXpaths);
-        $priceRaw = $priceDebug['value'] ?? null;
-        $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
-
-        if (! $name || is_null($price)) {
-            $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
-            if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
-                $name = (string) $structured['name'];
+        $knownProduct = $scraper->scrapeKnownSitePriceAndName($data['product_url']);
+        if ($knownProduct) {
+            $name = $knownProduct['name'];
+            $price = $knownProduct['price'];
+        } else {
+            $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
+            if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
+                return redirect()
+                    ->route('dashboard.competitors')
+                    ->with('status', 'Vui lòng cài đặt XPath lấy tên và giá của bạn trước.');
             }
-            if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
-                $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
+
+            $html = $scraper->fetchHtml($data['product_url']);
+            $nameXpaths = array_merge(
+                [(string) $settings->own_name_xpath],
+                UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
+            );
+            $priceXpaths = array_merge(
+                [(string) $settings->own_price_xpath],
+                UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
+            );
+
+            $nameDebug = $scraper->extractFirstByXPathsWithDebug($html, $nameXpaths);
+            $name = $nameDebug['value'] ?? null;
+            if (! $name) {
+                $name = $scraper->extractTitle($html);
             }
+            $priceDebug = $scraper->extractFirstByXPathsWithDebug($html, $priceXpaths);
+            $priceRaw = $priceDebug['value'] ?? null;
+            $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
         }
 
         if (! $name || is_null($price)) {
             $parts = [];
             if (! $name) {
                 $lines = ['Tên: không trích xuất được bằng XPath.'];
-                $lines[] = '- own_name_xpath: '.(string) $settings->own_name_xpath;
+                $lines[] = '- own_name_xpath: '.(string) ($settings->own_name_xpath ?? '');
                 $fallbacks = array_slice($nameDebug['tried'] ?? [], 1);
                 foreach ($fallbacks as $idx => $xp) {
                     $lines[] = '- tên dự phòng #'.($idx + 1).': '.$xp;
@@ -247,12 +204,12 @@ class ProductController extends Controller
             }
             if (is_null($price)) {
                 $lines = ['Giá: không trích xuất được bằng XPath.'];
-                $lines[] = '- own_price_xpath: '.(string) $settings->own_price_xpath;
+                $lines[] = '- own_price_xpath: '.(string) ($settings->own_price_xpath ?? '');
                 $fallbacks = array_slice($priceDebug['tried'] ?? [], 1);
                 foreach ($fallbacks as $idx => $xp) {
                     $lines[] = '- giá dự phòng #'.($idx + 1).': '.$xp;
                 }
-                if ($settings->price_regex) {
+                if (($settings->price_regex ?? null)) {
                     $lines[] = '- Regex lọc giá: '.(string) $settings->price_regex;
                 }
                 $parts[] = implode("\n", $lines);
@@ -327,23 +284,19 @@ class ProductController extends Controller
         }
 
         $userId = $request->user()->effectiveUserId();
-        $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
-        if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
-            return redirect()
-                ->route('dashboard.competitors')
-                ->with('status', 'Vui lòng cài đặt XPath lấy tên và giá của bạn trước.');
-        }
-
         $scraper = new PriceScraper;
-        $tgdd = $scraper->scrapeTgddPriceAndName($url);
-        if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
-            $price = $tgdd['price'];
-            $name = isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '' ? trim($tgdd['name']) : null;
-            if (! $name) {
-                $html = $scraper->fetchHtml($url);
-                $name = $scraper->extractTitle($html);
-            }
+        $knownProduct = $scraper->scrapeKnownSitePriceAndName($url);
+        if ($knownProduct) {
+            $name = $knownProduct['name'];
+            $price = $knownProduct['price'];
         } else {
+            $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
+            if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
+                return redirect()
+                    ->route('dashboard.competitors')
+                    ->with('status', 'Vui lòng cài đặt XPath lấy tên và giá của bạn trước.');
+            }
+
             $html = $scraper->fetchHtml($url);
             $nameXpaths = array_merge(
                 [(string) $settings->own_name_xpath],
@@ -357,26 +310,6 @@ class ProductController extends Controller
             $name = $scraper->extractFirstByXPaths($html, $nameXpaths) ?? $scraper->extractTitle($html);
             $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
             $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
-
-            if (! $name || is_null($price)) {
-                $structured = $scraper->extractProductNameAndPriceFromStructuredData($html);
-                if (! $name && is_string($structured['name'] ?? null) && trim((string) $structured['name']) !== '') {
-                    $name = (string) $structured['name'];
-                }
-                if (is_null($price) && is_string($structured['price_raw'] ?? null) && trim((string) $structured['price_raw']) !== '') {
-                    $price = $scraper->parsePriceToInt((string) $structured['price_raw'], $settings->price_regex);
-                }
-            }
-
-            if (is_null($price) || (int) $price <= 0) {
-                $tgdd = $scraper->scrapeTgddPriceAndName($url);
-                if (is_array($tgdd) && isset($tgdd['price']) && is_int($tgdd['price'])) {
-                    $price = $tgdd['price'];
-                    if (! $name && isset($tgdd['name']) && is_string($tgdd['name']) && trim($tgdd['name']) !== '') {
-                        $name = trim($tgdd['name']);
-                    }
-                }
-            }
         }
 
         if (! $name || is_null($price)) {

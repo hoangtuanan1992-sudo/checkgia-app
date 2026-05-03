@@ -2,195 +2,21 @@
 
 namespace App\Services;
 
-use GuzzleHttp\Cookie\CookieJar;
-use Illuminate\Http\Client\Pool;
-use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 
 class PriceScraper
 {
-    public int $timeoutSeconds;
-
-    public int $connectTimeoutSeconds;
-
-    public function __construct(?int $timeoutSeconds = null, ?int $connectTimeoutSeconds = null)
+    public function fetchHtml(string $url): string
     {
-        $this->timeoutSeconds = max(1, (int) ($timeoutSeconds ?? 7));
-        $this->connectTimeoutSeconds = max(1, (int) ($connectTimeoutSeconds ?? 7));
-    }
-
-    private function pendingRequest()
-    {
-        return Http::withHeaders([
+        $response = Http::withHeaders([
             'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
             'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language' => 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-        ])->connectTimeout($this->connectTimeoutSeconds)->timeout($this->timeoutSeconds)->retry(1, 100);
-    }
-
-    public function fetchHtml(string $url): string
-    {
-        $response = $this->pendingRequest()->get($url);
+        ])->timeout(25)->retry(2, 250)->get($url);
 
         $response->throw();
 
         return (string) $response->body();
-    }
-
-    public function fetchHtmlPool(array $urlsByKey, int $concurrency = 10): array
-    {
-        $filtered = [];
-        foreach ($urlsByKey as $key => $url) {
-            $key = (string) $key;
-            $url = trim((string) $url);
-            if ($key === '' || $url === '') {
-                continue;
-            }
-            $filtered[$key] = $url;
-        }
-
-        if ($filtered === []) {
-            return [];
-        }
-
-        $responses = $this->pendingRequest()->pool(function (Pool $pool) use ($filtered, $concurrency) {
-            $pool->concurrency(max(1, (int) $concurrency));
-
-            $reqs = [];
-            foreach ($filtered as $key => $url) {
-                $reqs[$key] = $pool->as($key)->get($url);
-            }
-
-            return $reqs;
-        });
-
-        $out = [];
-        foreach ($filtered as $key => $_url) {
-            $res = $responses[$key] ?? null;
-            if ($res instanceof Response && $res->successful()) {
-                $out[$key] = (string) $res->body();
-            } else {
-                $out[$key] = null;
-            }
-        }
-
-        return $out;
-    }
-
-    public function scrapeTgddPriceAndName(string $productUrl): ?array
-    {
-        $host = parse_url($productUrl, PHP_URL_HOST);
-        $host = is_string($host) ? strtolower($host) : '';
-        if ($host === '' || ! str_contains($host, 'thegioididong.com')) {
-            return null;
-        }
-
-        try {
-            $jar = new CookieJar;
-            $req = $this->pendingRequest()->withOptions([
-                'cookies' => $jar,
-                'allow_redirects' => true,
-            ]);
-
-            $pageRes = $req->get($productUrl);
-            if (! $pageRes->successful()) {
-                return null;
-            }
-
-            $pageHtml = (string) $pageRes->body();
-            $productId = null;
-            $categoryId = null;
-
-            if (preg_match('/\/Products\/Images\/(\d+)\/(\d+)\//i', $pageHtml, $m) === 1) {
-                $categoryId = (int) $m[1];
-                $productId = (int) $m[2];
-            } elseif (preg_match('/\bdata-id=["\'](\d{3,})["\']/i', $pageHtml, $m) === 1) {
-                $productId = (int) $m[1];
-            } elseif (preg_match('/\bproductId\b[^0-9]{0,20}(\d{3,})/i', $pageHtml, $m) === 1) {
-                $productId = (int) $m[1];
-            }
-
-            if (! $productId || $productId <= 0) {
-                return null;
-            }
-
-            $ajaxRes = $req
-                ->withHeaders([
-                    'Accept' => '*/*',
-                    'X-Requested-With' => 'XMLHttpRequest',
-                    'Origin' => 'https://www.thegioididong.com',
-                    'Referer' => $productUrl,
-                ])
-                ->asForm()
-                ->post('https://www.thegioididong.com/Ajax/GetViewedHistory', [
-                    'customerId' => '',
-                    'productIds[]' => (string) $productId,
-                    'categoryIds[]' => (string) max(0, (int) ($categoryId ?? 0)),
-                    'viewName' => 'detail',
-                    'shortNameCus' => '',
-                    'cateId' => '0',
-                ]);
-
-            if (! $ajaxRes->successful()) {
-                return null;
-            }
-
-            $snippet = (string) $ajaxRes->body();
-            if (trim($snippet) === '') {
-                return null;
-            }
-
-            $dom = new \DOMDocument('1.0', 'UTF-8');
-            libxml_use_internal_errors(true);
-            $dom->loadHTML($snippet);
-            libxml_clear_errors();
-
-            $xp = new \DOMXPath($dom);
-            $node = $xp->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' viewed-product ') and @data-id='".(int) $productId."']")?->item(0);
-            if (! $node) {
-                $node = $xp->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' viewed-product ')]")?->item(0);
-            }
-
-            if (! $node) {
-                return null;
-            }
-
-            $anchor = $xp->query('.//a', $node)?->item(0);
-            $dataPrice = $anchor instanceof \DOMElement ? trim((string) $anchor->getAttribute('data-price')) : '';
-            $dataName = $anchor instanceof \DOMElement ? trim((string) $anchor->getAttribute('data-name')) : '';
-
-            $price = null;
-            if ($dataPrice !== '' && preg_match('/^\d+(?:\.\d+)?$/', $dataPrice) === 1) {
-                $f = (float) $dataPrice;
-                if ($f > 0) {
-                    $price = (int) round($f);
-                }
-            }
-
-            if (is_null($price)) {
-                $priceText = trim((string) ($xp->query(".//*[contains(concat(' ', normalize-space(@class), ' '), ' viewed-product-price ')]", $node)?->item(0)?->textContent));
-                $price = $this->parsePriceToInt($priceText);
-            }
-
-            $name = $dataName !== '' ? html_entity_decode($dataName, ENT_QUOTES | ENT_HTML5, 'UTF-8') : null;
-            if (! $name) {
-                $nameText = trim((string) ($xp->query(".//*[contains(concat(' ', normalize-space(@class), ' '), ' viewed-product-title ')]", $node)?->item(0)?->textContent));
-                $name = $nameText !== '' ? $nameText : null;
-            }
-
-            if (is_null($price)) {
-                return null;
-            }
-
-            return [
-                'price' => $price,
-                'name' => $name,
-                'product_id' => $productId,
-                'category_id' => $categoryId,
-            ];
-        } catch (\Throwable $e) {
-            return null;
-        }
     }
 
     public function extractFirstByXPath(string $html, string $xpath): ?string
@@ -213,7 +39,9 @@ class PriceScraper
             if ($result->length === 0) {
                 return null;
             }
-            $value = (string) $result->item(0)?->textContent;
+
+            $node = $result->item(0);
+            $value = $node instanceof \DOMAttr ? $node->value : (string) $node?->textContent;
         } elseif (is_string($result) || is_int($result) || is_float($result)) {
             $value = (string) $result;
         } elseif (is_bool($result)) {
@@ -264,239 +92,6 @@ class PriceScraper
         return $this->extractFirstByXPath($html, '//title');
     }
 
-    public function extractProductNameAndPriceFromStructuredData(string $html): array
-    {
-        $result = [
-            'name' => null,
-            'price_raw' => null,
-        ];
-
-        if (! preg_match_all('/<script[^>]*type=[\"\']application\/ld\+json[\"\'][^>]*>(.*?)<\/script>/is', $html, $m)) {
-            $result['price_raw'] = $this->extractPriceRawFromCommonMeta($html);
-
-            return $result;
-        }
-
-        foreach ($m[1] as $json) {
-            $json = trim((string) $json);
-            if ($json === '') {
-                continue;
-            }
-
-            $data = $this->decodeJsonLd($json);
-            if (! is_array($data)) {
-                continue;
-            }
-
-            foreach ($this->flattenJsonLdNodes($data) as $node) {
-                if (! is_array($node) || ! $this->isJsonLdProductNode($node)) {
-                    continue;
-                }
-
-                if (! $result['name'] && isset($node['name']) && is_string($node['name'])) {
-                    $name = trim($node['name']);
-                    if ($name !== '') {
-                        $result['name'] = $name;
-                    }
-                }
-
-                if (! $result['price_raw']) {
-                    $priceRaw = $this->extractPriceRawFromJsonLdOffers($node['offers'] ?? null);
-                    if ($priceRaw !== null) {
-                        $result['price_raw'] = $priceRaw;
-                    }
-                }
-
-                if ($result['name'] && $result['price_raw']) {
-                    return $result;
-                }
-            }
-        }
-
-        if (! $result['price_raw']) {
-            $result['price_raw'] = $this->extractPriceRawFromCommonMeta($html);
-        }
-
-        return $result;
-    }
-
-    private function decodeJsonLd(string $json): ?array
-    {
-        $clean = trim($json);
-        if ($clean === '') {
-            return null;
-        }
-
-        $clean = preg_replace('/^\s*<!--/u', '', $clean) ?? $clean;
-        $clean = preg_replace('/-->\s*$/u', '', $clean) ?? $clean;
-        $clean = preg_replace('/^\s*\/\*\s*<!\[CDATA\[\s*\*\/\s*/u', '', $clean) ?? $clean;
-        $clean = preg_replace('/\s*\/\*\s*\]\]>\s*\*\/\s*$/u', '', $clean) ?? $clean;
-        $clean = trim($clean);
-
-        $data = json_decode($clean, true);
-        if (is_array($data)) {
-            return $data;
-        }
-
-        $o1 = strpos($clean, '{');
-        $o2 = strrpos($clean, '}');
-        if ($o1 !== false && $o2 !== false && $o2 > $o1) {
-            $sub = substr($clean, $o1, $o2 - $o1 + 1);
-            $data = json_decode($sub, true);
-            if (is_array($data)) {
-                return $data;
-            }
-        }
-
-        $a1 = strpos($clean, '[');
-        $a2 = strrpos($clean, ']');
-        if ($a1 !== false && $a2 !== false && $a2 > $a1) {
-            $sub = substr($clean, $a1, $a2 - $a1 + 1);
-            $data = json_decode($sub, true);
-            if (is_array($data)) {
-                return $data;
-            }
-        }
-
-        return null;
-    }
-
-    private function flattenJsonLdNodes(mixed $data): array
-    {
-        $out = [];
-        $stack = [$data];
-        $visited = 0;
-
-        while ($stack !== []) {
-            $visited++;
-            if ($visited > 5000) {
-                break;
-            }
-
-            $cur = array_pop($stack);
-            if (! is_array($cur)) {
-                continue;
-            }
-
-            if (array_key_exists('@type', $cur)) {
-                $out[] = $cur;
-            }
-
-            foreach ($cur as $v) {
-                if (is_array($v)) {
-                    $stack[] = $v;
-                }
-            }
-        }
-
-        return $out;
-    }
-
-    private function isJsonLdProductNode(array $node): bool
-    {
-        $type = $node['@type'] ?? null;
-        $types = [];
-
-        if (is_string($type)) {
-            $types = [$type];
-        } elseif (is_array($type)) {
-            $types = array_values(array_filter($type, fn ($v) => is_string($v)));
-        }
-
-        foreach ($types as $t) {
-            if (mb_strtolower($t) === 'product') {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function extractPriceRawFromJsonLdOffers(mixed $offers): ?string
-    {
-        $offerNodes = [];
-
-        if (is_array($offers)) {
-            $isList = array_keys($offers) === range(0, count($offers) - 1);
-            if ($isList) {
-                $offerNodes = array_values(array_filter($offers, fn ($v) => is_array($v)));
-            } else {
-                $offerNodes = [$offers];
-            }
-        }
-
-        foreach ($offerNodes as $offer) {
-            $direct = $this->extractPriceRawFromJsonLdNode($offer);
-            if ($direct !== null) {
-                return $direct;
-            }
-
-            $priceSpec = $offer['priceSpecification'] ?? null;
-            if (is_array($priceSpec)) {
-                $specNodes = array_keys($priceSpec) === range(0, count($priceSpec) - 1)
-                    ? array_values(array_filter($priceSpec, fn ($v) => is_array($v)))
-                    : [$priceSpec];
-
-                foreach ($specNodes as $spec) {
-                    $specPrice = $this->extractPriceRawFromJsonLdNode($spec);
-                    if ($specPrice !== null) {
-                        return $specPrice;
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private function extractPriceRawFromJsonLdNode(array $node): ?string
-    {
-        foreach (['sale_price', 'price', 'lowPrice', 'highPrice', 'minPrice', 'maxPrice', 'currentPrice'] as $k) {
-            if (! array_key_exists($k, $node)) {
-                continue;
-            }
-
-            $v = $node[$k];
-            if (is_int($v) || is_float($v)) {
-                return (string) $v;
-            }
-            if (is_string($v)) {
-                $s = trim($v);
-                if ($s !== '') {
-                    return $s;
-                }
-            }
-            if (is_array($v)) {
-                foreach (['@value', 'value', 'price'] as $vk) {
-                    if (array_key_exists($vk, $v) && (is_string($v[$vk]) || is_int($v[$vk]) || is_float($v[$vk]))) {
-                        $s = trim((string) $v[$vk]);
-                        if ($s !== '') {
-                            return $s;
-                        }
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private function extractPriceRawFromCommonMeta(string $html): ?string
-    {
-        $xpaths = [
-            '//meta[@property="product:price:amount"]/@content',
-            '//meta[@property="og:price:amount"]/@content',
-            '//meta[@property="og:price:standard_amount"]/@content',
-            '//meta[@property="og:price"]/@content',
-            '//meta[@name="price"]/@content',
-            '//meta[@itemprop="price"]/@content',
-            '//*[@itemprop="price"]/@content',
-            '//*[@itemprop="price"]',
-        ];
-
-        return $this->extractFirstByXPaths($html, $xpaths);
-    }
-
     public function parsePriceToInt(?string $raw, ?string $regex = null): ?int
     {
         if ($raw === null) {
@@ -524,5 +119,126 @@ class PriceScraper
         $value = (int) $digits;
 
         return $value >= 0 ? $value : null;
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeKnownSitePriceAndName(string $url): ?array
+    {
+        if ($this->isTopzoneUrl($url)) {
+            return $this->scrapeTopzonePriceAndName($url);
+        }
+
+        return null;
+    }
+
+    public function isTopzoneUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        return $host === 'topzone.vn';
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeTopzonePriceAndName(string $url, ?string $html = null): ?array
+    {
+        $html = $html ?? $this->fetchHtml($url);
+        $name = $this->cleanText($this->extractFirstByXPath($html, '//h1'));
+        if (! $name) {
+            $name = $this->cleanText($this->metaContent($html, 'og:title') ?? $this->extractTitle($html));
+        }
+
+        $price = $this->extractTopzonePrice($html);
+        if (! $name || is_null($price)) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'price' => $price,
+        ];
+    }
+
+    private function extractTopzonePrice(string $html): ?int
+    {
+        if (preg_match_all('/<[^>]*(?:bs_price|price[^"\']*)[^>]*>/iu', $html, $matches) === 1) {
+            foreach ($matches[0] as $tag) {
+                $disPrice = $this->attributeNumber($tag, 'data-disprice');
+                $price = $this->attributeNumber($tag, 'data-price');
+                if (! is_null($disPrice) && $disPrice > 0) {
+                    return $disPrice;
+                }
+                if (! is_null($price) && $price > 0) {
+                    return $price;
+                }
+            }
+        }
+
+        if (preg_match('/"priceSpecification"\s*:\s*\{.*?"price"\s*:\s*"?(?<price>\d+(?:[.,]\d+)?)"?/isu', $html, $match) === 1) {
+            $price = $this->normalizeNumericPrice((string) ($match['price'] ?? ''));
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        if (preg_match('/<strong[^>]*class=["\'][^"\']*price[^"\']*["\'][^>]*>(?<price>.*?)<\/strong>/isu', $html, $match) === 1) {
+            return $this->parsePriceToInt($this->cleanText((string) ($match['price'] ?? '')));
+        }
+
+        return null;
+    }
+
+    private function attributeNumber(string $tag, string $attribute): ?int
+    {
+        if (preg_match('/\b'.preg_quote($attribute, '/').'\s*=\s*["\'](?<value>[^"\']+)["\']/iu', $tag, $match) !== 1) {
+            return null;
+        }
+
+        return $this->normalizeNumericPrice((string) ($match['value'] ?? ''));
+    }
+
+    private function normalizeNumericPrice(string $value): ?int
+    {
+        $value = trim(html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        if ($value === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d+(?:[.,]\d+)?$/', $value) === 1) {
+            return (int) floor((float) str_replace(',', '.', $value));
+        }
+
+        return $this->parsePriceToInt($value);
+    }
+
+    private function metaContent(string $html, string $property): ?string
+    {
+        $quoted = preg_quote($property, '/');
+        $patterns = [
+            '/<meta[^>]+property=["\']'.$quoted.'["\'][^>]+content=["\'](?<content>[^"\']+)["\'][^>]*>/iu',
+            '/<meta[^>]+content=["\'](?<content>[^"\']+)["\'][^>]+property=["\']'.$quoted.'["\'][^>]*>/iu',
+            '/<meta[^>]+name=["\']'.$quoted.'["\'][^>]+content=["\'](?<content>[^"\']+)["\'][^>]*>/iu',
+            '/<meta[^>]+content=["\'](?<content>[^"\']+)["\'][^>]+name=["\']'.$quoted.'["\'][^>]*>/iu',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $html, $match) === 1) {
+                return $this->cleanText((string) ($match['content'] ?? ''));
+            }
+        }
+
+        return null;
+    }
+
+    private function cleanText(?string $value): ?string
+    {
+        $value = trim(html_entity_decode((string) ($value ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $value = preg_replace('/\s+/u', ' ', $value) ?? $value;
+
+        return $value === '' ? null : $value;
     }
 }

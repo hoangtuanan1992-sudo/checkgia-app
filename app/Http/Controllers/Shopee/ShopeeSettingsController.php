@@ -3,12 +3,9 @@
 namespace App\Http\Controllers\Shopee;
 
 use App\Http\Controllers\Controller;
-use App\Models\Product;
 use App\Models\ShopeeCompetitor;
 use App\Models\ShopeeProduct;
 use App\Models\ShopeeShop;
-use App\Models\User;
-use App\Models\UserNotificationSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,10 +17,6 @@ class ShopeeSettingsController extends Controller
     {
         $ownerId = $request->user()->effectiveUserId();
 
-        $notification = UserNotificationSetting::query()->firstOrCreate([
-            'user_id' => $ownerId,
-        ]);
-
         $shops = ShopeeShop::query()
             ->where('user_id', $ownerId)
             ->orderBy('position')
@@ -32,7 +25,6 @@ class ShopeeSettingsController extends Controller
 
         return view('shopee.settings-owner', [
             'shops' => $shops,
-            'notification' => $notification,
         ]);
     }
 
@@ -129,31 +121,17 @@ class ShopeeSettingsController extends Controller
 
         $data = $request->validate([
             'own_url' => ['required', 'url', 'max:2048'],
-            'price_pick' => ['nullable', 'string', 'in:low,high'],
             'competitor_urls' => ['nullable', 'array'],
-            'competitor_price_picks' => ['nullable', 'array'],
-            'competitor_price_picks.*' => ['nullable', 'string', 'in:low,high'],
         ]);
-
-        $limit = User::resolveProductLimitById($ownerId);
-        $used = (int) Product::query()->where('user_id', $ownerId)->count()
-            + (int) ShopeeProduct::query()->where('user_id', $ownerId)->count();
-        if ($used >= $limit) {
-            return back()
-                ->withInput()
-                ->with('status', 'Bạn đã đến giới hạn so sánh '.$limit.' sản phẩm, để dùng tiếp hãy xóa bớt sản phẩm so sánh hoặc liên hệ admin để nâng cấp tài khoản');
-        }
 
         $product = ShopeeProduct::create([
             'user_id' => $ownerId,
             'own_url' => trim((string) $data['own_url']),
-            'price_pick' => (string) ($data['price_pick'] ?? 'low'),
             'is_enabled' => true,
         ]);
 
         $shops = ShopeeShop::query()->where('user_id', $ownerId)->get()->keyBy('id');
         $urls = (array) ($data['competitor_urls'] ?? []);
-        $picks = (array) ($data['competitor_price_picks'] ?? []);
         foreach ($urls as $shopId => $url) {
             $shopId = (int) $shopId;
             $url = is_string($url) ? trim($url) : '';
@@ -169,15 +147,11 @@ class ShopeeSettingsController extends Controller
                 'shopee_product_id' => (int) $product->id,
                 'shopee_shop_id' => (int) $shopId,
                 'url' => $url,
-                'price_pick' => in_array(($picks[$shopId] ?? null), ['low', 'high'], true) ? (string) $picks[$shopId] : 'low',
                 'is_enabled' => true,
             ]);
         }
 
-        return redirect()
-            ->route('shopee.dashboard')
-            ->with('status', 'Đã thêm sản phẩm Shopee')
-            ->with('shopee_pending_product_id', (int) $product->id);
+        return redirect()->route('shopee.dashboard')->with('status', 'Đã thêm sản phẩm Shopee');
     }
 
     public function toggleProduct(Request $request, ShopeeProduct $product): RedirectResponse

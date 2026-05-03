@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'user_id',
     'name',
     'own_url',
-    'price_pick',
     'is_enabled',
     'last_price',
     'last_scraped_at',
@@ -24,8 +23,6 @@ class ShopeeProduct extends Model
             'is_enabled' => 'boolean',
             'last_price' => 'integer',
             'last_scraped_at' => 'datetime',
-            'lease_expires_at' => 'datetime',
-            'last_assigned_at' => 'datetime',
         ];
     }
 

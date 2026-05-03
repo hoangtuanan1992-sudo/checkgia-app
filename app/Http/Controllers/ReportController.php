@@ -19,17 +19,13 @@ class ReportController extends Controller
         $products = Product::query()
             ->where('user_id', $userId)
             ->with([
-                'competitors' => function ($q) use ($userId) {
+                'competitors' => function ($q) {
                     $q->with([
                         'competitorSite:id,name',
                         'prices' => function ($p) {
                             $p->latest('fetched_at')->limit(1);
                         },
-                    ])
-                        ->whereNotNull('competitor_site_id')
-                        ->whereHas('competitorSite', function ($s) use ($userId) {
-                            $s->where('user_id', $userId);
-                        });
+                    ]);
                 },
             ])
             ->get(['id', 'name', 'price']);
@@ -120,9 +116,7 @@ class ReportController extends Controller
                 $sub->from('competitors')
                     ->select('competitors.id')
                     ->join('products', 'products.id', '=', 'competitors.product_id')
-                    ->join('competitor_sites', 'competitor_sites.id', '=', 'competitors.competitor_site_id')
-                    ->where('products.user_id', $userId)
-                    ->where('competitor_sites.user_id', $userId);
+                    ->where('products.user_id', $userId);
             })
             ->count();
 

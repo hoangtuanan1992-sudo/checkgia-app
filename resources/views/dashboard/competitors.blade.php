@@ -23,8 +23,8 @@
                             @csrf
                             <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end">
                                 <div class="field" style="margin-top:0">
-                                    <label class="label" for="site_name">website đối thủ</label>
-                                    <input class="input" id="site_name" name="name" type="text" value="{{ old('name') }}" placeholder="VD: laptopaz.com hoặc https://laptopaz.vn/" required>
+                                    <label class="label" for="site_name">Tên website đối thủ</label>
+                                    <input class="input" id="site_name" name="name" type="text" value="{{ old('name') }}" placeholder="VD: LaptopAZ" required>
                                     @error('name')<div class="error">{{ $message }}</div>@enderror
                                 </div>
                                 <button class="btn" type="submit" style="height:44px">Thêm đối thủ</button>
