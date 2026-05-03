@@ -4,11 +4,18 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteScrapeXpath;
+use App\Models\CompetitorSiteTemplate;
+use App\Models\CompetitorSiteTemplateScrapeXpath;
 use App\Models\User;
+use App\Models\UserScrapeSetting;
+use App\Models\UserScrapeXpath;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
@@ -36,7 +43,80 @@ class AdminSettingController extends Controller
             'last_job_error' => Cache::get('checkgia:scrape-due:last_job_error'),
         ];
 
-        return view('admin.settings.edit', compact('setting', 'demoUsers', 'scrapeStatus'));
+        $templates = collect();
+        if (Schema::hasTable('competitor_site_templates')) {
+            $templatesQuery = CompetitorSiteTemplate::query()->orderBy('domain');
+            if (Schema::hasTable('competitor_site_template_scrape_xpaths')) {
+                $templatesQuery->with(['scrapeXpaths' => function ($q) {
+                    $q->orderBy('type')->orderBy('position');
+                }]);
+            }
+            $templates = $templatesQuery->get();
+        }
+
+        $templateUsage = collect();
+        if (Schema::hasTable('competitor_sites') && Schema::hasColumn('competitor_sites', 'domain')) {
+            $templateUsage = CompetitorSite::query()
+                ->whereNotNull('domain')
+                ->selectRaw('domain, COUNT(*) as c')
+                ->groupBy('domain')
+                ->pluck('c', 'domain');
+        }
+
+        $xpathUserId = trim((string) $request->query('xpath_user_id', ''));
+        $xpathUser = null;
+        $xpathUserSetting = null;
+        $xpathOwnNameFallbacks = collect();
+        $xpathOwnPriceFallbacks = collect();
+        $xpathUserSites = collect();
+
+        if ($xpathUserId !== '' && ctype_digit($xpathUserId)) {
+            $xpathUser = User::query()->where('id', (int) $xpathUserId)->first();
+            if ($xpathUser) {
+                $uid = (int) $xpathUser->id;
+                if (Schema::hasTable('user_scrape_settings')) {
+                    $xpathUserSetting = UserScrapeSetting::query()->firstOrCreate(['user_id' => $uid]);
+                }
+                if (Schema::hasTable('user_scrape_xpaths')) {
+                    $xpathOwnNameFallbacks = UserScrapeXpath::query()
+                        ->where('user_id', $uid)
+                        ->where('type', 'name')
+                        ->orderBy('position')
+                        ->pluck('xpath');
+                    $xpathOwnPriceFallbacks = UserScrapeXpath::query()
+                        ->where('user_id', $uid)
+                        ->where('type', 'price')
+                        ->orderBy('position')
+                        ->pluck('xpath');
+                }
+                if (Schema::hasTable('competitor_sites')) {
+                    $sitesQuery = CompetitorSite::query()
+                        ->where('user_id', $uid)
+                        ->orderBy('position')
+                        ->orderBy('name');
+                    if (Schema::hasTable('competitor_site_scrape_xpaths')) {
+                        $sitesQuery->with(['scrapeXpaths' => function ($q) {
+                            $q->orderBy('type')->orderBy('position');
+                        }]);
+                    }
+                    $xpathUserSites = $sitesQuery->get();
+                }
+            }
+        }
+
+        return view('admin.settings.edit', compact(
+            'setting',
+            'demoUsers',
+            'scrapeStatus',
+            'templates',
+            'templateUsage',
+            'xpathUserId',
+            'xpathUser',
+            'xpathUserSetting',
+            'xpathOwnNameFallbacks',
+            'xpathOwnPriceFallbacks',
+            'xpathUserSites'
+        ));
     }
 
     public function update(Request $request): RedirectResponse
@@ -141,6 +221,276 @@ class AdminSettingController extends Controller
         return back()->with('status', 'Đã lưu cài đặt');
     }
 
+    public function upsertXpathTemplate(Request $request): RedirectResponse
+    {
+        if (! Schema::hasTable('competitor_site_templates')) {
+            return back()->withErrors(['domain' => 'Chưa có bảng thư viện XPath. Hãy chạy migration.'])->withInput();
+        }
+
+        $data = $request->validate([
+            'domain' => ['required', 'string', 'max:255'],
+            'name' => ['nullable', 'string', 'max:255'],
+            'name_xpath' => ['nullable', 'string', 'max:10000'],
+            'price_xpath' => ['nullable', 'string', 'max:10000'],
+            'price_regex' => ['nullable', 'string', 'max:10000'],
+            'name_fallbacks' => ['nullable', 'string', 'max:50000'],
+            'price_fallbacks' => ['nullable', 'string', 'max:50000'],
+            'is_approved' => ['nullable', 'boolean'],
+        ]);
+
+        $normalized = CompetitorSite::normalizedDomainFromUserInput($data['domain'] ?? '');
+        if (! $normalized) {
+            return back()->withErrors(['domain' => 'Domain không hợp lệ.'])->withInput();
+        }
+
+        $nameFallbacks = $this->splitXPathLines($data['name_fallbacks'] ?? '');
+        $priceFallbacks = $this->splitXPathLines($data['price_fallbacks'] ?? '');
+
+        DB::transaction(function () use ($data, $normalized, $nameFallbacks, $priceFallbacks) {
+            $template = CompetitorSiteTemplate::query()->firstOrNew(['domain' => $normalized]);
+            $template->name = trim((string) ($data['name'] ?? '')) ?: null;
+            $template->name_xpath = trim((string) ($data['name_xpath'] ?? '')) ?: null;
+            $template->price_xpath = trim((string) ($data['price_xpath'] ?? '')) ?: null;
+            $template->price_regex = trim((string) ($data['price_regex'] ?? '')) ?: null;
+
+            $approved = (bool) ($data['is_approved'] ?? false);
+            if ($approved && ! $template->is_approved) {
+                $template->approved_at = now();
+            }
+            if (! $approved) {
+                $template->approved_at = null;
+            }
+            $template->is_approved = $approved;
+            $template->save();
+
+            if (! Schema::hasTable('competitor_site_template_scrape_xpaths')) {
+                return;
+            }
+
+            CompetitorSiteTemplateScrapeXpath::query()
+                ->where('competitor_site_template_id', $template->id)
+                ->whereIn('type', ['name', 'price'])
+                ->delete();
+
+            $rows = [];
+            foreach ($nameFallbacks as $i => $xpath) {
+                $rows[] = [
+                    'competitor_site_template_id' => $template->id,
+                    'type' => 'name',
+                    'position' => $i,
+                    'xpath' => $xpath,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+            foreach ($priceFallbacks as $i => $xpath) {
+                $rows[] = [
+                    'competitor_site_template_id' => $template->id,
+                    'type' => 'price',
+                    'position' => $i,
+                    'xpath' => $xpath,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+            if ($rows) {
+                CompetitorSiteTemplateScrapeXpath::query()->insert($rows);
+            }
+        });
+
+        return back()->with('status', 'Đã lưu template XPath');
+    }
+
+    public function destroyXpathTemplate(Request $request, CompetitorSiteTemplate $competitorSiteTemplate): RedirectResponse
+    {
+        $competitorSiteTemplate->delete();
+
+        return back()->with('status', 'Đã xoá template XPath');
+    }
+
+    public function updateUserXPaths(Request $request, User $user): RedirectResponse
+    {
+        $uid = (int) $user->id;
+
+        $data = $request->validate([
+            'own_name_xpath' => ['nullable', 'string', 'max:10000'],
+            'own_price_xpath' => ['nullable', 'string', 'max:10000'],
+            'own_price_regex' => ['nullable', 'string', 'max:10000'],
+            'own_name_fallbacks' => ['nullable', 'string', 'max:50000'],
+            'own_price_fallbacks' => ['nullable', 'string', 'max:50000'],
+            'site_domain' => ['array'],
+            'site_domain.*' => ['nullable', 'string', 'max:255'],
+            'site_name_xpath' => ['array'],
+            'site_name_xpath.*' => ['nullable', 'string', 'max:10000'],
+            'site_price_xpath' => ['array'],
+            'site_price_xpath.*' => ['nullable', 'string', 'max:10000'],
+            'site_price_regex' => ['array'],
+            'site_price_regex.*' => ['nullable', 'string', 'max:10000'],
+            'site_name_fallbacks' => ['array'],
+            'site_name_fallbacks.*' => ['nullable', 'string', 'max:50000'],
+            'site_price_fallbacks' => ['array'],
+            'site_price_fallbacks.*' => ['nullable', 'string', 'max:50000'],
+        ]);
+
+        $ownNameFallbacks = $this->splitXPathLines($data['own_name_fallbacks'] ?? '');
+        $ownPriceFallbacks = $this->splitXPathLines($data['own_price_fallbacks'] ?? '');
+
+        DB::transaction(function () use ($uid, $data, $ownNameFallbacks, $ownPriceFallbacks) {
+            $setting = UserScrapeSetting::query()->firstOrCreate(['user_id' => $uid]);
+            $setting->own_name_xpath = trim((string) ($data['own_name_xpath'] ?? '')) ?: null;
+            $setting->own_price_xpath = trim((string) ($data['own_price_xpath'] ?? '')) ?: null;
+            $setting->price_regex = trim((string) ($data['own_price_regex'] ?? '')) ?: null;
+            $setting->save();
+
+            UserScrapeXpath::query()
+                ->where('user_id', $uid)
+                ->whereIn('type', ['name', 'price'])
+                ->delete();
+
+            foreach ($ownNameFallbacks as $i => $xpath) {
+                UserScrapeXpath::create([
+                    'user_id' => $uid,
+                    'type' => 'name',
+                    'position' => $i,
+                    'xpath' => $xpath,
+                ]);
+            }
+            foreach ($ownPriceFallbacks as $i => $xpath) {
+                UserScrapeXpath::create([
+                    'user_id' => $uid,
+                    'type' => 'price',
+                    'position' => $i,
+                    'xpath' => $xpath,
+                ]);
+            }
+
+            $hasDomainColumn = Schema::hasColumn('competitor_sites', 'domain');
+            $sites = CompetitorSite::query()->where('user_id', $uid)->get();
+            foreach ($sites as $site) {
+                $id = (string) $site->id;
+                $updates = [
+                    'name_xpath' => trim((string) (($data['site_name_xpath'][$id] ?? '') ?: '')) ?: null,
+                    'price_xpath' => trim((string) (($data['site_price_xpath'][$id] ?? '') ?: '')) ?: null,
+                    'price_regex' => trim((string) (($data['site_price_regex'][$id] ?? '') ?: '')) ?: null,
+                ];
+
+                if ($hasDomainColumn) {
+                    $domainInput = trim((string) (($data['site_domain'][$id] ?? '') ?: ''));
+                    $updates['domain'] = $domainInput !== '' ? CompetitorSite::normalizedDomainFromUserInput($domainInput) : null;
+                }
+
+                $site->update($updates);
+
+                CompetitorSiteScrapeXpath::query()
+                    ->where('competitor_site_id', $site->id)
+                    ->whereIn('type', ['name', 'price'])
+                    ->delete();
+
+                foreach ($this->splitXPathLines($data['site_name_fallbacks'][$id] ?? '') as $i => $xpath) {
+                    CompetitorSiteScrapeXpath::create([
+                        'competitor_site_id' => $site->id,
+                        'type' => 'name',
+                        'position' => $i,
+                        'xpath' => $xpath,
+                    ]);
+                }
+
+                foreach ($this->splitXPathLines($data['site_price_fallbacks'][$id] ?? '') as $i => $xpath) {
+                    CompetitorSiteScrapeXpath::create([
+                        'competitor_site_id' => $site->id,
+                        'type' => 'price',
+                        'position' => $i,
+                        'xpath' => $xpath,
+                    ]);
+                }
+            }
+        });
+
+        return redirect()->route('admin.settings.edit', ['xpath_user_id' => $uid])->with('status', 'Đã cập nhật XPath của shop');
+    }
+
+    public function promoteUserSiteToTemplate(Request $request, User $user, CompetitorSite $competitorSite): RedirectResponse
+    {
+        if ((int) $competitorSite->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
+        $redirectBase = route('admin.settings.edit', ['xpath_user_id' => (int) $user->id]);
+        $anchor = trim((string) $request->query('anchor', ''));
+        $redirectUrl = (preg_match('/^[A-Za-z0-9\-_]+$/', $anchor) === 1) ? ($redirectBase.'#'.$anchor) : $redirectBase;
+
+        if (! Schema::hasTable('competitor_site_templates')) {
+            return redirect()->to($redirectUrl)
+                ->withErrors(['status' => 'Chưa có bảng thư viện XPath. Hãy chạy migrate.']);
+        }
+
+        $siteId = (string) $competitorSite->id;
+        $domainInput = trim((string) $request->input("site_domain.$siteId", $competitorSite->domain));
+        $domain = $domainInput !== '' ? CompetitorSite::normalizedDomainFromUserInput($domainInput) : null;
+        if (! $domain) {
+            $domain = CompetitorSite::normalizedDomainFromUserInput($competitorSite->name);
+        }
+        if (! $domain) {
+            return redirect()->to($redirectUrl)
+                ->withErrors(['status' => 'Site chưa có domain hợp lệ.']);
+        }
+
+        $nameXpath = trim((string) $request->input("site_name_xpath.$siteId", $competitorSite->name_xpath)) ?: null;
+        $priceXpath = trim((string) $request->input("site_price_xpath.$siteId", $competitorSite->price_xpath)) ?: null;
+        $priceRegex = trim((string) $request->input("site_price_regex.$siteId", $competitorSite->price_regex)) ?: null;
+        $nameFallbacks = $this->splitXPathLines($request->input("site_name_fallbacks.$siteId", ''));
+        $priceFallbacks = $this->splitXPathLines($request->input("site_price_fallbacks.$siteId", ''));
+
+        DB::transaction(function () use ($competitorSite, $domain, $nameXpath, $priceXpath, $priceRegex, $nameFallbacks, $priceFallbacks) {
+            $template = CompetitorSiteTemplate::query()->firstOrNew(['domain' => $domain]);
+            if (! $template->name) {
+                $template->name = $competitorSite->name ?: $domain;
+            }
+            $template->name_xpath = $nameXpath;
+            $template->price_xpath = $priceXpath;
+            $template->price_regex = $priceRegex;
+            $template->is_approved = true;
+            $template->approved_at = now();
+            $template->save();
+
+            if (! Schema::hasTable('competitor_site_template_scrape_xpaths')) {
+                return;
+            }
+
+            CompetitorSiteTemplateScrapeXpath::query()
+                ->where('competitor_site_template_id', $template->id)
+                ->whereIn('type', ['name', 'price'])
+                ->delete();
+
+            $rows = [];
+            foreach ($nameFallbacks as $i => $xpath) {
+                $rows[] = [
+                    'competitor_site_template_id' => $template->id,
+                    'type' => 'name',
+                    'position' => $i,
+                    'xpath' => $xpath,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+            foreach ($priceFallbacks as $i => $xpath) {
+                $rows[] = [
+                    'competitor_site_template_id' => $template->id,
+                    'type' => 'price',
+                    'position' => $i,
+                    'xpath' => $xpath,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+            if ($rows) {
+                CompetitorSiteTemplateScrapeXpath::query()->insert($rows);
+            }
+        });
+
+        return redirect()->to($redirectUrl)->with('status', 'Đã duyệt và chuyển XPath vào thư viện');
+    }
+
     public function testAiProvider(Request $request, string $provider): JsonResponse
     {
         return $this->handleAiProviderRequest($request, $provider, false);
@@ -235,6 +585,14 @@ class AdminSettingController extends Controller
                 'models_column' => 'chatgpt_models',
             ],
         ][strtolower($provider)] ?? null;
+    }
+
+    private function splitXPathLines(mixed $value): array
+    {
+        return array_values(array_filter(array_map(
+            fn ($line) => trim((string) $line),
+            preg_split('/\R+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY) ?: []
+        )));
     }
 
     private function fetchAiProviderModels(string $provider, string $apiKey): array

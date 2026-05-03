@@ -88,6 +88,10 @@ Route::middleware('auth')->group(function () {
         Route::put('/settings', [AdminSettingController::class, 'update'])->name('settings.update');
         Route::post('/settings/ai/{provider}/test', [AdminSettingController::class, 'testAiProvider'])->name('settings.ai.test');
         Route::post('/settings/ai/{provider}/models', [AdminSettingController::class, 'scanAiProviderModels'])->name('settings.ai.models');
+        Route::post('/xpath-templates', [AdminSettingController::class, 'upsertXpathTemplate'])->name('xpath-templates.upsert');
+        Route::delete('/xpath-templates/{competitorSiteTemplate}', [AdminSettingController::class, 'destroyXpathTemplate'])->name('xpath-templates.destroy');
+        Route::post('/xpath-users/{user}', [AdminSettingController::class, 'updateUserXPaths'])->name('xpath-users.update');
+        Route::post('/xpath-users/{user}/promote-site/{competitorSite}', [AdminSettingController::class, 'promoteUserSiteToTemplate'])->name('xpath-users.promote-site');
     });
 
     Route::middleware('owner')->group(function () {
