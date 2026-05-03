@@ -192,7 +192,11 @@ class AccountController extends Controller
         $ownerId = $owner->effectiveUserId();
         abort_unless($user->parent_user_id === $ownerId && $user->role === 'viewer', 404);
 
-        $validator = Validator::make($request->all(), $this->subUserVisibilityRules($ownerId));
+        $validator = Validator::make($request->all(), array_merge([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ], $this->subUserVisibilityRules($ownerId)));
         if ($validator->fails()) {
             return back()
                 ->withErrors($validator)
@@ -200,12 +204,34 @@ class AccountController extends Controller
                 ->with('edit_subuser_id', $user->id);
         }
 
-        $updates = $this->subUserVisibilityAttributes($validator->validated());
+        $validated = $validator->validated();
+        $canonical = User::canonicalEmail($validated['email']);
+        $existsCanonical = User::query()
+            ->where('email_canonical', $canonical)
+            ->whereKeyNot($user->id)
+            ->exists();
+        if ($existsCanonical) {
+            return back()
+                ->withErrors(['email' => 'Email này đã được dùng để tạo tài khoản (theo quy tắc Gmail).'])
+                ->withInput()
+                ->with('edit_subuser_id', $user->id);
+        }
+
+        $updates = array_merge([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+        ], $this->subUserVisibilityAttributes($validated));
+
+        $password = trim((string) ($validated['password'] ?? ''));
+        if ($password !== '') {
+            $updates['password'] = $password;
+        }
+
         if ($updates !== []) {
             $user->update($updates);
         }
 
-        return back()->with('status', 'Đã cập nhật quyền nhóm cho tài khoản con');
+        return back()->with('status', 'Đã cập nhật tài khoản con');
     }
 
     public function destroySubUser(Request $request, User $user): RedirectResponse

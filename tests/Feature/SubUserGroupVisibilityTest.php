@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class SubUserGroupVisibilityTest extends TestCase
@@ -56,10 +57,18 @@ class SubUserGroupVisibilityTest extends TestCase
             ->assertSee('Điện máy');
 
         $this->actingAs($owner)
-            ->put(route('account.subusers.update', $subUser))
+            ->put(route('account.subusers.update', $subUser), [
+                'name' => 'Tài khoản đã sửa',
+                'email' => 'viewer-updated@example.com',
+                'password' => 'newpassword123',
+                'password_confirmation' => 'newpassword123',
+            ])
             ->assertRedirect();
 
         $subUser->refresh();
+        $this->assertSame('Tài khoản đã sửa', $subUser->name);
+        $this->assertSame('viewer-updated@example.com', $subUser->email);
+        $this->assertTrue(Hash::check('newpassword123', $subUser->password));
         $this->assertSame([], $subUser->visibleProductGroupIds());
         $this->assertSame([], $subUser->visibleCompetitorSiteGroupIds());
     }

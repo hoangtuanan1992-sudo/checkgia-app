@@ -275,32 +275,24 @@
                                         </div>
                                         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px">
                                             <div class="field" style="margin-top:0">
-                                                <label class="label" for="sub_product_group_ids">Nhóm sản phẩm</label>
-                                                @if($groups->isEmpty())
-                                                    <div class="hint">Tất cả</div>
-                                                @else
-                                                    <select class="input" id="sub_product_group_ids" name="product_group_ids[]" multiple size="{{ min(max($groups->count(), 2), 6) }}">
-                                                        @foreach($groups as $g)
-                                                            <option value="{{ $g->id }}" @selected(in_array((string) $g->id, $oldSubProductGroupIds, true))>{{ $g->name }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                    <div class="hint">Không chọn nhóm nào = Tất cả</div>
-                                                @endif
+                                                <div class="label">Nhóm sản phẩm</div>
+                                                @include('account.partials.subuser-group-picker', [
+                                                    'items' => $groups,
+                                                    'selectedIds' => $oldSubProductGroupIds,
+                                                    'inputName' => 'product_group_ids[]',
+                                                ])
+                                                <div class="hint">Không thêm nhóm nào = Tất cả</div>
                                                 @error('product_group_ids')<div class="error">{{ $message }}</div>@enderror
                                                 @error('product_group_ids.*')<div class="error">{{ $message }}</div>@enderror
                                             </div>
                                             <div class="field" style="margin-top:0">
-                                                <label class="label" for="sub_competitor_site_group_ids">Nhóm đối thủ</label>
-                                                @if(($competitorSiteGroups ?? collect())->isEmpty())
-                                                    <div class="hint">Tất cả</div>
-                                                @else
-                                                    <select class="input" id="sub_competitor_site_group_ids" name="competitor_site_group_ids[]" multiple size="{{ min(max($competitorSiteGroups->count(), 2), 6) }}">
-                                                        @foreach($competitorSiteGroups as $g)
-                                                            <option value="{{ $g->id }}" @selected(in_array((string) $g->id, $oldSubCompetitorGroupIds, true))>{{ $g->name }}</option>
-                                                        @endforeach
-                                                    </select>
-                                                    <div class="hint">Không chọn nhóm nào = Tất cả</div>
-                                                @endif
+                                                <div class="label">Nhóm đối thủ</div>
+                                                @include('account.partials.subuser-group-picker', [
+                                                    'items' => $competitorSiteGroups ?? collect(),
+                                                    'selectedIds' => $oldSubCompetitorGroupIds,
+                                                    'inputName' => 'competitor_site_group_ids[]',
+                                                ])
+                                                <div class="hint">Không thêm nhóm nào = Tất cả</div>
                                                 @error('competitor_site_group_ids')<div class="error">{{ $message }}</div>@enderror
                                                 @error('competitor_site_group_ids.*')<div class="error">{{ $message }}</div>@enderror
                                             </div>
@@ -316,77 +308,116 @@
                                             <table class="table">
                                                 <thead>
                                                     <tr>
-                                                        <th style="min-width:180px">Tên</th>
                                                         <th style="min-width:220px">Email</th>
-                                                        <th style="min-width:240px">Nhóm sản phẩm</th>
-                                                        <th style="min-width:240px">Nhóm đối thủ</th>
                                                         <th style="min-width:160px">Tạo lúc</th>
-                                                        <th style="width:90px">Lưu</th>
-                                                        <th style="width:100px">Xoá</th>
+                                                        <th style="width:100px">Xem</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     @foreach($subUsers as $su)
-                                                        @php($subProductGroupIds = $editSubUserId === (int) $su->id ? array_values(array_map('intval', (array) old('product_group_ids', []))) : $su->visibleProductGroupIds())
-                                                        @php($subCompetitorGroupIds = $editSubUserId === (int) $su->id ? array_values(array_map('intval', (array) old('competitor_site_group_ids', []))) : $su->visibleCompetitorSiteGroupIds())
-                                                        @php($subProductGroupIdsForSelect = array_map('strval', $subProductGroupIds))
-                                                        @php($subCompetitorGroupIdsForSelect = array_map('strval', $subCompetitorGroupIds))
-                                                        @php($subProductGroupNames = $groups->whereIn('id', $subProductGroupIds)->pluck('name')->implode(', '))
-                                                        @php($subCompetitorGroupNames = ($competitorSiteGroups ?? collect())->whereIn('id', $subCompetitorGroupIds)->pluck('name')->implode(', '))
-                                                        @php($visibilityFormId = 'subuserVisibilityForm'.$su->id)
                                                         <tr>
-                                                            <td style="font-weight:600">
-                                                                <form id="{{ $visibilityFormId }}" method="POST" action="{{ route('account.subusers.update', $su) }}">
-                                                                    @csrf
-                                                                    @method('PUT')
-                                                                </form>
-                                                                {{ $su->name }}
-                                                            </td>
                                                             <td>{{ $su->email }}</td>
-                                                            <td>
-                                                                <div class="hint" style="margin-top:0;font-weight:700;color:#111827">{{ $subProductGroupIds === [] ? 'Tất cả' : ($subProductGroupNames ?: 'Nhóm đã xoá') }}</div>
-                                                                @if($groups->isNotEmpty())
-                                                                    <select class="input" name="product_group_ids[]" form="{{ $visibilityFormId }}" multiple size="{{ min(max($groups->count(), 2), 5) }}" style="margin-top:6px;min-width:220px">
-                                                                        @foreach($groups as $g)
-                                                                            <option value="{{ $g->id }}" @selected(in_array((string) $g->id, $subProductGroupIdsForSelect, true))>{{ $g->name }}</option>
-                                                                        @endforeach
-                                                                    </select>
-                                                                @endif
-                                                                @if($editSubUserId === (int) $su->id)
-                                                                    @error('product_group_ids')<div class="error">{{ $message }}</div>@enderror
-                                                                    @error('product_group_ids.*')<div class="error">{{ $message }}</div>@enderror
-                                                                @endif
-                                                            </td>
-                                                            <td>
-                                                                <div class="hint" style="margin-top:0;font-weight:700;color:#111827">{{ $subCompetitorGroupIds === [] ? 'Tất cả' : ($subCompetitorGroupNames ?: 'Nhóm đã xoá') }}</div>
-                                                                @if(($competitorSiteGroups ?? collect())->isNotEmpty())
-                                                                    <select class="input" name="competitor_site_group_ids[]" form="{{ $visibilityFormId }}" multiple size="{{ min(max($competitorSiteGroups->count(), 2), 5) }}" style="margin-top:6px;min-width:220px">
-                                                                        @foreach($competitorSiteGroups as $g)
-                                                                            <option value="{{ $g->id }}" @selected(in_array((string) $g->id, $subCompetitorGroupIdsForSelect, true))>{{ $g->name }}</option>
-                                                                        @endforeach
-                                                                    </select>
-                                                                @endif
-                                                                @if($editSubUserId === (int) $su->id)
-                                                                    @error('competitor_site_group_ids')<div class="error">{{ $message }}</div>@enderror
-                                                                    @error('competitor_site_group_ids.*')<div class="error">{{ $message }}</div>@enderror
-                                                                @endif
-                                                            </td>
                                                             <td>{{ $su->created_at?->format('d/m/Y H:i') }}</td>
                                                             <td style="text-align:right">
-                                                                <button class="btn btn-secondary" type="submit" form="{{ $visibilityFormId }}">Lưu</button>
-                                                            </td>
-                                                            <td style="text-align:right">
-                                                                <form method="POST" action="{{ route('account.subusers.destroy', $su) }}" onsubmit="return confirm('Xoá tài khoản con này?')">
-                                                                    @csrf
-                                                                    @method('DELETE')
-                                                                    <button class="btn" type="submit">Xoá</button>
-                                                                </form>
+                                                                <button class="btn btn-secondary js-subuser-view" type="button" data-dialog-id="subUserDialog{{ $su->id }}">Xem</button>
                                                             </td>
                                                         </tr>
                                                     @endforeach
                                                 </tbody>
                                             </table>
                                         </div>
+
+                                        @foreach($subUsers as $su)
+                                            @php($subProductGroupIds = $editSubUserId === (int) $su->id ? array_values(array_map('intval', (array) old('product_group_ids', []))) : $su->visibleProductGroupIds())
+                                            @php($subCompetitorGroupIds = $editSubUserId === (int) $su->id ? array_values(array_map('intval', (array) old('competitor_site_group_ids', []))) : $su->visibleCompetitorSiteGroupIds())
+                                            @php($subProductGroupNames = $groups->whereIn('id', $subProductGroupIds)->pluck('name')->implode(', '))
+                                            @php($subCompetitorGroupNames = ($competitorSiteGroups ?? collect())->whereIn('id', $subCompetitorGroupIds)->pluck('name')->implode(', '))
+                                            <dialog class="dialog subuser-dialog" id="subUserDialog{{ $su->id }}" data-subuser-dialog data-open-on-load="{{ $editSubUserId === (int) $su->id ? '1' : '0' }}">
+                                                <div class="dialog-header">
+                                                    <div>
+                                                        <div style="font-weight:800">Thông tin tài khoản con</div>
+                                                        <div class="hint" style="margin-top:4px">{{ $su->email }}</div>
+                                                    </div>
+                                                </div>
+                                                <div class="dialog-body">
+                                                    <form id="subUserEditForm{{ $su->id }}" method="POST" action="{{ route('account.subusers.update', $su) }}" autocomplete="off">
+                                                        @csrf
+                                                        @method('PUT')
+                                                        <div class="subuser-detail-grid">
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label" for="subuser_name_{{ $su->id }}">Tên</label>
+                                                                <input class="input" id="subuser_name_{{ $su->id }}" name="name" type="text" value="{{ $editSubUserId === (int) $su->id ? old('name', $su->name) : $su->name }}" required autocomplete="off">
+                                                                @if($editSubUserId === (int) $su->id)
+                                                                    @error('name')<div class="error">{{ $message }}</div>@enderror
+                                                                @endif
+                                                            </div>
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label" for="subuser_email_{{ $su->id }}">Email</label>
+                                                                <input class="input" id="subuser_email_{{ $su->id }}" name="email" type="email" value="{{ $editSubUserId === (int) $su->id ? old('email', $su->email) : $su->email }}" required autocomplete="off">
+                                                                @if($editSubUserId === (int) $su->id)
+                                                                    @error('email')<div class="error">{{ $message }}</div>@enderror
+                                                                @endif
+                                                            </div>
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label">Tạo lúc</label>
+                                                                <div class="pill" style="justify-content:flex-start;border-radius:10px">{{ $su->created_at?->format('d/m/Y H:i') }}</div>
+                                                            </div>
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label" for="subuser_password_{{ $su->id }}">Mật khẩu mới</label>
+                                                                <input class="input" id="subuser_password_{{ $su->id }}" name="password" type="password" autocomplete="new-password">
+                                                                <div class="hint">Để trống nếu không đổi mật khẩu</div>
+                                                                @if($editSubUserId === (int) $su->id)
+                                                                    @error('password')<div class="error">{{ $message }}</div>@enderror
+                                                                @endif
+                                                            </div>
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label" for="subuser_password_confirmation_{{ $su->id }}">Nhập lại mật khẩu mới</label>
+                                                                <input class="input" id="subuser_password_confirmation_{{ $su->id }}" name="password_confirmation" type="password" autocomplete="new-password">
+                                                            </div>
+                                                        </div>
+
+                                                        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px">
+                                                            <div class="field" style="margin-top:0">
+                                                                <div class="label">Nhóm sản phẩm</div>
+                                                                @include('account.partials.subuser-group-picker', [
+                                                                    'items' => $groups,
+                                                                    'selectedIds' => $subProductGroupIds,
+                                                                    'inputName' => 'product_group_ids[]',
+                                                                ])
+                                                                <div class="hint">Hiện tại: {{ $subProductGroupIds === [] ? 'Tất cả' : ($subProductGroupNames ?: 'Nhóm đã xoá') }}</div>
+                                                                @if($editSubUserId === (int) $su->id)
+                                                                    @error('product_group_ids')<div class="error">{{ $message }}</div>@enderror
+                                                                    @error('product_group_ids.*')<div class="error">{{ $message }}</div>@enderror
+                                                                @endif
+                                                            </div>
+                                                            <div class="field" style="margin-top:0">
+                                                                <div class="label">Nhóm đối thủ</div>
+                                                                @include('account.partials.subuser-group-picker', [
+                                                                    'items' => $competitorSiteGroups ?? collect(),
+                                                                    'selectedIds' => $subCompetitorGroupIds,
+                                                                    'inputName' => 'competitor_site_group_ids[]',
+                                                                ])
+                                                                <div class="hint">Hiện tại: {{ $subCompetitorGroupIds === [] ? 'Tất cả' : ($subCompetitorGroupNames ?: 'Nhóm đã xoá') }}</div>
+                                                                @if($editSubUserId === (int) $su->id)
+                                                                    @error('competitor_site_group_ids')<div class="error">{{ $message }}</div>@enderror
+                                                                    @error('competitor_site_group_ids.*')<div class="error">{{ $message }}</div>@enderror
+                                                                @endif
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="actions" style="justify-content:flex-end;margin-top:16px">
+                                                            <button type="button" class="btn btn-secondary js-subuser-dialog-close">Huỷ</button>
+                                                            <button type="submit" class="btn">Lưu</button>
+                                                        </div>
+                                                    </form>
+                                                    <form method="POST" action="{{ route('account.subusers.destroy', $su) }}" onsubmit="return confirm('Xoá tài khoản con này?')" style="margin-top:10px;display:flex;justify-content:flex-end">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button class="btn btn-secondary" type="submit">Xoá tài khoản con</button>
+                                                    </form>
+                                                </div>
+                                            </dialog>
+                                        @endforeach
                                     @else
                                         <div class="hint">Chưa có tài khoản con.</div>
                                     @endif
@@ -461,6 +492,116 @@
             </form>
         </div>
     </dialog>
+
+    <style>
+        .subuser-group-picker{display:flex;flex-direction:column;gap:8px}
+        .subuser-picker-chips{min-height:42px;border:1px solid var(--border);border-radius:12px;background:#fff;padding:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .subuser-picker-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid #bfdbfe;background:#eff6ff;color:#111827;border-radius:999px;padding:6px 8px 6px 10px;font-weight:700;font-size:13px}
+        .subuser-picker-remove{width:22px;height:22px;border:0;border-radius:999px;background:#dbeafe;color:#1d4ed8;cursor:pointer;line-height:1;font-size:16px}
+        .subuser-picker-add-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .subuser-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+        .subuser-dialog{width:min(860px, calc(100vw - 32px))}
+    </style>
+
+    <script>
+        (function () {
+            function refreshPicker(picker) {
+                const empty = picker.querySelector('.js-picker-empty');
+                const hasItems = picker.querySelectorAll('.js-picker-chip').length > 0;
+                if (empty) {
+                    empty.style.display = hasItems ? 'none' : '';
+                }
+            }
+
+            function addChip(picker, id, name) {
+                const list = picker.querySelector('.js-picker-list');
+                const inputName = picker.dataset.inputName || 'group_ids[]';
+                const exists = Array.from(picker.querySelectorAll('.js-picker-chip'))
+                    .some((chip) => chip.dataset.id === String(id));
+                if (!list || !id || exists) {
+                    return;
+                }
+
+                const chip = document.createElement('span');
+                chip.className = 'subuser-picker-chip js-picker-chip';
+                chip.dataset.id = String(id);
+
+                const label = document.createElement('span');
+                label.textContent = name || String(id);
+
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = inputName;
+                input.value = String(id);
+
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'subuser-picker-remove js-picker-remove';
+                remove.title = 'Xoá nhóm';
+                remove.setAttribute('aria-label', 'Xoá nhóm ' + (name || id));
+                remove.textContent = '×';
+
+                chip.appendChild(label);
+                chip.appendChild(input);
+                chip.appendChild(remove);
+                list.appendChild(chip);
+                refreshPicker(picker);
+            }
+
+            document.querySelectorAll('.js-subuser-group-picker').forEach((picker) => {
+                const add = picker.querySelector('.js-picker-add');
+                const source = picker.querySelector('.js-picker-source');
+
+                if (add && source) {
+                    add.addEventListener('click', () => {
+                        source.style.display = source.style.display === 'none' ? '' : 'none';
+                        if (source.style.display !== 'none') {
+                            source.focus();
+                        }
+                    });
+
+                    source.addEventListener('change', () => {
+                        const option = source.selectedOptions[0];
+                        if (option && option.value) {
+                            addChip(picker, option.value, option.textContent.trim());
+                        }
+                        source.value = '';
+                        source.style.display = 'none';
+                    });
+                }
+
+                picker.addEventListener('click', (event) => {
+                    const remove = event.target.closest('.js-picker-remove');
+                    if (!remove) return;
+                    const chip = remove.closest('.js-picker-chip');
+                    if (chip) {
+                        chip.remove();
+                        refreshPicker(picker);
+                    }
+                });
+
+                refreshPicker(picker);
+            });
+
+            document.querySelectorAll('.js-subuser-view').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const dialog = document.getElementById(btn.dataset.dialogId || '');
+                    if (dialog) {
+                        dialog.showModal();
+                    }
+                });
+            });
+
+            document.querySelectorAll('[data-subuser-dialog]').forEach((dialog) => {
+                dialog.querySelectorAll('.js-subuser-dialog-close').forEach((btn) => {
+                    btn.addEventListener('click', () => dialog.close());
+                });
+                if (dialog.dataset.openOnLoad === '1') {
+                    dialog.showModal();
+                }
+            });
+        })();
+    </script>
 
     <script>
         (function () {
