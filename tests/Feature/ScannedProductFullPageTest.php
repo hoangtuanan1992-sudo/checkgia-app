@@ -48,6 +48,43 @@ class ScannedProductFullPageTest extends TestCase
             ->assertDontSee('2.590.000đ');
     }
 
+    public function test_public_full_products_page_can_return_full_json_without_pagination(): void
+    {
+        $this->insertScannedProducts([
+            'job' => 'job-full-json',
+            'start_url' => 'https://dienmaydo.vn/',
+            'products' => [
+                [
+                    'name' => 'Tu lanh Toshiba GR-RS780WI-PGV(22)-XK',
+                    'code' => 'GR-RS780WI-PGV(22)-XK',
+                    'price' => 14500000,
+                    'url' => 'https://dienmaydo.vn/tu-lanh-toshiba-gr-rs780wi-pgv-22-xk',
+                ],
+                [
+                    'name' => 'Tu lanh Toshiba GR-RS910WI-PMV(06)-MG',
+                    'code' => 'GR-RS910WI-PMV(06)-MG',
+                    'price' => 16700000,
+                    'url' => 'https://dienmaydo.vn/tu-lanh-toshiba-gr-rs910wi-pmv-06-mg',
+                ],
+            ],
+        ]);
+
+        $response = $this->get('/san-pham-full?website_url=https://dienmaydo.vn/&format=json');
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('website', 'https://dienmaydo.vn')
+            ->assertJsonPath('websiteKey', 'dienmaydo.vn')
+            ->assertJsonPath('total', 2)
+            ->assertJsonCount(2, 'products')
+            ->assertJsonPath('products.0.code', 'GR-RS780WI-PGV(22)-XK')
+            ->assertJsonPath('products.0.name', 'Tu lanh Toshiba GR-RS780WI-PGV(22)-XK')
+            ->assertJsonPath('products.0.url', 'https://dienmaydo.vn/tu-lanh-toshiba-gr-rs780wi-pgv-22-xk');
+
+        $this->assertSame(['code', 'name', 'url'], array_keys($response->json('products.0')));
+    }
+
     /**
      * @param array<string, mixed> $data
      */
@@ -88,5 +125,50 @@ class ScannedProductFullPageTest extends TestCase
             'created_at' => $now,
             'updated_at' => $now,
         ]);
+    }
+
+    /**
+     * @param array{job: string, start_url: string, products: array<int, array{name: string, code: string, price: int, url: string}>} $data
+     */
+    private function insertScannedProducts(array $data): void
+    {
+        $now = now();
+        $count = count($data['products']);
+        $jobId = DB::table('scanner_import_jobs')->insertGetId([
+            'external_job_id' => $data['job'],
+            'app' => 'windows-product-scanner',
+            'start_url' => $data['start_url'],
+            'mode' => 'all',
+            'product_count' => $count,
+            'imported_product_count' => $count,
+            'priced_product_count' => $count,
+            'batch_index' => 1,
+            'batch_total' => 1,
+            'last_pushed_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        foreach ($data['products'] as $product) {
+            DB::table('scanner_import_products')->insert([
+                'scanner_import_job_id' => $jobId,
+                'external_id' => sha1($product['url']),
+                'external_job_id' => $data['job'],
+                'product_code' => $product['code'],
+                'name' => $product['name'],
+                'price_text' => number_format((int) $product['price'], 0, ',', '.').'d',
+                'price_value' => $product['price'],
+                'currency' => 'VND',
+                'url' => $product['url'],
+                'link' => $product['url'],
+                'source_url' => $data['start_url'],
+                'url_hash' => sha1($product['url']),
+                'source_url_hash' => sha1($data['start_url']),
+                'dedupe_hash' => sha1($data['start_url'].'|'.$product['url']),
+                'imported_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
     }
 }
