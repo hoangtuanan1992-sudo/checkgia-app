@@ -317,4 +317,36 @@ class PriceScraperTest extends TestCase
             'price' => 17490000,
         ], $result);
     }
+
+    public function test_extracts_lg_com_price_and_name_without_xpath(): void
+    {
+        $html = <<<'HTML'
+            <html><head>
+                <title data-id="pdp-title">Tu lanh LG Instaview UV nano 635L mau be GR-X257BG | LG Viet Nam</title>
+                <meta property="og:title" content="Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG - GR-X257BG | LG Viet Nam" />
+            </head><body>
+                <div class="price-area hidden" data-sku="GR-X257BG.AEEPEVN.EAVH.VN.C" data-msrp="55990000"></div>
+                <h2 class="pdp-title">Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG</h2>
+                <script>
+                    var ga4_dataset = {
+                        "product": {
+                            "model_name": `Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG`,
+                            "msrp": parseFloat(`55990000`),
+                            "price": ""
+                        }
+                    };
+                </script>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeLgComPriceAndName(
+            'https://www.lg.com/vn/tu-lanh/tu-lanh-instaview/gr-x257bg/',
+            $html
+        );
+
+        $this->assertSame([
+            'name' => 'Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG',
+            'price' => 55990000,
+        ], $result);
+    }
 }

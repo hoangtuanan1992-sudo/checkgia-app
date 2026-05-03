@@ -197,4 +197,30 @@ class ProductCrudTest extends TestCase
             'product_url' => $url,
         ]);
     }
+
+    public function test_dashboard_can_add_lg_com_product_without_manual_xpath(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://www.lg.com/vn/tu-lanh/tu-lanh-instaview/gr-x257bg/';
+
+        Http::fake([
+            $url => Http::response(
+                '<html><head><title data-id="pdp-title">Tu lanh LG Instaview UV nano 635L mau be GR-X257BG | LG Viet Nam</title></head><body><div class="price-area hidden" data-sku="GR-X257BG.AEEPEVN.EAVH.VN.C" data-msrp="55990000" data-pim-model-name="Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG"></div></body></html>',
+                200
+            ),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'Tu lanh LG Instaview Door-in-door 635L mau be GR-X257BG',
+            'price' => 55990000,
+            'product_url' => $url,
+        ]);
+    }
 }

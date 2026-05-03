@@ -168,6 +168,10 @@ class PriceScraper
             return $this->scrapeMinhTuanMobilePriceAndName($url);
         }
 
+        if ($this->isLgComUrl($url)) {
+            return $this->scrapeLgComPriceAndName($url);
+        }
+
         return null;
     }
 
@@ -209,6 +213,110 @@ class PriceScraper
         $host = preg_replace('/^www\./', '', $host) ?? $host;
 
         return $host === 'minhtuanmobile.com';
+    }
+
+    public function isLgComUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        return $host === 'lg.com';
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeLgComPriceAndName(string $url, ?string $html = null): ?array
+    {
+        $html = $html ?? $this->fetchHtml($url);
+
+        $name = $this->lgComProductName($html);
+        $price = $this->lgComProductPrice($html);
+
+        if (! $name || is_null($price)) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'price' => $price,
+        ];
+    }
+
+    private function lgComProductName(string $html): ?string
+    {
+        $name = $this->cleanText($this->attributeText($html, 'data-pim-model-name'));
+        if ($name) {
+            return $name;
+        }
+
+        if (preg_match('/\\\\"userFriendlyName\\\\"\s*:\s*\\\\"(?<name>(?:\\\\\\\\.|[^\\\\"])*)\\\\"/isu', $html, $match) === 1) {
+            $decoded = json_decode('"'.str_replace('"', '\"', (string) ($match['name'] ?? '')).'"');
+            $name = $this->cleanText(is_string($decoded) ? $decoded : (string) ($match['name'] ?? ''));
+            if ($name) {
+                return $name;
+            }
+        }
+
+        $name = $this->cleanText($this->extractFirstByXPath($html, '//*[contains(concat(" ", normalize-space(@class), " "), " pdp-title ")]'));
+        if ($name) {
+            return $name;
+        }
+
+        return $this->cleanLgComTitle($this->metaContent($html, 'og:title') ?? $this->extractTitle($html));
+    }
+
+    private function lgComProductPrice(string $html): ?int
+    {
+        foreach (['data-price', 'data-pim-price', 'data-promotion-price', 'data-msrp', 'data-pim-msrp'] as $attribute) {
+            $price = $this->attributeNumber($html, $attribute);
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        foreach (['promotionPrice', 'salePrice', 'finalPrice', 'onlinePrice', 'msrp'] as $field) {
+            $price = $this->lgComNumericField($html, $field);
+            if (! is_null($price) && $price > 0) {
+                return $price;
+            }
+        }
+
+        return null;
+    }
+
+    private function lgComNumericField(string $html, string $field): ?int
+    {
+        $quoted = preg_quote($field, '/');
+        $patterns = [
+            '/(?<![A-Za-z0-9_])'.$quoted.'\s*:\s*parseFloat\(`(?<price>\d+(?:[.,]\d+)?)`\)/isu',
+            '/(?<![A-Za-z0-9_])'.$quoted.'\s*:\s*(?<price>\d+(?:[.,]\d+)?)/isu',
+            '/["\\\\]+'.$quoted.'["\\\\]*\s*:\s*(?<price>\d+(?:[.,]\d+)?)/isu',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $html, $match) === 1) {
+                $price = $this->normalizeNumericPrice((string) ($match['price'] ?? ''));
+                if (! is_null($price) && $price > 0) {
+                    return $price;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function cleanLgComTitle(?string $title): ?string
+    {
+        $title = $this->cleanText($title);
+        if (! $title) {
+            return null;
+        }
+
+        $title = preg_replace('/\s*\|\s*LG.*$/iu', '', $title) ?? $title;
+        $title = preg_replace('/\s+-\s+([A-Z0-9][A-Z0-9\-]{2,})$/u', '', $title) ?? $title;
+
+        return $this->cleanText($title);
     }
 
     /**
