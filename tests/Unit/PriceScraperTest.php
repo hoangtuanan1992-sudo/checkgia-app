@@ -120,6 +120,60 @@ class PriceScraperTest extends TestCase
         ], $result);
     }
 
+    public function test_extracts_thegioididong_visible_price_and_name_without_xpath(): void
+    {
+        $html = <<<'HTML'
+            <html><body>
+                <div class="product-name">
+                    <h1>iPhone 16 256GB</h1>
+                </div>
+                <div class="box_saving v2 olgr twoprice">
+                    <div class="bs_title">
+                        <div class="bs_price" data-priceOrg="24990000.0" data-discountorigin="1600000.0">
+                            <b>Online Gia Re Qua</b>
+                            <strong>23.390.000&#x20AB;</strong>
+                            <em>24.990.000&#x20AB;</em>
+                        </div>
+                    </div>
+                </div>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeTheGioiDiDongPriceAndName('https://www.thegioididong.com/dtdd/iphone-16-256gb', $html);
+
+        $this->assertSame([
+            'name' => 'iPhone 16 256GB',
+            'price' => 23390000,
+        ], $result);
+    }
+
+    public function test_extracts_thegioididong_json_ld_price_when_visible_price_is_missing(): void
+    {
+        $html = <<<'HTML'
+            <html><body>
+                <script type="application/ld+json" id="productld">
+                    {
+                        "@context": "https://schema.org",
+                        "@type": "Product",
+                        "name": "Samsung Galaxy A56 5G 12GB/256GB",
+                        "offers": {
+                            "@type": "Offer",
+                            "priceCurrency": "VND",
+                            "price": 10690000.0
+                        }
+                    }
+                </script>
+            </body></html>
+        HTML;
+
+        $result = (new PriceScraper)->scrapeTheGioiDiDongPriceAndName('https://www.thegioididong.com/dtdd/samsung-galaxy-a56-5g', $html);
+
+        $this->assertSame([
+            'name' => 'Samsung Galaxy A56 5G 12GB/256GB',
+            'price' => 10690000,
+        ], $result);
+    }
+
     public function test_extracts_viettelstore_json_ld_price_and_name_without_xpath(): void
     {
         $html = <<<'HTML'

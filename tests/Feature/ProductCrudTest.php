@@ -60,6 +60,32 @@ class ProductCrudTest extends TestCase
         ]);
     }
 
+    public function test_dashboard_can_add_thegioididong_product_without_manual_xpath(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://www.thegioididong.com/dtdd/iphone-16-256gb';
+
+        Http::fake([
+            $url => Http::response(
+                '<html><body><div class="product-name"><h1>iPhone 16 256GB</h1></div><div class="box_saving v2 olgr twoprice"><div class="bs_title"><div class="bs_price" data-priceOrg="24990000.0"><b>Online Gia Re Qua</b><strong>23.390.000&#x20AB;</strong><em>24.990.000&#x20AB;</em></div></div></div></body></html>',
+                200
+            ),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'iPhone 16 256GB',
+            'price' => 23390000,
+            'product_url' => $url,
+        ]);
+    }
+
     public function test_dashboard_can_add_viettelstore_product_without_manual_xpath(): void
     {
         $user = User::factory()->create();

@@ -148,6 +148,10 @@ class PriceScraper
      */
     public function scrapeKnownSitePriceAndName(string $url): ?array
     {
+        if ($this->isTheGioiDiDongUrl($url)) {
+            return $this->scrapeTheGioiDiDongPriceAndName($url);
+        }
+
         if ($this->isTopzoneUrl($url)) {
             return $this->scrapeTopzonePriceAndName($url);
         }
@@ -185,6 +189,14 @@ class PriceScraper
         $host = preg_replace('/^www\./', '', $host) ?? $host;
 
         return $host === 'topzone.vn';
+    }
+
+    public function isTheGioiDiDongUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        return $host === 'thegioididong.com';
     }
 
     public function isViettelStoreUrl(string $url): bool
@@ -349,6 +361,78 @@ class PriceScraper
 
         $title = preg_replace('/\s*\|\s*Samsung.*$/iu', '', $title) ?? $title;
         $title = preg_replace('/\s+-\s*Gia\s*&.*$/iu', '', $title) ?? $title;
+
+        return $this->cleanText($title);
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeTheGioiDiDongPriceAndName(string $url, ?string $html = null): ?array
+    {
+        $html = $html ?? $this->fetchHtml($url);
+        $product = $this->jsonLdProduct($html);
+
+        $name = $this->cleanText($this->extractFirstByXPath($html, '//h1'));
+        if (! $name) {
+            $name = $this->cleanText((string) ($product['name'] ?? ''));
+        }
+        if (! $name) {
+            $name = $this->cleanTheGioiDiDongTitle($this->metaContent($html, 'og:title') ?? $this->extractTitle($html));
+        }
+
+        $price = $this->extractTheGioiDiDongVisiblePrice($html);
+        if (is_null($price)) {
+            $price = $this->jsonLdProductPrice($product);
+        }
+        if (is_null($price)) {
+            $price = $this->extractTopzonePrice($html);
+        }
+
+        if (! $name || is_null($price)) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'price' => $price,
+        ];
+    }
+
+    private function extractTheGioiDiDongVisiblePrice(string $html): ?int
+    {
+        if (preg_match('/<div[^>]*class=["\'][^"\']*\bbs_price\b[^"\']*["\'][^>]*>(?<content>.*?)<\/div>/isu', $html, $match) === 1) {
+            $content = (string) ($match['content'] ?? '');
+            if (preg_match('/<strong[^>]*>(?<price>.*?)<\/strong>/isu', $content, $priceMatch) === 1) {
+                $price = $this->parsePriceToInt($this->cleanText((string) ($priceMatch['price'] ?? '')));
+                if (! is_null($price) && $price > 0) {
+                    return $price;
+                }
+            }
+        }
+
+        if (preg_match_all('/<[^>]+data-disprice=["\'](?<price>[^"\']+)["\'][^>]*>/iu', $html, $matches) === 1) {
+            foreach ($matches['price'] as $rawPrice) {
+                $price = $this->normalizeNumericPrice((string) $rawPrice);
+                if (! is_null($price) && $price > 0) {
+                    return $price;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function cleanTheGioiDiDongTitle(?string $title): ?string
+    {
+        $title = $this->cleanText($title);
+        if (! $title) {
+            return null;
+        }
+
+        $title = preg_replace('/\s+ch(i|í)nh h(ã|a)ng.*$/iu', '', $title) ?? $title;
+        $title = preg_replace('/\s*,\s*gi(a|á).*$/iu', '', $title) ?? $title;
+        $title = preg_replace('/\s+-\s*Thegioididong\.com\s*$/iu', '', $title) ?? $title;
 
         return $this->cleanText($title);
     }
