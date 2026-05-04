@@ -14,6 +14,64 @@
                 width:100%;
                 height:100%;
             }
+            .comparison-pagination{
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                gap:12px;
+                flex-wrap:wrap;
+                margin-top:14px;
+                padding-top:14px;
+                border-top:1px solid var(--border);
+            }
+            .comparison-page-left,
+            .comparison-page-buttons{
+                display:flex;
+                align-items:center;
+                gap:8px;
+                flex-wrap:wrap;
+            }
+            .comparison-page-left{
+                color:var(--muted);
+                font-size:13px;
+            }
+            .comparison-page-input{
+                width:92px;
+                height:42px;
+                padding:0 10px;
+                text-align:center;
+            }
+            .comparison-per-page{
+                width:92px;
+                height:42px;
+                padding:0 10px;
+            }
+            .comparison-page-btn{
+                min-width:42px;
+                height:42px;
+                border:1px solid var(--border);
+                border-radius:10px;
+                background:#fff;
+                color:#111827;
+                font-weight:600;
+                cursor:pointer;
+            }
+            .comparison-page-btn.is-active{
+                background:#111827;
+                border-color:#111827;
+                color:#fff;
+            }
+            .comparison-page-btn:disabled{
+                color:#9ca3af;
+                background:#f9fafb;
+                cursor:not-allowed;
+            }
+            .comparison-page-ellipsis{
+                min-width:34px;
+                text-align:center;
+                color:var(--muted);
+                font-weight:700;
+            }
             @media (max-width: 1100px){
                 #comparisonCardView{
                     grid-template-columns:1fr;
@@ -548,6 +606,24 @@
                     @empty
                         <div class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm trước.</div>
                     @endforelse
+                </div>
+
+                <div id="comparisonPagination" class="comparison-pagination">
+                    <div class="comparison-page-left">
+                        <span id="comparePageSummary">Trang 1/1 • Hiển thị 0/0</span>
+                        <label class="label" for="comparePerPage" style="margin:0">Số dòng</label>
+                        <select class="input comparison-per-page" id="comparePerPage">
+                            <option value="20">20</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                            <option value="500">500</option>
+                            <option value="all">Tất cả</option>
+                        </select>
+                        <label class="label" for="comparePageJump" style="margin:0">Bạn muốn xem trang:</label>
+                        <input class="input comparison-page-input" id="comparePageJump" type="number" min="1" value="1" inputmode="numeric">
+                    </div>
+                    <div class="comparison-page-buttons" id="comparePageButtons" aria-label="Phân trang kết quả so sánh"></div>
                 </div>
             </div>
         </div>
@@ -1183,6 +1259,7 @@
                     if (row) row.remove();
                     const card = document.querySelector(`[data-product-card="${pendingDelete.productId}"]`);
                     if (card) card.remove();
+                    applyFiltersAndSort(false);
                 } catch (e) {
                     alert('Xoá thất bại. Vui lòng thử lại.');
                 } finally {
@@ -1282,6 +1359,13 @@
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
             const tbody = document.querySelector('table.table tbody');
+            const comparisonPagination = document.getElementById('comparisonPagination');
+            const comparePerPage = document.getElementById('comparePerPage');
+            const comparePageSummary = document.getElementById('comparePageSummary');
+            const comparePageJump = document.getElementById('comparePageJump');
+            const comparePageButtons = document.getElementById('comparePageButtons');
+            const comparePerPageKey = 'checkgia_compare_per_page';
+            let compareCurrentPage = 1;
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1291,80 +1375,229 @@
                 return Number.isFinite(n) ? n : null;
             }
 
-            function applyFiltersAndSort() {
-                const q = (filterSearch?.value || '').trim().toLowerCase();
-                const group = filterGroup?.value || '';
-                const sort = sortSelect?.value || 'row_asc';
+            function getStoredPerPage() {
+                try {
+                    const value = localStorage.getItem(comparePerPageKey);
+                    return ['20', '50', '100', '200', '500', 'all'].includes(value) ? value : '50';
+                } catch (e) {
+                    return '50';
+                }
+            }
 
-                function applyToItems(items, appendTo) {
-                    items.forEach((el) => {
-                        const name = (el.dataset.productName || '').toLowerCase();
-                        const id = String(el.dataset.productId || '');
-                        const groupId = String(el.dataset.groupId || '');
+            if (comparePerPage) {
+                comparePerPage.value = getStoredPerPage();
+            }
 
-                        let visible = true;
-                        if (q) {
-                            visible = name.includes(q) || id.includes(q);
+            function getComparePerPageValue() {
+                const value = comparePerPage?.value || '50';
+                if (value === 'all') {
+                    return Number.POSITIVE_INFINITY;
+                }
+
+                const parsed = Number(value);
+                return Number.isFinite(parsed) && parsed > 0 ? parsed : 50;
+            }
+
+            function itemMatchesFilter(el, q, group) {
+                const name = (el.dataset.productName || '').toLowerCase();
+                const id = String(el.dataset.productId || '');
+                const groupId = String(el.dataset.groupId || '');
+
+                if (q && !name.includes(q) && !id.includes(q)) {
+                    return false;
+                }
+                if (group) {
+                    return group === '__none__' ? !groupId : groupId === group;
+                }
+
+                return true;
+            }
+
+            function compareDashboardItems(a, b, sort) {
+                const aRow = parseNum(a.dataset.rowOrder) ?? 0;
+                const bRow = parseNum(b.dataset.rowOrder) ?? 0;
+                const aLast = parseNum(a.dataset.lastUpdated) ?? 0;
+                const bLast = parseNum(b.dataset.lastUpdated) ?? 0;
+                const aPrice = parseNum(a.dataset.ownPrice) ?? 0;
+                const bPrice = parseNum(b.dataset.ownPrice) ?? 0;
+                const aDiff = parseNum(a.dataset.minDiff);
+                const bDiff = parseNum(b.dataset.minDiff);
+                const aDiffVal = aDiff === null ? Number.POSITIVE_INFINITY : aDiff;
+                const bDiffVal = bDiff === null ? Number.POSITIVE_INFINITY : bDiff;
+
+                if (sort === 'row_asc') return aRow - bRow;
+                if (sort === 'last_desc') return bLast - aLast;
+                if (sort === 'last_asc') return aLast - bLast;
+                if (sort === 'price_asc') return aPrice - bPrice;
+                if (sort === 'price_desc') return bPrice - aPrice;
+                if (sort === 'diff_asc') return aDiffVal - bDiffVal;
+                if (sort === 'diff_desc') return bDiffVal - aDiffVal;
+
+                return aRow - bRow;
+            }
+
+            function filteredSortedItems(items, q, group, sort) {
+                return items
+                    .filter((el) => itemMatchesFilter(el, q, group))
+                    .sort((a, b) => compareDashboardItems(a, b, sort));
+            }
+
+            function pageInfoFor(total) {
+                const perPage = getComparePerPageValue();
+                const pageCount = total > 0
+                    ? (perPage === Number.POSITIVE_INFINITY ? 1 : Math.max(1, Math.ceil(total / perPage)))
+                    : 0;
+                compareCurrentPage = pageCount > 0 ? Math.min(Math.max(1, compareCurrentPage), pageCount) : 1;
+
+                const start = pageCount > 0 && perPage !== Number.POSITIVE_INFINITY
+                    ? (compareCurrentPage - 1) * perPage
+                    : 0;
+                const end = pageCount > 0 && perPage !== Number.POSITIVE_INFINITY
+                    ? Math.min(total, start + perPage)
+                    : total;
+
+                return {
+                    pageCount,
+                    start,
+                    end,
+                    shown: Math.max(0, end - start),
+                };
+            }
+
+            function renderComparePagination(total, info) {
+                if (!comparisonPagination || !comparePageSummary || !comparePageButtons) {
+                    return;
+                }
+
+                const pageCount = info.pageCount;
+                const pageText = total > 0 ? compareCurrentPage : 0;
+                comparePageSummary.textContent = `Trang ${pageText}/${pageCount} • Hiển thị ${info.shown}/${total}`;
+
+                if (comparePageJump) {
+                    comparePageJump.disabled = pageCount <= 1;
+                    comparePageJump.max = String(Math.max(1, pageCount));
+                    comparePageJump.value = total > 0 ? String(compareCurrentPage) : '';
+                }
+
+                comparePageButtons.innerHTML = '';
+
+                const addButton = (label, page, disabled, active) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'comparison-page-btn' + (active ? ' is-active' : '');
+                    button.textContent = label;
+                    button.disabled = !!disabled;
+                    button.addEventListener('click', () => goToComparePage(page));
+                    comparePageButtons.appendChild(button);
+                };
+                const addDots = () => {
+                    const dots = document.createElement('span');
+                    dots.className = 'comparison-page-ellipsis';
+                    dots.textContent = '.....';
+                    comparePageButtons.appendChild(dots);
+                };
+
+                addButton('Trước', compareCurrentPage - 1, pageCount <= 1 || compareCurrentPage <= 1, false);
+
+                if (pageCount > 0) {
+                    const firstBlockEnd = Math.min(4, pageCount);
+                    for (let page = 1; page <= firstBlockEnd; page += 1) {
+                        addButton(String(page), page, false, page === compareCurrentPage);
+                    }
+                    if (pageCount > 5) {
+                        addDots();
+                        addButton(String(pageCount), pageCount, false, pageCount === compareCurrentPage);
+                    } else {
+                        for (let page = firstBlockEnd + 1; page <= pageCount; page += 1) {
+                            addButton(String(page), page, false, page === compareCurrentPage);
                         }
-                        if (visible && group) {
-                            if (group === '__none__') {
-                                visible = !groupId;
-                            } else {
-                                visible = groupId === group;
-                            }
-                        }
-                        el.style.display = visible ? '' : 'none';
-                    });
-
-                    const visibleItems = items.filter((r) => r.style.display !== 'none');
-                    visibleItems.sort((a, b) => {
-                        const aRow = parseNum(a.dataset.rowOrder) ?? 0;
-                        const bRow = parseNum(b.dataset.rowOrder) ?? 0;
-                        const aLast = parseNum(a.dataset.lastUpdated) ?? 0;
-                        const bLast = parseNum(b.dataset.lastUpdated) ?? 0;
-                        const aPrice = parseNum(a.dataset.ownPrice) ?? 0;
-                        const bPrice = parseNum(b.dataset.ownPrice) ?? 0;
-                        const aDiff = parseNum(a.dataset.minDiff);
-                        const bDiff = parseNum(b.dataset.minDiff);
-
-                        const aDiffVal = aDiff === null ? Number.POSITIVE_INFINITY : aDiff;
-                        const bDiffVal = bDiff === null ? Number.POSITIVE_INFINITY : bDiff;
-
-                        if (sort === 'row_asc') return aRow - bRow;
-                        if (sort === 'last_desc') return bLast - aLast;
-                        if (sort === 'last_asc') return aLast - bLast;
-                        if (sort === 'price_asc') return aPrice - bPrice;
-                        if (sort === 'price_desc') return bPrice - aPrice;
-                        if (sort === 'diff_asc') return aDiffVal - bDiffVal;
-                        if (sort === 'diff_desc') return bDiffVal - aDiffVal;
-                        return 0;
-                    });
-
-                    if (appendTo) {
-                        visibleItems.forEach((el) => appendTo.appendChild(el));
                     }
                 }
 
+                addButton('Sau', compareCurrentPage + 1, pageCount <= 1 || compareCurrentPage >= pageCount, false);
+            }
+
+            function applyPageVisibility(items, appendTo, visibleItems, q, group, sort, info) {
+                const visibleIds = new Set(visibleItems.slice(info.start, info.end).map((el) => String(el.dataset.productId || '')));
+                const hiddenItems = items
+                    .filter((el) => !itemMatchesFilter(el, q, group))
+                    .sort((a, b) => compareDashboardItems(a, b, 'row_asc'));
+
+                if (appendTo) {
+                    visibleItems.concat(hiddenItems).forEach((el) => appendTo.appendChild(el));
+                }
+
+                items.forEach((el) => {
+                    el.style.display = visibleIds.has(String(el.dataset.productId || '')) ? '' : 'none';
+                });
+            }
+
+            function applyFiltersAndSort(resetPage = false) {
+                if (resetPage) {
+                    compareCurrentPage = 1;
+                }
+
+                const q = (filterSearch?.value || '').trim().toLowerCase();
+                const group = filterGroup?.value || '';
+                const sort = sortSelect?.value || 'row_asc';
+                const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-product-row]')) : [];
+                const visibleRows = filteredSortedItems(rows, q, group, sort);
+                const info = pageInfoFor(visibleRows.length);
+
                 if (tbody) {
-                    const rows = Array.from(tbody.querySelectorAll('tr[data-product-row]'));
-                    applyToItems(rows, tbody);
+                    applyPageVisibility(rows, tbody, visibleRows, q, group, sort, info);
                 }
 
                 if (comparisonCardView) {
                     const cards = Array.from(comparisonCardView.querySelectorAll('[data-product-card]'));
-                    applyToItems(cards, comparisonCardView);
+                    const visibleCards = filteredSortedItems(cards, q, group, sort);
+                    applyPageVisibility(cards, comparisonCardView, visibleCards, q, group, sort, info);
                 }
+
+                renderComparePagination(visibleRows.length, info);
+            }
+
+            function goToComparePage(page) {
+                const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-product-row]')) : [];
+                const q = (filterSearch?.value || '').trim().toLowerCase();
+                const group = filterGroup?.value || '';
+                const total = rows.filter((el) => itemMatchesFilter(el, q, group)).length;
+                const info = pageInfoFor(total);
+                const target = Math.min(Math.max(1, Number(page) || 1), Math.max(1, info.pageCount));
+                if (target === compareCurrentPage) {
+                    return;
+                }
+                compareCurrentPage = target;
+                applyFiltersAndSort(false);
             }
 
             if (filterSearch) filterSearch.addEventListener('input', applyFiltersAndSort);
             if (filterGroup) filterGroup.addEventListener('change', applyFiltersAndSort);
             if (sortSelect) sortSelect.addEventListener('change', applyFiltersAndSort);
+            if (comparePerPage) {
+                comparePerPage.addEventListener('change', () => {
+                    try {
+                        localStorage.setItem(comparePerPageKey, comparePerPage.value || '50');
+                    } catch (e) {
+                    }
+                    applyFiltersAndSort(true);
+                });
+            }
+            if (comparePageJump) {
+                comparePageJump.addEventListener('change', () => goToComparePage(comparePageJump.value));
+                comparePageJump.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        goToComparePage(comparePageJump.value);
+                    }
+                });
+            }
             if (filterReset) {
                 filterReset.addEventListener('click', () => {
                     if (filterSearch) filterSearch.value = '';
                     if (filterGroup) filterGroup.value = '';
                     if (sortSelect) sortSelect.value = 'row_asc';
-                    applyFiltersAndSort();
+                    applyFiltersAndSort(true);
                 });
             }
 
