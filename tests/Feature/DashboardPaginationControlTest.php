@@ -37,4 +37,32 @@ class DashboardPaginationControlTest extends TestCase
             ->assertSee('id="compareFloatingNext"', false)
             ->assertSee('checkgia_compare_per_page', false);
     }
+
+    public function test_dashboard_comparison_table_is_paginated_on_server(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+
+        for ($i = 1; $i <= 55; $i++) {
+            Product::query()->create([
+                'user_id' => $owner->id,
+                'name' => 'San pham '.$i,
+                'price' => 1000000 + $i,
+                'product_url' => 'https://shop.test/product-'.$i,
+            ]);
+        }
+
+        $response = $this->actingAs($owner)
+            ->withHeader('X-Requested-With', 'XMLHttpRequest')
+            ->get(route('dashboard', ['per_page' => 20, 'page' => 2]));
+
+        $response->assertOk()
+            ->assertSee('data-current-page="2"', false)
+            ->assertSee('data-page-count="3"', false)
+            ->assertSee('data-total="55"', false)
+            ->assertSee('data-shown="20"', false);
+
+        $html = $response->getContent();
+        $this->assertSame(20, substr_count($html, 'data-product-row="'));
+        $this->assertSame(20, substr_count($html, 'data-product-card="'));
+    }
 }

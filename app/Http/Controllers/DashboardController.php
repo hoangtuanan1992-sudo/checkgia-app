@@ -55,8 +55,21 @@ class DashboardController extends Controller
             $productsQuery->whereIn('product_group_id', $productGroupRestrictionIds);
         }
 
+        $this->applyComparisonFilters($productsQuery, $request);
+        $this->applyComparisonSort($productsQuery, $request, $restrictedCompetitorSiteIds);
+
+        $perPage = $this->comparisonPerPage($request);
         $products = $productsQuery
-            ->get(['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at']);
+            ->paginate($perPage, ['products.id', 'products.user_id', 'products.product_group_id', 'products.name', 'products.price', 'products.product_url', 'products.last_scraped_at', 'products.created_at'], 'page')
+            ->withQueryString();
+        $productsTotal = $products->total();
+        $comparisonMeta = [
+            'page' => $products->currentPage(),
+            'pageCount' => $products->lastPage(),
+            'perPage' => $perPage,
+            'total' => $productsTotal,
+            'shown' => $products->count(),
+        ];
 
         $tz = 'Asia/Ho_Chi_Minh';
         $now = Carbon::now($tz);
@@ -95,16 +108,114 @@ class DashboardController extends Controller
             return $b['at'] <=> $a['at'];
         });
         $priceEvents = array_slice($priceEvents, 0, 6);
-        $compareMatchCounts = $this->compareMatchCounts($userId, $products, $competitorSites);
+        $compareMatchEnabled = User::compareMatchEnabledForId($userId);
+        $compareMatchProducts = collect();
+        if ($compareMatchEnabled) {
+            $compareMatchProductsQuery = Product::query()
+                ->with(['competitors' => function ($q) use ($restrictedCompetitorSiteIds) {
+                    $this->constrainToIds($q, $restrictedCompetitorSiteIds, 'competitor_site_id');
+                }])
+                ->where('user_id', $userId);
+            if ($hasProductGroupRestriction) {
+                $compareMatchProductsQuery->whereIn('product_group_id', $productGroupRestrictionIds);
+            }
+            $compareMatchProducts = $compareMatchProductsQuery->get(['id', 'user_id', 'product_group_id']);
+        }
+        $compareMatchCounts = $compareMatchEnabled
+            ? $this->compareMatchCounts($userId, $compareMatchProducts, $competitorSites)
+            : ['allCells' => 0, 'emptyCells' => 0, 'emptyCheckedCells' => 0, 'emptySkipRemainingCells' => 0];
 
         return view('dashboard.index', [
             'products' => $products,
+            'productsTotal' => $productsTotal,
+            'comparisonMeta' => $comparisonMeta,
             'competitorSites' => $competitorSites,
             'productGroups' => $productGroups,
             'priceEvents' => $priceEvents,
-            'compareMatchEnabled' => User::compareMatchEnabledForId($userId),
+            'compareMatchEnabled' => $compareMatchEnabled,
             'compareMatchCounts' => $compareMatchCounts,
         ]);
+    }
+
+    private function applyComparisonFilters($query, Request $request): void
+    {
+        $search = trim((string) $request->query('q', ''));
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('products.name', 'like', '%'.$search.'%');
+                if (ctype_digit($search)) {
+                    $q->orWhere('products.id', (int) $search);
+                }
+            });
+        }
+
+        $group = (string) $request->query('group', '');
+        if ($group === '__none__') {
+            $query->whereNull('products.product_group_id');
+        } elseif (ctype_digit($group)) {
+            $query->where('products.product_group_id', (int) $group);
+        }
+    }
+
+    private function applyComparisonSort($query, Request $request, ?array $restrictedCompetitorSiteIds): void
+    {
+        $sort = (string) $request->query('sort', 'row_asc');
+
+        if ($sort === 'price_asc') {
+            $query->orderBy('products.price')->orderByDesc('products.id');
+
+            return;
+        }
+
+        if ($sort === 'price_desc') {
+            $query->orderByDesc('products.price')->orderByDesc('products.id');
+
+            return;
+        }
+
+        if (in_array($sort, ['last_desc', 'last_asc'], true)) {
+            $latest = DB::table('competitor_prices as cp')
+                ->join('competitors as c', 'c.id', '=', 'cp.competitor_id')
+                ->whereColumn('c.product_id', 'products.id')
+                ->selectRaw('MAX(cp.fetched_at)');
+            $this->constrainToIds($latest, $restrictedCompetitorSiteIds, 'c.competitor_site_id');
+
+            $query->select('products.*')
+                ->selectSub($latest, 'latest_competitor_fetched_at');
+
+            $direction = $sort === 'last_asc' ? 'asc' : 'desc';
+            $query->orderByRaw('COALESCE(latest_competitor_fetched_at, products.last_scraped_at, products.updated_at) '.$direction)
+                ->orderByDesc('products.id');
+
+            return;
+        }
+
+        if (in_array($sort, ['diff_asc', 'diff_desc'], true)) {
+            $minDiff = DB::table('competitors as c')
+                ->whereColumn('c.product_id', 'products.id')
+                ->selectRaw('MIN((SELECT cp.price FROM competitor_prices cp WHERE cp.competitor_id = c.id ORDER BY cp.fetched_at DESC, cp.id DESC LIMIT 1) + COALESCE(c.price_adjustment, 0) - products.price)');
+            $this->constrainToIds($minDiff, $restrictedCompetitorSiteIds, 'c.competitor_site_id');
+
+            $query->select('products.*')
+                ->selectSub($minDiff, 'min_diff_sort');
+
+            $direction = $sort === 'diff_asc' ? 'asc' : 'desc';
+            $query->orderByRaw('min_diff_sort IS NULL')
+                ->orderBy('min_diff_sort', $direction)
+                ->orderByDesc('products.id');
+
+            return;
+        }
+
+        $query->orderByDesc('products.created_at')->orderByDesc('products.id');
+    }
+
+    private function comparisonPerPage(Request $request): int
+    {
+        $perPage = (int) $request->query('per_page', 50);
+        $allowed = [20, 50, 100, 200, 500];
+
+        return in_array($perPage, $allowed, true) ? $perPage : 50;
     }
 
     private function agoText(Carbon $at, Carbon $now): string

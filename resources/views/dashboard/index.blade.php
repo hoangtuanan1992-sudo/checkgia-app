@@ -211,34 +211,34 @@
                     <h2 class="card-title">Kết quả so sánh</h2>
                     <p class="card-sub">Giá chênh = Giá đối thủ - Giá của bạn</p>
                 </div>
-                <div class="pill">Tổng sản phẩm: {{ $products->count() }}</div>
+                <div class="pill" id="productsTotalPill">Tổng sản phẩm: {{ number_format((int) ($productsTotal ?? $products->count()), 0, ',', '.') }}</div>
             </div>
             <div class="card-body">
                 <div id="dashboardToolbar" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
                     <div class="field" style="margin-top:0;min-width:240px;flex:1">
                         <label class="label" for="filterSearch">Tìm kiếm</label>
-                        <input class="input" id="filterSearch" type="text" placeholder="Nhập tên sản phẩm hoặc ID...">
+                        <input class="input" id="filterSearch" type="text" value="{{ request('q') }}" placeholder="Nhập tên sản phẩm hoặc ID...">
                     </div>
                     <div class="field" style="margin-top:0;min-width:220px">
                         <label class="label" for="filterGroup">Nhóm</label>
                         <select class="input" id="filterGroup">
                             <option value="">Tất cả</option>
-                            <option value="__none__">Chưa có nhóm</option>
+                            <option value="__none__" @selected(request('group') === '__none__')>Chưa có nhóm</option>
                             @foreach($productGroups as $g)
-                                <option value="{{ $g->id }}">{{ $g->name }}</option>
+                                <option value="{{ $g->id }}" @selected((string) request('group') === (string) $g->id)>{{ $g->name }}</option>
                             @endforeach
                         </select>
                     </div>
                     <div class="field" style="margin-top:0;min-width:240px">
                         <label class="label" for="sortSelect">Sắp xếp</label>
                         <select class="input" id="sortSelect">
-                            <option value="row_asc">Số thứ tự</option>
-                            <option value="last_desc">Cập nhật gần nhất</option>
-                            <option value="last_asc">Cập nhật cũ nhất</option>
-                            <option value="price_asc">Giá của bạn: thấp → cao</option>
-                            <option value="price_desc">Giá của bạn: cao → thấp</option>
-                            <option value="diff_asc">Chênh lệch: rẻ hơn nhiều nhất</option>
-                            <option value="diff_desc">Chênh lệch: đắt hơn nhiều nhất</option>
+                            <option value="row_asc" @selected(request('sort', 'row_asc') === 'row_asc')>Số thứ tự</option>
+                            <option value="last_desc" @selected(request('sort') === 'last_desc')>Cập nhật gần nhất</option>
+                            <option value="last_asc" @selected(request('sort') === 'last_asc')>Cập nhật cũ nhất</option>
+                            <option value="price_asc" @selected(request('sort') === 'price_asc')>Giá của bạn: thấp → cao</option>
+                            <option value="price_desc" @selected(request('sort') === 'price_desc')>Giá của bạn: cao → thấp</option>
+                            <option value="diff_asc" @selected(request('sort') === 'diff_asc')>Chênh lệch: rẻ hơn nhiều nhất</option>
+                            <option value="diff_desc" @selected(request('sort') === 'diff_desc')>Chênh lệch: đắt hơn nhiều nhất</option>
                         </select>
                     </div>
                     <div class="actions" style="margin-top:0">
@@ -257,22 +257,26 @@
                 </div>
                 <div id="comparisonPagination" class="comparison-pagination" style="margin-top:0;margin-bottom:12px;padding-top:0;border-top:0">
                     <div class="comparison-page-left">
-                        <span id="comparePageSummary">Trang 1/1 • Hiển thị 0/0</span>
+                        <span id="comparePageSummary">Trang {{ (int) ($comparisonMeta['page'] ?? 1) }}/{{ (int) ($comparisonMeta['pageCount'] ?? 1) }} • Hiển thị {{ (int) ($comparisonMeta['shown'] ?? $products->count()) }}/{{ number_format((int) ($comparisonMeta['total'] ?? $products->count()), 0, ',', '.') }}</span>
                         <label class="label" for="comparePerPage" style="margin:0">Số dòng</label>
                         <select class="input comparison-per-page" id="comparePerPage">
-                            <option value="20">20</option>
-                            <option value="50" selected>50</option>
-                            <option value="100">100</option>
-                            <option value="200">200</option>
-                            <option value="500">500</option>
-                            <option value="all">Tất cả</option>
+                            @foreach([20, 50, 100, 200, 500] as $size)
+                                <option value="{{ $size }}" @selected((int) ($comparisonMeta['perPage'] ?? 50) === $size)>{{ $size }}</option>
+                            @endforeach
                         </select>
                         <label class="label" for="comparePageJump" style="margin:0">Bạn muốn xem trang:</label>
-                        <input class="input comparison-page-input" id="comparePageJump" type="number" min="1" value="1" inputmode="numeric">
+                        <input class="input comparison-page-input" id="comparePageJump" type="number" min="1" value="{{ (int) ($comparisonMeta['page'] ?? 1) }}" inputmode="numeric">
                     </div>
                     <div class="comparison-page-buttons" id="comparePageButtons" aria-label="Phân trang kết quả so sánh"></div>
                 </div>
 
+                @php($rowOffset = method_exists($products, 'firstItem') ? (($products->firstItem() ?? 1) - 1) : 0)
+                <div id="comparisonResults"
+                     data-current-page="{{ (int) ($comparisonMeta['page'] ?? 1) }}"
+                     data-page-count="{{ (int) ($comparisonMeta['pageCount'] ?? 1) }}"
+                     data-per-page="{{ (int) ($comparisonMeta['perPage'] ?? 50) }}"
+                     data-total="{{ (int) ($comparisonMeta['total'] ?? $products->count()) }}"
+                     data-shown="{{ (int) ($comparisonMeta['shown'] ?? $products->count()) }}">
                 <div class="table-wrap" id="comparisonTableView">
                     <table class="table">
                         <thead>
@@ -304,7 +308,7 @@
                                 })->filter(fn ($v) => ! is_null($v))->min())
                                 <tr
                                     data-product-row="{{ $product->id }}"
-                                    data-row-order="{{ $idx }}"
+                                    data-row-order="{{ $rowOffset + $idx }}"
                                     data-product-name="{{ $product->name }}"
                                     data-product-id="{{ $product->id }}"
                                     data-group-id="{{ $product->product_group_id ?? '' }}"
@@ -312,7 +316,7 @@
                                     data-last-updated="{{ $lastUpdated?->timestamp ?? 0 }}"
                                     data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
                                 >
-                                    <td>{{ $idx+1 }}</td>
+                                    <td>{{ $rowOffset + $idx + 1 }}</td>
                                     <td>
                                         <div style="display:flex;gap:10px;align-items:center">
                                             <div style="display:flex;flex-direction:column;gap:4px">
@@ -505,7 +509,7 @@
                         <div
                             class="card compare-card"
                             data-product-card="{{ $product->id }}"
-                            data-row-order="{{ $idx }}"
+                            data-row-order="{{ $rowOffset + $idx }}"
                             data-product-name="{{ $product->name }}"
                             data-product-id="{{ $product->id }}"
                             data-group-id="{{ $product->product_group_id ?? '' }}"
@@ -648,6 +652,7 @@
                 </div>
 
                 <div id="comparisonBottomSentinel" style="height:1px"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1317,12 +1322,14 @@
 
             function setCompareView(mode, persist) {
                 const nextMode = mode === 'cards' ? 'cards' : 'table';
+                const tableView = document.getElementById('comparisonTableView');
+                const cardView = document.getElementById('comparisonCardView');
 
-                if (comparisonCardView) {
-                    comparisonCardView.style.display = nextMode === 'cards' ? 'grid' : 'none';
+                if (cardView) {
+                    cardView.style.display = nextMode === 'cards' ? 'grid' : 'none';
                 }
-                if (comparisonTableView) {
-                    comparisonTableView.style.display = nextMode === 'cards' ? 'none' : '';
+                if (tableView) {
+                    tableView.style.display = nextMode === 'cards' ? 'none' : '';
                 }
 
                 if (compareViewToggle) {
@@ -1380,12 +1387,71 @@
                 });
             });
 
+            function bindDynamicComparisonControls(root) {
+                const scope = root || document;
+                scope.querySelectorAll('.js-edit-url').forEach((btn) => {
+                    if (btn.dataset.dynamicBound === '1') return;
+                    btn.dataset.dynamicBound = '1';
+                    btn.addEventListener('click', (e) => {
+                        if (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+                        open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
+                    });
+                });
+                scope.querySelectorAll('.js-edit-adjustment').forEach((btn) => {
+                    if (btn.dataset.dynamicBound === '1') return;
+                    btn.dataset.dynamicBound = '1';
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        lastAdjustButton = btn;
+                        openAdjust(btn.dataset.action, btn.dataset.value);
+                    });
+                });
+                scope.querySelectorAll('.js-delete-product').forEach((btn) => {
+                    if (btn.dataset.dynamicBound === '1') return;
+                    btn.dataset.dynamicBound = '1';
+                    btn.addEventListener('click', () => {
+                        openDelete(btn.dataset.action, btn.dataset.productId);
+                    });
+                });
+                scope.querySelectorAll('.js-add-link').forEach((btn) => {
+                    if (btn.dataset.dynamicBound === '1') return;
+                    btn.dataset.dynamicBound = '1';
+                    btn.addEventListener('click', () => {
+                        const targetId = btn.dataset.target || '';
+                        const target = targetId ? document.getElementById(targetId) : null;
+                        if (!target) return;
+                        target.style.display = target.style.display === 'none' ? '' : 'none';
+                        const select = target.querySelector('select');
+                        if (select) select.focus();
+                    });
+                });
+                scope.querySelectorAll('.js-add-link-select').forEach((select) => {
+                    if (select.dataset.dynamicBound === '1') return;
+                    select.dataset.dynamicBound = '1';
+                    select.addEventListener('change', () => {
+                        const action = select.value || '';
+                        if (!action) return;
+                        open(action, '', 'url');
+                        const wrapId = select.dataset.target || '';
+                        const wrap = wrapId ? document.getElementById(wrapId) : null;
+                        if (wrap) wrap.style.display = 'none';
+                        select.value = '';
+                    });
+                });
+            }
+
             const filterSearch = document.getElementById('filterSearch');
             const filterGroup = document.getElementById('filterGroup');
             const sortSelect = document.getElementById('sortSelect');
             const filterReset = document.getElementById('filterReset');
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
+            const productsTotalPill = document.getElementById('productsTotalPill');
             const tbody = document.querySelector('table.table tbody');
             const comparisonPagination = document.getElementById('comparisonPagination');
             const comparePerPage = document.getElementById('comparePerPage');
@@ -1397,8 +1463,11 @@
             const compareFloatingPrev = document.getElementById('compareFloatingPrev');
             const compareFloatingNext = document.getElementById('compareFloatingNext');
             const comparePerPageKey = 'checkgia_compare_per_page';
+            const comparisonFetchUrl = '{{ route('dashboard') }}';
             let compareCurrentPage = 1;
             let comparisonBottomVisible = false;
+            let compareLastPageCount = 0;
+            let comparisonRequest = null;
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1411,7 +1480,7 @@
             function getStoredPerPage() {
                 try {
                     const value = localStorage.getItem(comparePerPageKey);
-                    return ['20', '50', '100', '200', '500', 'all'].includes(value) ? value : '50';
+                    return ['20', '50', '100', '200', '500'].includes(value) ? value : '50';
                 } catch (e) {
                     return '50';
                 }
@@ -1423,10 +1492,6 @@
 
             function getComparePerPageValue() {
                 const value = comparePerPage?.value || '50';
-                if (value === 'all') {
-                    return Number.POSITIVE_INFINITY;
-                }
-
                 const parsed = Number(value);
                 return Number.isFinite(parsed) && parsed > 0 ? parsed : 50;
             }
@@ -1497,12 +1562,115 @@
                 };
             }
 
+            function currentComparisonResults() {
+                return document.getElementById('comparisonResults');
+            }
+
+            function comparisonMetaFromDom() {
+                const node = currentComparisonResults();
+                const total = Number(node?.dataset.total || 0);
+                const pageCount = Math.max(0, Number(node?.dataset.pageCount || 0));
+                return {
+                    page: Math.max(1, Number(node?.dataset.currentPage || 1)),
+                    pageCount,
+                    perPage: Math.max(1, Number(node?.dataset.perPage || getComparePerPageValue())),
+                    total,
+                    shown: Math.max(0, Number(node?.dataset.shown || 0)),
+                };
+            }
+
+            function renderComparisonFromCurrentResults() {
+                const meta = comparisonMetaFromDom();
+                compareCurrentPage = meta.page;
+                compareLastPageCount = meta.pageCount;
+                if (comparePerPage && String(comparePerPage.value || '') !== String(meta.perPage)) {
+                    comparePerPage.value = String(meta.perPage);
+                }
+                renderComparePagination(meta.total, {pageCount: meta.pageCount, shown: meta.shown});
+                setCompareView(isMobileView() ? 'cards' : getStoredCompareView(), false);
+            }
+
+            function comparisonQueryParams(page) {
+                const params = new URLSearchParams();
+                const q = (filterSearch?.value || '').trim();
+                const group = filterGroup?.value || '';
+                const sort = sortSelect?.value || 'row_asc';
+                const perPage = comparePerPage?.value || '50';
+                if (q) params.set('q', q);
+                if (group) params.set('group', group);
+                if (sort && sort !== 'row_asc') params.set('sort', sort);
+                params.set('per_page', perPage);
+                params.set('page', String(Math.max(1, Number(page) || 1)));
+
+                return params;
+            }
+
+            async function loadComparisonPage(page) {
+                const params = comparisonQueryParams(page);
+                const url = `${comparisonFetchUrl}?${params.toString()}`;
+                const current = currentComparisonResults();
+                if (current) {
+                    current.style.opacity = '.55';
+                    current.style.pointerEvents = 'none';
+                }
+                if (comparisonRequest) {
+                    comparisonRequest.abort();
+                }
+                comparisonRequest = new AbortController();
+
+                try {
+                    const response = await fetch(url, {
+                        headers: {
+                            'Accept': 'text/html',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'include',
+                        signal: comparisonRequest.signal,
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const html = await response.text();
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    const nextResults = doc.getElementById('comparisonResults');
+                    if (!nextResults) {
+                        throw new Error('Missing comparison results');
+                    }
+
+                    const nextPill = doc.getElementById('productsTotalPill');
+                    if (productsTotalPill && nextPill) {
+                        productsTotalPill.textContent = nextPill.textContent;
+                    }
+
+                    const activeMode = compareViewToggle?.dataset.mode || (isMobileView() ? 'cards' : getStoredCompareView());
+                    currentComparisonResults()?.replaceWith(nextResults);
+                    bindDynamicComparisonControls(nextResults);
+                    renderComparisonFromCurrentResults();
+                    setCompareView(activeMode, false);
+                    history.replaceState(null, '', url);
+                } catch (error) {
+                    if (!(error instanceof DOMException && error.name === 'AbortError')) {
+                        alert('Không tải được phân trang. Vui lòng thử lại.');
+                    }
+                } finally {
+                    const node = currentComparisonResults();
+                    if (node) {
+                        node.style.opacity = '';
+                        node.style.pointerEvents = '';
+                    }
+                    comparisonRequest = null;
+                }
+            }
+
             function renderComparePagination(total, info) {
                 if (!comparisonPagination || !comparePageSummary || !comparePageButtons) {
                     return;
                 }
 
                 const pageCount = info.pageCount;
+                compareLastPageCount = pageCount;
                 const pageText = total > 0 ? compareCurrentPage : 0;
                 comparePageSummary.textContent = `Trang ${pageText}/${pageCount} • Hiển thị ${info.shown}/${total}`;
 
@@ -1563,13 +1731,11 @@
             }
 
             function applyPageVisibility(items, appendTo, visibleItems, q, group, sort, info) {
-                const visibleIds = new Set(visibleItems.slice(info.start, info.end).map((el) => String(el.dataset.productId || '')));
-                const hiddenItems = items
-                    .filter((el) => !itemMatchesFilter(el, q, group))
-                    .sort((a, b) => compareDashboardItems(a, b, 'row_asc'));
+                const pageItems = visibleItems.slice(info.start, info.end);
+                const visibleIds = new Set(pageItems.map((el) => String(el.dataset.productId || '')));
 
                 if (appendTo) {
-                    visibleItems.concat(hiddenItems).forEach((el) => appendTo.appendChild(el));
+                    pageItems.forEach((el) => appendTo.appendChild(el));
                 }
 
                 items.forEach((el) => {
@@ -1578,47 +1744,27 @@
             }
 
             function applyFiltersAndSort(resetPage = false) {
-                if (resetPage) {
-                    compareCurrentPage = 1;
-                }
-
-                const q = (filterSearch?.value || '').trim().toLowerCase();
-                const group = filterGroup?.value || '';
-                const sort = sortSelect?.value || 'row_asc';
-                const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-product-row]')) : [];
-                const visibleRows = filteredSortedItems(rows, q, group, sort);
-                const info = pageInfoFor(visibleRows.length);
-
-                if (tbody) {
-                    applyPageVisibility(rows, tbody, visibleRows, q, group, sort, info);
-                }
-
-                if (comparisonCardView) {
-                    const cards = Array.from(comparisonCardView.querySelectorAll('[data-product-card]'));
-                    const visibleCards = filteredSortedItems(cards, q, group, sort);
-                    applyPageVisibility(cards, comparisonCardView, visibleCards, q, group, sort, info);
-                }
-
-                renderComparePagination(visibleRows.length, info);
+                return loadComparisonPage(resetPage ? 1 : compareCurrentPage);
             }
 
             function goToComparePage(page) {
-                const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-product-row]')) : [];
-                const q = (filterSearch?.value || '').trim().toLowerCase();
-                const group = filterGroup?.value || '';
-                const total = rows.filter((el) => itemMatchesFilter(el, q, group)).length;
-                const info = pageInfoFor(total);
-                const target = Math.min(Math.max(1, Number(page) || 1), Math.max(1, info.pageCount));
+                const target = Math.min(Math.max(1, Number(page) || 1), Math.max(1, compareLastPageCount || 1));
                 if (target === compareCurrentPage) {
                     return;
                 }
                 compareCurrentPage = target;
-                applyFiltersAndSort(false);
+                return loadComparisonPage(compareCurrentPage);
             }
 
-            if (filterSearch) filterSearch.addEventListener('input', applyFiltersAndSort);
-            if (filterGroup) filterGroup.addEventListener('change', applyFiltersAndSort);
-            if (sortSelect) sortSelect.addEventListener('change', applyFiltersAndSort);
+            let comparisonSearchTimer = null;
+            if (filterSearch) {
+                filterSearch.addEventListener('input', () => {
+                    clearTimeout(comparisonSearchTimer);
+                    comparisonSearchTimer = setTimeout(() => applyFiltersAndSort(true), 250);
+                });
+            }
+            if (filterGroup) filterGroup.addEventListener('change', () => applyFiltersAndSort(true));
+            if (sortSelect) sortSelect.addEventListener('change', () => applyFiltersAndSort(true));
             if (comparePerPage) {
                 comparePerPage.addEventListener('change', () => {
                     try {
@@ -1650,20 +1796,12 @@
 
                 const rect = comparisonBottomSentinel.getBoundingClientRect();
                 comparisonBottomVisible = rect.top <= window.innerHeight && rect.bottom >= 0;
-                const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-product-row]')) : [];
-                const q = (filterSearch?.value || '').trim().toLowerCase();
-                const group = filterGroup?.value || '';
-                const total = rows.filter((el) => itemMatchesFilter(el, q, group)).length;
-                updateFloatingPager(pageInfoFor(total).pageCount);
+                updateFloatingPager(compareLastPageCount);
             }
             if (comparisonBottomSentinel && 'IntersectionObserver' in window) {
                 const floatingPagerObserver = new IntersectionObserver((entries) => {
                     comparisonBottomVisible = entries.some((entry) => entry.isIntersecting);
-                    const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-product-row]')) : [];
-                    const q = (filterSearch?.value || '').trim().toLowerCase();
-                    const group = filterGroup?.value || '';
-                    const total = rows.filter((el) => itemMatchesFilter(el, q, group)).length;
-                    updateFloatingPager(pageInfoFor(total).pageCount);
+                    updateFloatingPager(compareLastPageCount);
                 }, {threshold: 0});
                 floatingPagerObserver.observe(comparisonBottomSentinel);
             } else {
@@ -1693,7 +1831,7 @@
 
             if (filterGroup) filterGroup.addEventListener('change', syncExportLinks);
             syncExportLinks();
-            applyFiltersAndSort();
+            renderComparisonFromCurrentResults();
         })();
     </script>
 @endsection
