@@ -229,6 +229,69 @@ class DashboardCompareMatchTest extends TestCase
             ->assertSee('id="compareMatchOpen"', false);
     }
 
+    public function test_compare_match_popup_shows_cell_counts_for_each_mode(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner', 'allow_compare_match' => true]);
+        $productA = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Product A',
+            'price' => 1000000,
+            'product_url' => 'https://own.test/a',
+        ]);
+        $productB = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Product B',
+            'price' => 2000000,
+            'product_url' => 'https://own.test/b',
+        ]);
+        $siteA = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Site A',
+            'position' => 1,
+        ]);
+        $siteB = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Site B',
+            'position' => 2,
+        ]);
+        Competitor::query()->create([
+            'product_id' => $productA->id,
+            'competitor_site_id' => $siteA->id,
+            'name' => $siteA->name,
+            'url' => 'https://site-a.test/product-a',
+        ]);
+        Competitor::query()->create([
+            'product_id' => $productB->id,
+            'competitor_site_id' => $siteA->id,
+            'name' => $siteA->name,
+            'url' => '',
+        ]);
+        $previousRun = CompareMatchRun::query()->create([
+            'user_id' => $owner->id,
+            'mode' => 'empty',
+            'status' => 'done',
+            'total_products' => 1,
+            'processed_products' => 1,
+            'total_cells' => 1,
+            'processed_cells' => 1,
+        ]);
+        CompareMatchRunItem::query()->create([
+            'compare_match_run_id' => $previousRun->id,
+            'product_id' => $productA->id,
+            'competitor_site_id' => $siteB->id,
+            'status' => 'no_match',
+            'processed_at' => now(),
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('So khớp toàn bộ')
+            ->assertSee('4 ô')
+            ->assertSee('3 ô trống')
+            ->assertSee('Còn 2 / đã so khớp 1');
+    }
+
     public function test_compare_match_endpoint_is_forbidden_when_permission_is_off(): void
     {
         $owner = User::factory()->create(['role' => 'owner', 'allow_compare_match' => false]);

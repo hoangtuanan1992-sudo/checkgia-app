@@ -554,6 +554,7 @@
     </div>
 
     @if($compareMatchEnabled ?? false)
+        @php($compareMatchCounts = $compareMatchCounts ?? ['allCells' => 0, 'emptyCells' => 0, 'emptyCheckedCells' => 0, 'emptySkipRemainingCells' => 0])
         <dialog id="compareMatchDialog" class="dialog">
             <div class="dialog-header">
                 <h3 class="card-title" style="font-size:18px">So khớp link đối thủ</h3>
@@ -561,9 +562,18 @@
             </div>
             <div class="dialog-body">
                 <div id="compareMatchChoices" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
-                    <button class="btn" type="button" data-compare-mode="all">So khớp toàn bộ</button>
-                    <button class="btn btn-secondary" type="button" data-compare-mode="empty">So khớp ô trống</button>
-                    <button class="btn btn-secondary" type="button" data-compare-mode="empty_skip_checked">Ô trống mới, bỏ qua ô đã so khớp</button>
+                    <button class="btn" type="button" data-compare-mode="all" style="flex-direction:column;gap:4px;min-height:58px;line-height:1.2">
+                        <span>So khớp toàn bộ</span>
+                        <span style="font-size:12px;font-weight:600;opacity:.86">{{ number_format((int) $compareMatchCounts['allCells'], 0, ',', '.') }} ô</span>
+                    </button>
+                    <button class="btn btn-secondary" type="button" data-compare-mode="empty" style="flex-direction:column;gap:4px;min-height:58px;line-height:1.2">
+                        <span>So khớp ô trống</span>
+                        <span style="font-size:12px;font-weight:600;color:var(--muted)">{{ number_format((int) $compareMatchCounts['emptyCells'], 0, ',', '.') }} ô trống</span>
+                    </button>
+                    <button class="btn btn-secondary" type="button" data-compare-mode="empty_skip_checked" style="flex-direction:column;gap:4px;min-height:58px;line-height:1.2">
+                        <span>Ô trống mới, bỏ qua ô đã so khớp</span>
+                        <span style="font-size:12px;font-weight:600;color:var(--muted)">Còn {{ number_format((int) $compareMatchCounts['emptySkipRemainingCells'], 0, ',', '.') }} / đã so khớp {{ number_format((int) $compareMatchCounts['emptyCheckedCells'], 0, ',', '.') }}</span>
+                    </button>
                 </div>
                 <div id="compareMatchProgress" style="display:none;margin-top:14px">
                     <div class="hint" id="compareMatchProgressText" style="margin-top:0">Đang chuẩn bị...</div>

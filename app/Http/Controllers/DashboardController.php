@@ -95,6 +95,7 @@ class DashboardController extends Controller
             return $b['at'] <=> $a['at'];
         });
         $priceEvents = array_slice($priceEvents, 0, 6);
+        $compareMatchCounts = $this->compareMatchCounts($userId, $products, $competitorSites);
 
         return view('dashboard.index', [
             'products' => $products,
@@ -102,6 +103,7 @@ class DashboardController extends Controller
             'productGroups' => $productGroups,
             'priceEvents' => $priceEvents,
             'compareMatchEnabled' => User::compareMatchEnabledForId($userId),
+            'compareMatchCounts' => $compareMatchCounts,
         ]);
     }
 
@@ -143,6 +145,61 @@ class DashboardController extends Controller
         }
 
         return (string) $abs;
+    }
+
+    private function compareMatchCounts(int $userId, $products, $competitorSites): array
+    {
+        $productIds = $products->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        $siteIds = $competitorSites->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        $totalCells = count($productIds) * count($siteIds);
+
+        if ($totalCells === 0) {
+            return [
+                'allCells' => 0,
+                'emptyCells' => 0,
+                'emptyCheckedCells' => 0,
+                'emptySkipRemainingCells' => 0,
+            ];
+        }
+
+        $emptyPairs = [];
+        foreach ($products as $product) {
+            $map = $product->competitors->keyBy('competitor_site_id');
+            foreach ($competitorSites as $site) {
+                $competitor = $map->get($site->id);
+                if (! $competitor || trim((string) $competitor->url) === '') {
+                    $emptyPairs[(int) $product->id.'|'.(int) $site->id] = true;
+                }
+            }
+        }
+
+        $emptyCells = count($emptyPairs);
+        $emptyCheckedCells = 0;
+
+        if ($emptyCells > 0 && Schema::hasTable('compare_match_runs') && Schema::hasTable('compare_match_run_items')) {
+            $checkedPairs = DB::table('compare_match_run_items as i')
+                ->join('compare_match_runs as r', 'r.id', '=', 'i.compare_match_run_id')
+                ->where('r.user_id', $userId)
+                ->whereIn('i.product_id', $productIds)
+                ->whereIn('i.competitor_site_id', $siteIds)
+                ->whereIn('i.status', ['matched', 'no_candidates', 'no_match'])
+                ->select('i.product_id', 'i.competitor_site_id')
+                ->distinct()
+                ->get();
+
+            foreach ($checkedPairs as $pair) {
+                if (isset($emptyPairs[(int) $pair->product_id.'|'.(int) $pair->competitor_site_id])) {
+                    $emptyCheckedCells++;
+                }
+            }
+        }
+
+        return [
+            'allCells' => $totalCells,
+            'emptyCells' => $emptyCells,
+            'emptyCheckedCells' => $emptyCheckedCells,
+            'emptySkipRemainingCells' => max(0, $emptyCells - $emptyCheckedCells),
+        ];
     }
 
     /**
