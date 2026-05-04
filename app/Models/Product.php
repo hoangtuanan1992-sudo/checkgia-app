@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at'])]
+#[Fillable(['user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'own_scrape_failed_since'])]
 class Product extends Model
 {
     use HasFactory;
@@ -17,6 +17,7 @@ class Product extends Model
     {
         return [
             'last_scraped_at' => 'datetime',
+            'own_scrape_failed_since' => 'datetime',
         ];
     }
 

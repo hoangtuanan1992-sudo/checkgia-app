@@ -14,6 +14,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Schema;
 
 class ScrapeProductPrices implements ShouldQueue
 {
@@ -51,6 +52,7 @@ class ScrapeProductPrices implements ShouldQueue
 
         $scraper = new PriceScraper;
         $notifier = new AlertNotifier;
+        $ownScrapeSucceeded = false;
 
         try {
             $html = $scraper->fetchHtml($product->product_url);
@@ -79,10 +81,15 @@ class ScrapeProductPrices implements ShouldQueue
             $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
 
             if ($name && ! is_null($price)) {
-                $product->update([
+                $updates = [
                     'name' => $name,
                     'price' => $price,
-                ]);
+                ];
+                if (Schema::hasColumn('products', 'own_scrape_failed_since')) {
+                    $updates['own_scrape_failed_since'] = null;
+                }
+                $product->update($updates);
+                $ownScrapeSucceeded = true;
 
                 $latestOwn = ProductPriceHistory::query()->where('product_id', $product->id)->latest('fetched_at')->first();
                 if (! $latestOwn || (int) $latestOwn->price !== (int) $price) {
@@ -94,6 +101,10 @@ class ScrapeProductPrices implements ShouldQueue
                 }
             }
         } catch (\Throwable $e) {
+        }
+
+        if (! $ownScrapeSucceeded && $this->markOwnScrapeFailureAndShouldStop($product, $settings)) {
+            return;
         }
 
         foreach ($product->competitors as $competitor) {
@@ -130,5 +141,38 @@ class ScrapeProductPrices implements ShouldQueue
 
         $product->last_scraped_at = now();
         $product->save();
+    }
+
+    private function markOwnScrapeFailureAndShouldStop(Product $product, UserScrapeSetting $settings): bool
+    {
+        if (! Schema::hasColumn('products', 'own_scrape_failed_since')) {
+            return false;
+        }
+
+        $now = now();
+        if (! $product->own_scrape_failed_since) {
+            $product->own_scrape_failed_since = $now;
+            $product->save();
+
+            return false;
+        }
+
+        $enabled = Schema::hasColumn('user_scrape_settings', 'auto_delete_failed_products_enabled')
+            && (bool) $settings->auto_delete_failed_products_enabled;
+        if (! $enabled) {
+            return false;
+        }
+
+        $days = Schema::hasColumn('user_scrape_settings', 'auto_delete_failed_products_days')
+            ? max(1, (int) ($settings->auto_delete_failed_products_days ?: 7))
+            : 7;
+
+        if ($product->own_scrape_failed_since->lte($now->copy()->subDays($days))) {
+            $product->delete();
+
+            return true;
+        }
+
+        return false;
     }
 }

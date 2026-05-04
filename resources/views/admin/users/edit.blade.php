@@ -96,6 +96,28 @@
                         </div>
                     </div>
 
+                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px" id="autoDeleteCard">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Xóa sản phẩm tự động</h2>
+                            <p class="card-sub">Tự xóa hàng ở bảng Kết quả so sánh nếu nhiều ngày liên tiếp không lấy được tên và giá sản phẩm của bạn</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            <label style="display:flex;align-items:center;gap:10px;font-weight:700;margin-bottom:12px">
+                                <input type="hidden" name="auto_delete_failed_products_enabled" value="0">
+                                <input type="checkbox" name="auto_delete_failed_products_enabled" value="1" @checked(old('auto_delete_failed_products_enabled', (bool) ($userScrapeSetting->auto_delete_failed_products_enabled ?? false))) style="width:20px;height:20px">
+                                Bật xóa tự động khi không lấy được tên và giá
+                            </label>
+                            @error('auto_delete_failed_products_enabled')<div class="error">{{ $message }}</div>@enderror
+
+                            <div class="field" style="margin-top:0;max-width:260px">
+                                <label class="label" for="auto_delete_failed_products_days">Số ngày lỗi liên tiếp</label>
+                                <input class="input" id="auto_delete_failed_products_days" name="auto_delete_failed_products_days" type="number" min="1" max="365" value="{{ old('auto_delete_failed_products_days', $userScrapeSetting->auto_delete_failed_products_days ?? 7) }}">
+                                @error('auto_delete_failed_products_days')<div class="error">{{ $message }}</div>@enderror
+                                <div class="hint">Ví dụ nhập 7: nếu sau 7 ngày vẫn không lấy được tên và giá sản phẩm của bạn thì hệ thống xóa sản phẩm đó.</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px" id="noteCard">
                         <div class="card-header" style="padding:16px 16px 6px">
                             <h2 class="card-title" style="font-size:18px">Ghi chú</h2>
@@ -145,6 +167,7 @@
             const parentField = document.getElementById('parentField');
             const serviceCard = document.getElementById('serviceCard');
             const updateIntervalCard = document.getElementById('updateIntervalCard');
+            const autoDeleteCard = document.getElementById('autoDeleteCard');
             const noteCard = document.getElementById('noteCard');
             const permissionCard = document.getElementById('permissionCard');
 
@@ -154,6 +177,7 @@
                 const showForShop = role.value === 'owner';
                 if (serviceCard) serviceCard.style.display = showForShop ? '' : 'none';
                 if (updateIntervalCard) updateIntervalCard.style.display = showForShop ? '' : 'none';
+                if (autoDeleteCard) autoDeleteCard.style.display = showForShop ? '' : 'none';
                 if (noteCard) noteCard.style.display = showForShop ? '' : 'none';
                 if (permissionCard) permissionCard.style.display = showForShop ? '' : 'none';
             }

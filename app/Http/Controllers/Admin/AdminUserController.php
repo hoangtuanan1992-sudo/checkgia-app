@@ -129,6 +129,8 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'scrape_schedule_times' => ['nullable', 'string', 'max:255', $this->scrapeScheduleTimesRule()],
+            'auto_delete_failed_products_enabled' => ['nullable', 'boolean'],
+            'auto_delete_failed_products_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
             'allow_compare_match' => ['nullable', 'boolean'],
             'allow_shopee_check' => ['nullable', 'boolean'],
@@ -173,13 +175,10 @@ class AdminUserController extends Controller
 
         $user = User::create($createData);
 
-        if ($data['role'] === 'owner' && Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times')) {
+        if ($data['role'] === 'owner' && Schema::hasTable('user_scrape_settings')) {
             UserScrapeSetting::query()->updateOrCreate(
                 ['user_id' => $user->id],
-                [
-                    'scrape_interval_minutes' => 10,
-                    'scrape_schedule_times' => $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? ''),
-                ]
+                $this->scrapeSettingPayload($data)
             );
         }
 
@@ -227,6 +226,8 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'scrape_schedule_times' => ['nullable', 'string', 'max:255', $this->scrapeScheduleTimesRule()],
+            'auto_delete_failed_products_enabled' => ['nullable', 'boolean'],
+            'auto_delete_failed_products_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
             'allow_compare_match' => ['nullable', 'boolean'],
             'allow_shopee_check' => ['nullable', 'boolean'],
@@ -274,13 +275,10 @@ class AdminUserController extends Controller
 
         $user->update($updates);
 
-        if ($updates['role'] === 'owner' && Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times')) {
+        if ($updates['role'] === 'owner' && Schema::hasTable('user_scrape_settings')) {
             UserScrapeSetting::query()->updateOrCreate(
                 ['user_id' => $user->id],
-                [
-                    'scrape_interval_minutes' => 10,
-                    'scrape_schedule_times' => $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? ''),
-                ]
+                $this->scrapeSettingPayload($data)
             );
         }
 
@@ -314,6 +312,31 @@ class AdminUserController extends Controller
         $normalized = UserScrapeSetting::normalizeScheduleTimes($value);
 
         return $normalized;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function scrapeSettingPayload(array $data): array
+    {
+        $payload = [
+            'scrape_interval_minutes' => 10,
+        ];
+
+        if (Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times')) {
+            $payload['scrape_schedule_times'] = $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? '');
+        }
+
+        if (Schema::hasColumn('user_scrape_settings', 'auto_delete_failed_products_enabled')) {
+            $payload['auto_delete_failed_products_enabled'] = (bool) ($data['auto_delete_failed_products_enabled'] ?? false);
+        }
+
+        if (Schema::hasColumn('user_scrape_settings', 'auto_delete_failed_products_days')) {
+            $payload['auto_delete_failed_products_days'] = max(1, min(365, (int) ($data['auto_delete_failed_products_days'] ?? 7)));
+        }
+
+        return $payload;
     }
 
     private function scrapeScheduleTimesRule(): \Closure
