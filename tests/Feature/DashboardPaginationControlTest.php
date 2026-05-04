@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Product;
+use App\Models\ProductGroup;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -35,6 +36,9 @@ class DashboardPaginationControlTest extends TestCase
             ->assertSee('id="comparisonFloatingPager"', false)
             ->assertSee('id="compareFloatingPrev"', false)
             ->assertSee('id="compareFloatingNext"', false)
+            ->assertSee('id="bulkDeleteOpen"', false)
+            ->assertSee('id="bulkDeleteDialog"', false)
+            ->assertDontSee('id="filterReset"', false)
             ->assertSee('checkgia_compare_per_page', false);
     }
 
@@ -66,5 +70,64 @@ class DashboardPaginationControlTest extends TestCase
         preg_match_all('/<div\b[^>]*data-product-card="/', $html, $cardMatches);
         $this->assertSame(20, count($rowMatches[0]));
         $this->assertSame(20, count($cardMatches[0]));
+    }
+
+    public function test_dashboard_bulk_delete_removes_only_filtered_products(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $groupA = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Group A',
+        ]);
+        $groupB = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Group B',
+        ]);
+
+        $deleteA = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $groupA->id,
+            'name' => 'Phone Alpha',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/phone-alpha',
+        ]);
+        $deleteB = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $groupA->id,
+            'name' => 'Phone Beta',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/phone-beta',
+        ]);
+        $keepSameGroup = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $groupA->id,
+            'name' => 'Laptop Alpha',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/laptop-alpha',
+        ]);
+        $keepSameSearch = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $groupB->id,
+            'name' => 'Phone Gamma',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/phone-gamma',
+        ]);
+
+        $this->actingAs($owner)
+            ->deleteJson(route('dashboard.products.bulk-destroy', [
+                'q' => 'Phone',
+                'group' => $groupA->id,
+            ]))
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'matched' => 2,
+                'deleted' => 2,
+            ]);
+
+        $this->assertDatabaseMissing('products', ['id' => $deleteA->id]);
+        $this->assertDatabaseMissing('products', ['id' => $deleteB->id]);
+        $this->assertDatabaseHas('products', ['id' => $keepSameGroup->id]);
+        $this->assertDatabaseHas('products', ['id' => $keepSameSearch->id]);
     }
 }

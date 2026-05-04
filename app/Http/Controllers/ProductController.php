@@ -362,4 +362,47 @@ class ProductController extends Controller
 
         return back()->with('status', 'Đã xoá sản phẩm');
     }
+
+    public function destroyFilteredFromDashboard(Request $request): RedirectResponse|JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user, 403);
+        abort_if($user->isViewer(), 403);
+
+        $query = Product::query()->where('user_id', $user->effectiveUserId());
+        $this->applyDashboardDeleteFilters($query, $request);
+
+        $count = (clone $query)->count();
+        $deleted = $query->delete();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'matched' => $count,
+                'deleted' => $deleted,
+            ]);
+        }
+
+        return back()->with('status', 'Đã xoá '.$deleted.' sản phẩm');
+    }
+
+    private function applyDashboardDeleteFilters($query, Request $request): void
+    {
+        $search = trim((string) $request->query('q', $request->input('q', '')));
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%'.$search.'%');
+                if (ctype_digit($search)) {
+                    $q->orWhere('id', (int) $search);
+                }
+            });
+        }
+
+        $group = (string) $request->query('group', $request->input('group', ''));
+        if ($group === '__none__') {
+            $query->whereNull('product_group_id');
+        } elseif ($group !== '' && ctype_digit($group)) {
+            $query->where('product_group_id', (int) $group);
+        }
+    }
 }

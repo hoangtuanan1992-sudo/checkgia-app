@@ -252,7 +252,9 @@
                         @if($compareMatchEnabled ?? false)
                             <button class="btn btn-secondary" type="button" id="compareMatchOpen">So Khớp</button>
                         @endif
-                        <button class="btn btn-secondary" type="button" id="filterReset">Reset</button>
+                        @unless(auth()->user()?->isViewer())
+                            <button class="btn btn-secondary" type="button" id="bulkDeleteOpen" data-action="{{ route('dashboard.products.bulk-destroy') }}">Xóa</button>
+                        @endunless
                     </div>
                 </div>
                 <div id="comparisonPagination" class="comparison-pagination" style="margin-top:0;margin-bottom:12px;padding-top:0;border-top:0">
@@ -770,6 +772,20 @@
             <div class="actions" style="justify-content:flex-end">
                 <button class="btn btn-secondary" type="button" id="deleteDialogCancel">Huỷ</button>
                 <button class="btn" type="button" id="deleteDialogConfirm">Xoá</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="bulkDeleteDialog" class="dialog">
+        <div class="dialog-header">
+            <h3 class="card-title" style="font-size:18px">Xoá sản phẩm đang xem?</h3>
+            <p class="card-sub" id="bulkDeleteDialogText">Bạn có chắc chắn xóa hết tất cả sản phẩm ở bảng đang xem?</p>
+        </div>
+        <div class="dialog-body">
+            <p class="card-sub" id="bulkDeleteDialogCount" style="margin-top:0"></p>
+            <div class="actions" style="justify-content:flex-end">
+                <button class="btn btn-secondary" type="button" id="bulkDeleteCancel">Huỷ</button>
+                <button class="btn" type="button" id="bulkDeleteConfirm">Xóa</button>
             </div>
         </div>
     </dialog>
@@ -1301,6 +1317,89 @@
                     deleteDialog.close();
                 }
             });
+
+            const bulkDeleteOpen = document.getElementById('bulkDeleteOpen');
+            const bulkDeleteDialog = document.getElementById('bulkDeleteDialog');
+            const bulkDeleteCancel = document.getElementById('bulkDeleteCancel');
+            const bulkDeleteConfirm = document.getElementById('bulkDeleteConfirm');
+            const bulkDeleteDialogText = document.getElementById('bulkDeleteDialogText');
+            const bulkDeleteDialogCount = document.getElementById('bulkDeleteDialogCount');
+
+            function bulkDeleteQueryParams() {
+                const params = new URLSearchParams();
+                const q = (filterSearch?.value || '').trim();
+                const group = filterGroup?.value || '';
+                if (q) params.set('q', q);
+                if (group) params.set('group', group);
+
+                return params;
+            }
+
+            function openBulkDeleteDialog() {
+                if (!bulkDeleteDialog || !bulkDeleteOpen) return;
+                const meta = comparisonMetaFromDom();
+                const count = Number(meta.total || 0);
+                if (count <= 0) {
+                    alert('Không có sản phẩm nào trong bảng đang xem để xóa.');
+                    return;
+                }
+
+                const countText = count.toLocaleString('vi-VN');
+                if (bulkDeleteDialogText) {
+                    bulkDeleteDialogText.textContent = `Bạn có chắc chắn xóa hết tất cả sản phẩm ở bảng đang xem?`;
+                }
+                if (bulkDeleteDialogCount) {
+                    bulkDeleteDialogCount.textContent = `Số sản phẩm sẽ xóa: ${countText}`;
+                }
+                if (typeof bulkDeleteDialog.showModal === 'function') {
+                    bulkDeleteDialog.showModal();
+                }
+            }
+
+            if (bulkDeleteOpen) {
+                bulkDeleteOpen.addEventListener('click', openBulkDeleteDialog);
+            }
+            if (bulkDeleteCancel && bulkDeleteDialog) {
+                bulkDeleteCancel.addEventListener('click', () => bulkDeleteDialog.close());
+                bulkDeleteDialog.addEventListener('click', (e) => {
+                    if (e.target === bulkDeleteDialog) {
+                        bulkDeleteDialog.close();
+                    }
+                });
+            }
+            if (bulkDeleteConfirm && bulkDeleteOpen) {
+                bulkDeleteConfirm.addEventListener('click', async () => {
+                    bulkDeleteConfirm.disabled = true;
+                    const params = bulkDeleteQueryParams();
+                    const action = bulkDeleteOpen.dataset.action + (params.toString() ? `?${params.toString()}` : '');
+
+                    try {
+                        const res = await fetch(action, {
+                            method: 'DELETE',
+                            headers: {
+                                'X-CSRF-TOKEN': csrf,
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json',
+                            },
+                            credentials: 'include',
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok || data.ok === false) {
+                            alert(data.message || `Xóa thất bại (HTTP ${res.status}).`);
+                            return;
+                        }
+
+                        if (bulkDeleteDialog) {
+                            bulkDeleteDialog.close();
+                        }
+                        await loadComparisonPage(1);
+                    } catch (e) {
+                        alert('Xóa thất bại. Vui lòng thử lại.');
+                    } finally {
+                        bulkDeleteConfirm.disabled = false;
+                    }
+                });
+            }
 
             const compareViewToggle = document.getElementById('compareViewToggle');
             const comparisonTableView = document.getElementById('comparisonTableView');
