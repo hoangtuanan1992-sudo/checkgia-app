@@ -22,6 +22,7 @@ class DashboardQuickScanController extends Controller
         $websiteKey = $this->websiteKey($websiteUrl);
         $userId = $request->user()->effectiveUserId();
         $q = trim((string) $request->query('q', ''));
+        $productFilter = $this->productFilter($request);
         $perPage = $this->perPage($request);
         $selectedJob = null;
         $latestRequest = null;
@@ -32,20 +33,30 @@ class DashboardQuickScanController extends Controller
             0,
             $perPage,
             1,
-            ['path' => $request->url(), 'query' => $this->queryForLinks($websiteUrl, $q, $perPage)]
+            ['path' => $request->url(), 'query' => $this->queryForLinks($websiteUrl, $q, $productFilter, $perPage)]
         );
 
         if (! Schema::hasTable('scanner_import_jobs') || ! Schema::hasTable('scanner_import_products')) {
             $error = 'Chưa có bảng dữ liệu quét. Hãy chạy migration import trên hosting.';
         } elseif ($websiteKey !== '') {
-            $selectedJob = DB::table('scanner_import_jobs')
+            $matchingJobs = DB::table('scanner_import_jobs')
                 ->orderByDesc('last_pushed_at')
                 ->orderByDesc('updated_at')
                 ->orderByDesc('id')
                 ->get()
-                ->first(fn ($job): bool => $this->websiteKey((string) ($job->start_url ?? '')) === $websiteKey);
+                ->filter(fn ($job): bool => $this->websiteKey((string) ($job->start_url ?? '')) === $websiteKey)
+                ->values();
+
+            $selectedJob = $matchingJobs->first();
 
             if ($selectedJob) {
+                $previousJobIds = $matchingJobs
+                    ->skip(1)
+                    ->pluck('id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->values()
+                    ->all();
+
                 $query = DB::table('scanner_import_products')
                     ->where('scanner_import_job_id', (int) $selectedJob->id);
 
@@ -56,6 +67,7 @@ class DashboardQuickScanController extends Controller
                             ->orWhere('url', 'like', '%'.$q.'%');
                     });
                 }
+                $this->applyProductFilter($query, $productFilter, $previousJobIds);
 
                 $allProductIds = (clone $query)
                     ->orderBy('id')
@@ -66,7 +78,7 @@ class DashboardQuickScanController extends Controller
                 $products = $query
                     ->orderBy('id')
                     ->paginate($perPage)
-                    ->appends($this->queryForLinks($websiteUrl, $q, $perPage));
+                    ->appends($this->queryForLinks($websiteUrl, $q, $productFilter, $perPage));
 
                 $products->getCollection()->transform(fn ($product): array => $this->productRow($product));
             }
@@ -87,6 +99,7 @@ class DashboardQuickScanController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name']),
             'q' => $q,
+            'productFilter' => $productFilter,
             'perPage' => $perPage,
             'error' => $error,
             'selectedJob' => $selectedJob,
@@ -317,10 +330,63 @@ class DashboardQuickScanController extends Controller
         return in_array($value, [50, 100, 200, 500], true) ? $value : 200;
     }
 
+    private function productFilter(Request $request): string
+    {
+        $filter = (string) $request->query('product_filter', 'all');
+
+        return in_array($filter, ['all', 'newest', 'priced', 'unpriced'], true) ? $filter : 'all';
+    }
+
+    /**
+     * @param array<int, int> $previousJobIds
+     */
+    private function applyProductFilter($query, string $filter, array $previousJobIds): void
+    {
+        if ($filter === 'priced') {
+            $query->where('price_value', '>', 0);
+
+            return;
+        }
+
+        if ($filter === 'unpriced') {
+            $query->where(function ($where) {
+                $where->whereNull('price_value')
+                    ->orWhere('price_value', '<=', 0);
+            });
+
+            return;
+        }
+
+        if ($filter !== 'newest') {
+            return;
+        }
+
+        $since = now()->subMonth();
+        $query->where(function ($where) use ($since) {
+            $where->where('imported_at', '>=', $since)
+                ->orWhere('created_at', '>=', $since)
+                ->orWhere('updated_at', '>=', $since);
+        });
+
+        if ($previousJobIds === []) {
+            return;
+        }
+
+        $query->whereNotExists(function ($sub) use ($previousJobIds) {
+            $sub->select(DB::raw(1))
+                ->from('scanner_import_products as previous_products')
+                ->whereIn('previous_products.scanner_import_job_id', $previousJobIds)
+                ->where(function ($same) {
+                    $same->whereColumn('previous_products.url_hash', 'scanner_import_products.url_hash')
+                        ->orWhereColumn('previous_products.dedupe_hash', 'scanner_import_products.dedupe_hash');
+                });
+        });
+    }
+
     /**
      * @return array<string, mixed>
      */
-    private function queryForLinks(string $websiteUrl, string $q, int $perPage): array
+    private function queryForLinks(string $websiteUrl, string $q, string $productFilter, int $perPage): array
     {
         $query = [];
         if ($websiteUrl !== '') {
@@ -328,6 +394,9 @@ class DashboardQuickScanController extends Controller
         }
         if ($q !== '') {
             $query['q'] = $q;
+        }
+        if ($productFilter !== 'all') {
+            $query['product_filter'] = $productFilter;
         }
         if ($perPage !== 200) {
             $query['per_page'] = $perPage;

@@ -5,6 +5,7 @@
         $websiteUrl = (string) ($websiteUrl ?? '');
         $websiteKey = (string) ($websiteKey ?? '');
         $q = (string) ($q ?? '');
+        $productFilter = (string) ($productFilter ?? 'all');
         $perPage = (int) ($perPage ?? 200);
         $products = $products ?? null;
         $productGroups = collect($productGroups ?? []);
@@ -48,23 +49,11 @@
                     </div>
                 @endif
 
-                <form method="GET" action="{{ route('dashboard.quick-scan') }}" style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(220px,340px) auto;gap:14px;align-items:end">
+                <form method="GET" action="{{ route('dashboard.quick-scan') }}" style="display:grid;grid-template-columns:minmax(280px,1fr) auto;gap:14px;align-items:end">
                     <div class="field" style="margin-top:0">
                         <label class="label" for="website_url">Link website muốn hiển thị</label>
                         <input class="input" id="website_url" name="website_url" value="{{ $websiteUrl }}" placeholder="https://dienmaydo.vn/" autocomplete="off">
                         @error('website_url')<div class="error">{{ $message }}</div>@enderror
-                    </div>
-                    <div class="field" style="margin-top:0">
-                        <label class="label" for="q">Tìm kiếm</label>
-                        <input class="input" id="q" name="q" value="{{ $q }}" placeholder="Tên, mã hoặc link...">
-                    </div>
-                    <div class="field" style="display:none">
-                        <label class="label" for="per_page">Số dòng</label>
-                        <select class="input" id="per_page" name="per_page">
-                            @foreach([50, 100, 200, 500] as $pp)
-                                <option value="{{ $pp }}" @selected($perPage === $pp)>{{ $pp }}</option>
-                            @endforeach
-                        </select>
                     </div>
                     <button class="btn" type="submit">Quét</button>
                 </form>
@@ -113,6 +102,25 @@
                     <div class="hint">
                         Endpoint nhận dữ liệu: https://checkgia.id.vn/api/products/import - Hiển thị {{ number_format($products->count(), 0, ',', '.') }}/{{ number_format($products->total(), 0, ',', '.') }} dòng
                     </div>
+
+                    <form method="GET" action="{{ route('dashboard.quick-scan') }}" style="margin-top:14px;display:grid;grid-template-columns:minmax(260px,1fr) minmax(220px,320px) auto;gap:12px;align-items:end">
+                        <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
+                        <input type="hidden" name="per_page" value="{{ $perPage }}">
+                        <div class="field" style="margin-top:0">
+                            <label class="label" for="q">Tìm kiếm</label>
+                            <input class="input" id="q" name="q" value="{{ $q }}" placeholder="Tên, mã hoặc link...">
+                        </div>
+                        <div class="field" style="margin-top:0">
+                            <label class="label" for="product_filter">Lọc sản phẩm</label>
+                            <select class="input" id="product_filter" name="product_filter">
+                                <option value="all" @selected($productFilter === 'all')>Tất cả sản phẩm</option>
+                                <option value="newest" @selected($productFilter === 'newest')>Sản phẩm mới nhất</option>
+                                <option value="priced" @selected($productFilter === 'priced')>Sản phẩm có giá</option>
+                                <option value="unpriced" @selected($productFilter === 'unpriced')>Sản phẩm không có giá</option>
+                            </select>
+                        </div>
+                        <button class="btn" type="submit">Lọc</button>
+                    </form>
                 @endif
 
                 <div class="table-wrap" style="margin-top:14px;max-height:70vh">
@@ -176,6 +184,9 @@
                             <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
                             @if($q !== '')
                                 <input type="hidden" name="q" value="{{ $q }}">
+                            @endif
+                            @if($productFilter !== 'all')
+                                <input type="hidden" name="product_filter" value="{{ $productFilter }}">
                             @endif
                             <div class="field" style="margin-top:0;min-width:130px">
                                 <label class="label" for="quickScanPerPage">Số dòng</label>
