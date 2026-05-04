@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\UserScrapeSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -127,6 +128,7 @@ class AdminUserController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
+            'scrape_schedule_times' => ['nullable', 'string', 'max:255', $this->scrapeScheduleTimesRule()],
             'admin_note' => ['nullable', 'string', 'max:10000'],
             'allow_compare_match' => ['nullable', 'boolean'],
             'allow_shopee_check' => ['nullable', 'boolean'],
@@ -169,7 +171,14 @@ class AdminUserController extends Controller
             $createData['allow_shopee_check'] = (bool) ($data['allow_shopee_check'] ?? false);
         }
 
-        User::create($createData);
+        $user = User::create($createData);
+
+        if ($data['role'] === 'owner' && Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times')) {
+            UserScrapeSetting::query()->updateOrCreate(
+                ['user_id' => $user->id],
+                ['scrape_schedule_times' => $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? '')]
+            );
+        }
 
         return redirect()->route('admin.users.index')->with('status', 'Đã tạo tài khoản');
     }
@@ -196,7 +205,12 @@ class AdminUserController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
 
-        return view('admin.users.edit', compact('user', 'owners'));
+        $userScrapeSetting = null;
+        if ($user->role === 'owner' && Schema::hasTable('user_scrape_settings')) {
+            $userScrapeSetting = UserScrapeSetting::query()->firstOrCreate(['user_id' => $user->id]);
+        }
+
+        return view('admin.users.edit', compact('user', 'owners', 'userScrapeSetting'));
     }
 
     public function update(Request $request, User $user): RedirectResponse
@@ -209,6 +223,7 @@ class AdminUserController extends Controller
             'password' => ['nullable', 'string', 'min:8'],
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
+            'scrape_schedule_times' => ['nullable', 'string', 'max:255', $this->scrapeScheduleTimesRule()],
             'admin_note' => ['nullable', 'string', 'max:10000'],
             'allow_compare_match' => ['nullable', 'boolean'],
             'allow_shopee_check' => ['nullable', 'boolean'],
@@ -256,6 +271,13 @@ class AdminUserController extends Controller
 
         $user->update($updates);
 
+        if ($updates['role'] === 'owner' && Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times')) {
+            UserScrapeSetting::query()->updateOrCreate(
+                ['user_id' => $user->id],
+                ['scrape_schedule_times' => $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? '')]
+            );
+        }
+
         return redirect()->route('admin.users.index')->with('status', 'Đã cập nhật người dùng');
     }
 
@@ -279,5 +301,39 @@ class AdminUserController extends Controller
         $user->delete();
 
         return back()->with('status', 'Đã xoá tài khoản');
+    }
+
+    private function normalizeScrapeScheduleTimes(?string $value): string
+    {
+        $normalized = UserScrapeSetting::normalizeScheduleTimes($value);
+
+        return $normalized !== '' ? $normalized : '5 10 20';
+    }
+
+    private function scrapeScheduleTimesRule(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail): void {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return;
+            }
+
+            preg_match_all('/\d{1,2}/', $value, $matches);
+            $hours = $matches[0] ?? [];
+            if ($hours === []) {
+                $fail('Vui lòng nhập giờ cập nhật từ 0 đến 23, ví dụ: 5 10 20.');
+
+                return;
+            }
+
+            foreach ($hours as $hour) {
+                $hour = (int) $hour;
+                if ($hour < 0 || $hour > 23) {
+                    $fail('Giờ cập nhật phải nằm trong khoảng 0 đến 23.');
+
+                    return;
+                }
+            }
+        };
     }
 }

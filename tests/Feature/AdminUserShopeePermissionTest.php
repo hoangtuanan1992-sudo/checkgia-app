@@ -16,7 +16,6 @@ class AdminUserShopeePermissionTest extends TestCase
         $owner = User::factory()->create([
             'role' => 'owner',
             'allow_shopee_check' => false,
-            'product_limit' => 100,
         ]);
 
         $this->actingAs($admin)
@@ -27,10 +26,8 @@ class AdminUserShopeePermissionTest extends TestCase
                 'parent_user_id' => '',
                 'service_start_date' => '',
                 'service_end_date' => '',
-                'product_limit' => 100,
                 'allow_shopee_check' => '1',
                 'admin_note' => '',
-                'scrape_schedule_times' => '',
             ])
             ->assertRedirect(route('admin.users.index'));
 

@@ -7,28 +7,44 @@ use App\Models\UserScrapeSetting;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+use Illuminate\Support\Facades\Schema;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
 Artisan::command('checkgia:scrape-due', function () {
-    $now = now();
-
-    $settings = UserScrapeSetting::query()->get([
+    $now = now('Asia/Ho_Chi_Minh');
+    $hasScheduleTimes = Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times');
+    $columns = [
         'user_id',
         'own_name_xpath',
         'own_price_xpath',
         'scrape_interval_minutes',
-    ]);
+    ];
+
+    if ($hasScheduleTimes) {
+        $columns[] = 'scrape_schedule_times';
+    }
+
+    $settings = UserScrapeSetting::query()->get($columns);
 
     foreach ($settings as $setting) {
         if (! $setting->own_name_xpath || ! $setting->own_price_xpath) {
             continue;
         }
 
-        $interval = max(5, (int) $setting->scrape_interval_minutes);
-        $cutoff = $now->copy()->subMinutes($interval);
+        $scheduledHours = $hasScheduleTimes ? $setting->scheduledHours() : [];
+        if ($scheduledHours !== []) {
+            if ((int) $now->minute !== 0 || ! in_array((int) $now->hour, $scheduledHours, true)) {
+                continue;
+            }
+
+            $cutoff = $now->copy()->startOfHour();
+        } else {
+            $interval = max(5, (int) $setting->scrape_interval_minutes);
+            $cutoff = $now->copy()->subMinutes($interval);
+        }
 
         $productIds = Product::query()
             ->where('user_id', $setting->user_id)
@@ -42,7 +58,7 @@ Artisan::command('checkgia:scrape-due', function () {
             dispatch(new ScrapeProductPrices((int) $id));
         }
     }
-})->purpose('Scrape due product/competitor prices based on user interval');
+})->purpose('Scrape due product/competitor prices based on user schedule');
 
 Artisan::command('checkgia:admin-create {email} {--name=Admin} {--password=}', function () {
     $email = (string) $this->argument('email');
