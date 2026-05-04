@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteGroup;
 use App\Models\ProductGroup;
 use App\Models\User;
 use App\Models\UserNotificationSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -27,19 +30,34 @@ class AccountController extends Controller
         ]);
 
         $subUsers = collect();
+        $groups = collect();
+        $competitorSites = collect();
+        $competitorGroups = collect();
+
         if (! $user->isViewer()) {
             $subUsers = User::query()
                 ->where('parent_user_id', $ownerId)
-                ->orderBy('name')
-                ->get(['id', 'name', 'email', 'created_at']);
-        }
+                ->orderBy('email')
+                ->get(['id', 'name', 'email', 'created_at', 'visible_product_group_ids', 'visible_competitor_site_group_ids']);
 
-        $groups = collect();
-        if (! $user->isViewer()) {
             $groups = ProductGroup::query()
                 ->where('user_id', $ownerId)
                 ->orderBy('name')
                 ->get(['id', 'name', 'created_at']);
+
+            $competitorSites = CompetitorSite::query()
+                ->where('user_id', $ownerId)
+                ->orderBy('position')
+                ->orderBy('name')
+                ->get(['id', 'name', 'domain']);
+
+            if (Schema::hasTable('competitor_site_groups')) {
+                $competitorGroups = CompetitorSiteGroup::query()
+                    ->where('user_id', $ownerId)
+                    ->with(['competitorSites:id,name'])
+                    ->orderBy('name')
+                    ->get(['id', 'user_id', 'name', 'created_at']);
+            }
         }
 
         return view('account.index', [
@@ -50,6 +68,8 @@ class AccountController extends Controller
             'notification' => $notification,
             'subUsers' => $subUsers,
             'groups' => $groups,
+            'competitorSites' => $competitorSites,
+            'competitorGroups' => $competitorGroups,
         ]);
     }
 
@@ -131,6 +151,10 @@ class AccountController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'product_group_ids' => ['nullable', 'array'],
+            'product_group_ids.*' => ['integer'],
+            'competitor_site_group_ids' => ['nullable', 'array'],
+            'competitor_site_group_ids.*' => ['integer'],
         ]);
 
         $canonical = User::canonicalEmail($data['email']);
@@ -145,9 +169,55 @@ class AccountController extends Controller
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => $data['password'],
+            'visible_product_group_ids' => $this->ownedProductGroupIds($data['product_group_ids'] ?? [], $ownerId),
+            'visible_competitor_site_group_ids' => $this->ownedCompetitorGroupIds($data['competitor_site_group_ids'] ?? [], $ownerId),
         ]);
 
         return back()->with('status', 'Đã tạo tài khoản con');
+    }
+
+    public function updateSubUser(Request $request, User $user): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+
+        $ownerId = $owner->effectiveUserId();
+        abort_unless($user->parent_user_id === $ownerId && $user->role === 'viewer', 404);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+            'product_group_ids' => ['nullable', 'array'],
+            'product_group_ids.*' => ['integer'],
+            'competitor_site_group_ids' => ['nullable', 'array'],
+            'competitor_site_group_ids.*' => ['integer'],
+        ]);
+
+        $canonical = User::canonicalEmail($data['email']);
+        $existsCanonical = User::query()
+            ->where('email_canonical', $canonical)
+            ->whereKeyNot($user->id)
+            ->exists();
+
+        if ($existsCanonical) {
+            return back()->withInput()->withErrors(['email' => 'Email này đã được dùng để tạo tài khoản (theo quy tắc Gmail).']);
+        }
+
+        $updates = [
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'visible_product_group_ids' => $this->ownedProductGroupIds($data['product_group_ids'] ?? [], $ownerId),
+            'visible_competitor_site_group_ids' => $this->ownedCompetitorGroupIds($data['competitor_site_group_ids'] ?? [], $ownerId),
+        ];
+
+        if (! empty($data['password'])) {
+            $updates['password'] = $data['password'];
+        }
+
+        $user->update($updates);
+
+        return back()->with('status', 'Đã lưu tài khoản con');
     }
 
     public function destroySubUser(Request $request, User $user): RedirectResponse
@@ -182,6 +252,23 @@ class AccountController extends Controller
         return back()->with('status', 'Đã thêm nhóm sản phẩm');
     }
 
+    public function updateGroup(Request $request, ProductGroup $productGroup): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+        abort_unless($productGroup->user_id === $owner->effectiveUserId(), 404);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+        ]);
+
+        $productGroup->update([
+            'name' => trim($data['name']),
+        ]);
+
+        return back()->with('status', 'Đã sửa nhóm sản phẩm');
+    }
+
     public function destroyGroup(Request $request, ProductGroup $productGroup): RedirectResponse
     {
         $owner = $request->user();
@@ -192,5 +279,137 @@ class AccountController extends Controller
         $productGroup->delete();
 
         return back()->with('status', 'Đã xoá nhóm sản phẩm');
+    }
+
+    public function createCompetitorGroup(Request $request): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+
+        $ownerId = $owner->effectiveUserId();
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'competitor_site_ids' => ['nullable', 'array'],
+            'competitor_site_ids.*' => ['integer'],
+        ]);
+
+        $group = CompetitorSiteGroup::firstOrCreate([
+            'user_id' => $ownerId,
+            'name' => trim($data['name']),
+        ]);
+
+        $group->competitorSites()->sync($this->ownedCompetitorSiteIds($data['competitor_site_ids'] ?? [], $ownerId));
+
+        return back()->with('status', 'Đã thêm nhóm đối thủ');
+    }
+
+    public function updateCompetitorGroup(Request $request, CompetitorSiteGroup $competitorSiteGroup): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+        abort_unless($competitorSiteGroup->user_id === $owner->effectiveUserId(), 404);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'competitor_site_ids' => ['nullable', 'array'],
+            'competitor_site_ids.*' => ['integer'],
+        ]);
+
+        $competitorSiteGroup->update([
+            'name' => trim($data['name']),
+        ]);
+        $competitorSiteGroup->competitorSites()->sync($this->ownedCompetitorSiteIds($data['competitor_site_ids'] ?? [], $owner->effectiveUserId()));
+
+        return back()->with('status', 'Đã sửa nhóm đối thủ');
+    }
+
+    public function destroyCompetitorGroup(Request $request, CompetitorSiteGroup $competitorSiteGroup): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+        abort_unless($competitorSiteGroup->user_id === $owner->effectiveUserId(), 404);
+
+        $competitorSiteGroup->delete();
+
+        return back()->with('status', 'Đã xoá nhóm đối thủ');
+    }
+
+    /**
+     * @param array<int, mixed> $ids
+     * @return array<int, int>
+     */
+    private function ownedProductGroupIds(array $ids, int $ownerId): array
+    {
+        $ids = $this->normalizeIds($ids);
+        if ($ids === []) {
+            return [];
+        }
+
+        return ProductGroup::query()
+            ->where('user_id', $ownerId)
+            ->whereIn('id', $ids)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, mixed> $ids
+     * @return array<int, int>
+     */
+    private function ownedCompetitorGroupIds(array $ids, int $ownerId): array
+    {
+        if (! Schema::hasTable('competitor_site_groups')) {
+            return [];
+        }
+
+        $ids = $this->normalizeIds($ids);
+        if ($ids === []) {
+            return [];
+        }
+
+        return CompetitorSiteGroup::query()
+            ->where('user_id', $ownerId)
+            ->whereIn('id', $ids)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, mixed> $ids
+     * @return array<int, int>
+     */
+    private function ownedCompetitorSiteIds(array $ids, int $ownerId): array
+    {
+        $ids = $this->normalizeIds($ids);
+        if ($ids === []) {
+            return [];
+        }
+
+        return CompetitorSite::query()
+            ->where('user_id', $ownerId)
+            ->whereIn('id', $ids)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, mixed> $ids
+     * @return array<int, int>
+     */
+    private function normalizeIds(array $ids): array
+    {
+        return collect($ids)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 }

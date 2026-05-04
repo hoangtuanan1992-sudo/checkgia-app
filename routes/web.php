@@ -54,7 +54,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/dashboard/compare-match', [DashboardCompareMatchController::class, 'run'])->name('dashboard.compare-match.run');
     Route::post('/dashboard/compare-match/{compareMatchRun}/tick', [DashboardCompareMatchController::class, 'tick'])->name('dashboard.compare-match.tick');
 
-    Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->name('shopee.dashboard');
+    Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->middleware('shopee.check')->name('shopee.dashboard');
     Route::middleware('owner')->group(function () {
         Route::get('/shopee/settings', [ShopeeSettingsController::class, 'index'])->name('shopee.settings');
         Route::post('/shopee/shops', [ShopeeSettingsController::class, 'storeShop'])->name('shopee.shops.store');
@@ -114,9 +114,14 @@ Route::middleware('auth')->group(function () {
         Route::post('/dashboard/scrape-settings', [DashboardCompetitorSetupController::class, 'updateScrapeSettings'])->name('dashboard.scrape-settings.update');
         Route::put('/account/notifications', [AccountController::class, 'updateNotifications'])->name('account.notifications');
         Route::post('/account/subusers', [AccountController::class, 'createSubUser'])->name('account.subusers.store');
+        Route::put('/account/subusers/{user}', [AccountController::class, 'updateSubUser'])->name('account.subusers.update');
         Route::delete('/account/subusers/{user}', [AccountController::class, 'destroySubUser'])->name('account.subusers.destroy');
         Route::post('/account/product-groups', [AccountController::class, 'createGroup'])->name('account.product-groups.store');
+        Route::put('/account/product-groups/{productGroup}', [AccountController::class, 'updateGroup'])->name('account.product-groups.update');
         Route::delete('/account/product-groups/{productGroup}', [AccountController::class, 'destroyGroup'])->name('account.product-groups.destroy');
+        Route::post('/account/competitor-site-groups', [AccountController::class, 'createCompetitorGroup'])->name('account.competitor-site-groups.store');
+        Route::put('/account/competitor-site-groups/{competitorSiteGroup}', [AccountController::class, 'updateCompetitorGroup'])->name('account.competitor-site-groups.update');
+        Route::delete('/account/competitor-site-groups/{competitorSiteGroup}', [AccountController::class, 'destroyCompetitorGroup'])->name('account.competitor-site-groups.destroy');
         Route::resource('products', ProductController::class)->except(['show', 'index'])->names('products');
         Route::post('/products/{product}/competitors', [CompetitorController::class, 'store'])->name('products.competitors.store');
         Route::put('/products/{product}/competitors/{competitor}', [CompetitorController::class, 'update'])->name('products.competitors.update');
@@ -128,6 +133,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/dashboard/competitor-sites/{competitorSite}', fn () => redirect()->route('dashboard.competitors'))->name('dashboard.competitors.sites.show');
     Route::get('/dashboard/products/{product}/competitor-sites/{competitorSite}', fn () => redirect()->route('dashboard'))->name('dashboard.products.competitors.show');
+    Route::get('/account/product-groups/{productGroup}', fn () => redirect()->route('account'))->name('account.product-groups.show');
+    Route::get('/account/competitor-site-groups/{competitorSiteGroup}', fn () => redirect()->route('account'))->name('account.competitor-site-groups.show');
 
     Route::match(['put', 'post'], '/competitors/{competitor}/price-adjustment', [CompetitorController::class, 'updatePriceAdjustment'])->name('competitors.adjustment.update');
     Route::get('/competitors/{competitor}/price-adjustment', fn () => redirect()->route('dashboard'));

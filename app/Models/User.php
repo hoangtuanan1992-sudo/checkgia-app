@@ -14,7 +14,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'allow_compare_match', 'allow_shopee_check'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'visible_product_group_ids', 'visible_competitor_site_group_ids', 'service_start_date', 'service_end_date', 'admin_note', 'allow_compare_match', 'allow_shopee_check'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -33,6 +33,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             'service_start_date' => 'date',
             'service_end_date' => 'date',
+            'visible_product_group_ids' => 'array',
+            'visible_competitor_site_group_ids' => 'array',
             'allow_compare_match' => 'boolean',
             'allow_shopee_check' => 'boolean',
         ];
@@ -99,6 +101,45 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function visibleProductGroupIds(): array
+    {
+        return $this->normalizedIdArray($this->visible_product_group_ids);
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    public function visibleCompetitorSiteGroupIds(): array
+    {
+        return $this->normalizedIdArray($this->visible_competitor_site_group_ids);
+    }
+
+    /**
+     * @param mixed $value
+     * @return array<int, int>
+     */
+    private function normalizedIdArray(mixed $value): array
+    {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = is_array($decoded) ? $decoded : preg_split('/\s*,\s*/', $value);
+        }
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return collect($value)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public static function shopeeCheckEnabledForId(int $userId): bool

@@ -7,6 +7,8 @@ use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
@@ -14,27 +16,46 @@ class DashboardController extends Controller
 {
     public function index(Request $request): View
     {
-        $userId = $request->user()->effectiveUserId();
+        $authUser = $request->user();
+        $userId = $authUser->effectiveUserId();
+        $productGroupRestrictionIds = $authUser->isViewer() ? $authUser->visibleProductGroupIds() : [];
+        $hasProductGroupRestriction = $authUser->isViewer() && $productGroupRestrictionIds !== [];
+        $restrictedCompetitorSiteIds = $authUser->isViewer()
+            ? $this->competitorSiteIdsForGroups($userId, $authUser->visibleCompetitorSiteGroupIds())
+            : null;
 
-        $competitorSites = CompetitorSite::query()
+        $competitorSitesQuery = CompetitorSite::query()
             ->where('user_id', $userId)
             ->orderBy('position')
-            ->orderBy('name')
+            ->orderBy('name');
+        $this->constrainToIds($competitorSitesQuery, $restrictedCompetitorSiteIds, 'id');
+        $competitorSites = $competitorSitesQuery
             ->get(['id', 'name', 'position']);
 
-        $productGroups = ProductGroup::query()
+        $productGroupsQuery = ProductGroup::query()
             ->where('user_id', $userId)
-            ->orderBy('name')
+            ->orderBy('name');
+        if ($hasProductGroupRestriction) {
+            $productGroupsQuery->whereIn('id', $productGroupRestrictionIds);
+        }
+        $productGroups = $productGroupsQuery
             ->get(['id', 'name']);
 
-        $products = Product::query()
-            ->with(['group:id,name', 'competitors' => function ($q) {
+        $productsQuery = Product::query()
+            ->with(['group:id,name', 'competitors' => function ($q) use ($restrictedCompetitorSiteIds) {
+                $this->constrainToIds($q, $restrictedCompetitorSiteIds, 'competitor_site_id');
                 $q->with(['prices' => function ($p) {
                     $p->latest('fetched_at')->limit(2);
                 }, 'competitorSite']);
             }])
             ->where('user_id', $userId)
-            ->latest()
+            ->latest();
+
+        if ($hasProductGroupRestriction) {
+            $productsQuery->whereIn('product_group_id', $productGroupRestrictionIds);
+        }
+
+        $products = $productsQuery
             ->get(['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'last_scraped_at', 'created_at']);
 
         $tz = 'Asia/Ho_Chi_Minh';
@@ -122,5 +143,48 @@ class DashboardController extends Controller
         }
 
         return (string) $abs;
+    }
+
+    /**
+     * @param array<int, int> $groupIds
+     * @return array<int, int>|null
+     */
+    private function competitorSiteIdsForGroups(int $userId, array $groupIds): ?array
+    {
+        if ($groupIds === []) {
+            return null;
+        }
+
+        if (! Schema::hasTable('competitor_site_groups') || ! Schema::hasTable('competitor_site_group_sites')) {
+            return [];
+        }
+
+        return DB::table('competitor_site_group_sites')
+            ->join('competitor_site_groups', 'competitor_site_groups.id', '=', 'competitor_site_group_sites.competitor_site_group_id')
+            ->where('competitor_site_groups.user_id', $userId)
+            ->whereIn('competitor_site_group_sites.competitor_site_group_id', $groupIds)
+            ->pluck('competitor_site_group_sites.competitor_site_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, int>|null $ids
+     */
+    private function constrainToIds($query, ?array $ids, string $column): void
+    {
+        if (! is_array($ids)) {
+            return;
+        }
+
+        if ($ids === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn($column, $ids);
     }
 }
