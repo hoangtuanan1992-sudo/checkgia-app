@@ -82,7 +82,10 @@ class DashboardCompareMatchTest extends TestCase
             ->assertJsonPath('run.status', 'done')
             ->assertJsonPath('run.processedCells', 1)
             ->assertJsonPath('run.remainingCells', 0)
-            ->assertJsonPath('run.matched', 1);
+            ->assertJsonPath('run.matched', 1)
+            ->assertJsonPath('run.matchedLinks', 1)
+            ->assertJsonPath('run.percent', 100)
+            ->assertJsonPath('run.etaSeconds', 0);
 
         $competitor = Competitor::query()
             ->where('product_id', $product->id)

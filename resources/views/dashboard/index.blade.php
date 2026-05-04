@@ -551,6 +551,24 @@
                     <div style="height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px">
                         <div id="compareMatchProgressBar" style="height:100%;width:0%;background:#1677ff"></div>
                     </div>
+                    <div id="compareMatchStats" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px">
+                        <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
+                            <div class="label">Tiến trình</div>
+                            <strong id="compareMatchPercent">0%</strong>
+                        </div>
+                        <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
+                            <div class="label">Đã xử lý</div>
+                            <strong id="compareMatchProcessed">0/0 ô</strong>
+                        </div>
+                        <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
+                            <div class="label">Đã điền link</div>
+                            <strong id="compareMatchMatched">0 link</strong>
+                        </div>
+                        <div style="border:1px solid var(--border);border-radius:10px;padding:10px;background:#fff">
+                            <div class="label">Dự kiến còn lại</div>
+                            <strong id="compareMatchEta">Đang tính</strong>
+                        </div>
+                    </div>
                     <div class="hint" id="compareMatchMessage" style="margin-top:8px"></div>
                 </div>
                 <div class="actions" style="justify-content:flex-end;margin-top:14px">
@@ -763,6 +781,10 @@
             const compareMatchProgress = document.getElementById('compareMatchProgress');
             const compareMatchProgressText = document.getElementById('compareMatchProgressText');
             const compareMatchProgressBar = document.getElementById('compareMatchProgressBar');
+            const compareMatchPercent = document.getElementById('compareMatchPercent');
+            const compareMatchProcessed = document.getElementById('compareMatchProcessed');
+            const compareMatchMatched = document.getElementById('compareMatchMatched');
+            const compareMatchEta = document.getElementById('compareMatchEta');
             const compareMatchMessage = document.getElementById('compareMatchMessage');
             const compareMatchRunUrl = '{{ route('dashboard.compare-match.run') }}';
             const compareMatchTickUrlTemplate = '{{ route('dashboard.compare-match.tick', ['compareMatchRun' => '__RUN_ID__']) }}';
@@ -772,14 +794,28 @@
                 const total = Number(run?.totalCells || 0);
                 const processed = Number(run?.processedCells || 0);
                 const remaining = Math.max(0, Number(run?.remainingCells || 0));
+                const matched = Number(run?.matchedLinks ?? run?.matched ?? 0);
                 const percent = Math.max(0, Math.min(100, Number(run?.percent ?? (total > 0 ? Math.floor((processed / total) * 100) : 0))));
+                const etaText = run?.etaText || (processed > 0 ? 'Đang tính' : 'Chưa đủ dữ liệu');
                 if (compareMatchProgressText) {
                     compareMatchProgressText.textContent = total > 0
-                        ? `Đang so khớp ${processed}/${total} ô, còn ${remaining} ô.`
+                        ? `Đang so khớp ${processed}/${total} ô (${percent}%), còn ${remaining} ô.`
                         : (fallbackMessage || 'Đang chuẩn bị...');
                 }
                 if (compareMatchProgressBar) {
                     compareMatchProgressBar.style.width = `${percent}%`;
+                }
+                if (compareMatchPercent) {
+                    compareMatchPercent.textContent = `${percent}%`;
+                }
+                if (compareMatchProcessed) {
+                    compareMatchProcessed.textContent = `${processed}/${total} ô`;
+                }
+                if (compareMatchMatched) {
+                    compareMatchMatched.textContent = `${matched} link`;
+                }
+                if (compareMatchEta) {
+                    compareMatchEta.textContent = etaText;
                 }
                 if (compareMatchMessage) {
                     compareMatchMessage.textContent = run?.message || fallbackMessage || '';

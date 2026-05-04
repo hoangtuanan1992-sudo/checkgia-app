@@ -382,6 +382,17 @@ class DashboardCompareMatchController extends Controller
         $processedCells = max(0, (int) $run->processed_cells);
         $totalProducts = max(0, (int) $run->total_products);
         $processedProducts = max(0, (int) $run->processed_products);
+        $remainingCells = max(0, $totalCells - $processedCells);
+        $percent = $totalCells > 0 ? (int) floor(($processedCells / $totalCells) * 100) : 100;
+        $startedAt = $run->started_at ?: $run->created_at;
+        $elapsedSeconds = $startedAt ? (int) max(0, $startedAt->diffInSeconds(now())) : 0;
+        $etaSeconds = null;
+
+        if (in_array((string) $run->status, ['done', 'failed'], true) || $remainingCells === 0) {
+            $etaSeconds = 0;
+        } elseif ($processedCells > 0 && $elapsedSeconds > 0) {
+            $etaSeconds = (int) ceil(($elapsedSeconds / max(1, $processedCells)) * $remainingCells);
+        }
 
         return [
             'id' => (int) $run->id,
@@ -392,16 +403,45 @@ class DashboardCompareMatchController extends Controller
             'remainingProducts' => max(0, $totalProducts - $processedProducts),
             'totalCells' => $totalCells,
             'processedCells' => min($processedCells, $totalCells),
-            'remainingCells' => max(0, $totalCells - $processedCells),
+            'remainingCells' => $remainingCells,
             'matched' => (int) $run->matched_count,
+            'matchedLinks' => (int) $run->matched_count,
             'skippedExisting' => (int) $run->skipped_existing_count,
             'noCandidates' => (int) $run->no_candidates_count,
             'noMatch' => (int) $run->no_match_count,
             'errors' => (int) $run->error_count,
+            'elapsedSeconds' => $elapsedSeconds,
+            'etaSeconds' => $etaSeconds,
+            'etaText' => $this->durationText($etaSeconds),
             'currentProductName' => (string) ($run->current_product_name ?? ''),
             'message' => (string) ($run->message ?? ''),
-            'percent' => $totalCells > 0 ? (int) floor(($processedCells / $totalCells) * 100) : 100,
+            'percent' => $percent,
         ];
+    }
+
+    private function durationText(?int $seconds): string
+    {
+        if ($seconds === null) {
+            return 'Đang tính';
+        }
+
+        if ($seconds <= 0) {
+            return '0 giây';
+        }
+
+        $hours = intdiv($seconds, 3600);
+        $minutes = intdiv($seconds % 3600, 60);
+        $secs = $seconds % 60;
+
+        if ($hours > 0) {
+            return $hours.' giờ'.($minutes > 0 ? ' '.$minutes.' phút' : '');
+        }
+
+        if ($minutes > 0) {
+            return $minutes.' phút '.($secs > 0 ? $secs.' giây' : '');
+        }
+
+        return $secs.' giây';
     }
 
     private function resolveAiConfig(): array

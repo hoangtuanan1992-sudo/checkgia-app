@@ -92,9 +92,9 @@
                         <div class="card-body" style="padding:8px 16px 16px">
                             <div class="field" style="margin-top:0;max-width:360px">
                                 <label class="label" for="scrape_schedule_times">Giờ cập nhật mỗi ngày</label>
-                                <input class="input" id="scrape_schedule_times" name="scrape_schedule_times" type="text" value="{{ old('scrape_schedule_times', '5 10 20') }}" placeholder="VD: 5 10 20">
+                                <input class="input" id="scrape_schedule_times" name="scrape_schedule_times" type="text" value="{{ old('scrape_schedule_times') }}" placeholder="VD: 5 10 20">
                                 @error('scrape_schedule_times')<div class="error">{{ $message }}</div>@enderror
-                                <div class="hint">VD: nhập 5 10 20 thì mỗi ngày cập nhật lúc 05:00, 10:00 và 20:00.</div>
+                                <div class="hint">Để trống thì cập nhật 10 phút/lần. VD: nhập 5 10 20 thì mỗi ngày cập nhật lúc 05:00, 10:00 và 20:00.</div>
                             </div>
                         </div>
                     </div>

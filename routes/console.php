@@ -42,7 +42,7 @@ Artisan::command('checkgia:scrape-due', function () {
 
             $cutoff = $now->copy()->startOfHour();
         } else {
-            $interval = max(5, (int) $setting->scrape_interval_minutes);
+            $interval = $hasScheduleTimes ? 10 : max(5, (int) $setting->scrape_interval_minutes);
             $cutoff = $now->copy()->subMinutes($interval);
         }
 

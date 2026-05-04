@@ -176,7 +176,10 @@ class AdminUserController extends Controller
         if ($data['role'] === 'owner' && Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times')) {
             UserScrapeSetting::query()->updateOrCreate(
                 ['user_id' => $user->id],
-                ['scrape_schedule_times' => $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? '')]
+                [
+                    'scrape_interval_minutes' => 10,
+                    'scrape_schedule_times' => $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? ''),
+                ]
             );
         }
 
@@ -274,7 +277,10 @@ class AdminUserController extends Controller
         if ($updates['role'] === 'owner' && Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times')) {
             UserScrapeSetting::query()->updateOrCreate(
                 ['user_id' => $user->id],
-                ['scrape_schedule_times' => $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? '')]
+                [
+                    'scrape_interval_minutes' => 10,
+                    'scrape_schedule_times' => $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? ''),
+                ]
             );
         }
 
@@ -307,7 +313,7 @@ class AdminUserController extends Controller
     {
         $normalized = UserScrapeSetting::normalizeScheduleTimes($value);
 
-        return $normalized !== '' ? $normalized : '5 10 20';
+        return $normalized;
     }
 
     private function scrapeScheduleTimesRule(): \Closure
