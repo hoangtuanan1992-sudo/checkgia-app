@@ -36,7 +36,6 @@
                 min-width:var(--compare-price-col-width);
                 width:var(--compare-price-col-width);
                 max-width:var(--compare-price-col-width);
-                box-shadow:12px 0 18px rgba(15,23,42,.08);
             }
             #comparisonTableView thead .compare-sticky-name,
             #comparisonTableView thead .compare-sticky-price{
