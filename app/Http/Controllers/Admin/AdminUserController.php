@@ -128,6 +128,7 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
+            'allow_compare_match' => ['nullable', 'boolean'],
             'allow_shopee_check' => ['nullable', 'boolean'],
         ]);
 
@@ -159,6 +160,10 @@ class AdminUserController extends Controller
             'service_end_date' => $data['service_end_date'] ?? null,
             'admin_note' => $data['admin_note'] ?? null,
         ];
+
+        if (Schema::hasColumn('users', 'allow_compare_match')) {
+            $createData['allow_compare_match'] = (bool) ($data['allow_compare_match'] ?? false);
+        }
 
         if (Schema::hasColumn('users', 'allow_shopee_check')) {
             $createData['allow_shopee_check'] = (bool) ($data['allow_shopee_check'] ?? false);
@@ -205,6 +210,7 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
+            'allow_compare_match' => ['nullable', 'boolean'],
             'allow_shopee_check' => ['nullable', 'boolean'],
         ]);
 
@@ -225,6 +231,10 @@ class AdminUserController extends Controller
             'service_end_date' => $data['service_end_date'] ?? null,
             'admin_note' => $data['admin_note'] ?? null,
         ];
+
+        if (Schema::hasColumn('users', 'allow_compare_match')) {
+            $updates['allow_compare_match'] = (bool) ($data['allow_compare_match'] ?? false);
+        }
 
         if (Schema::hasColumn('users', 'allow_shopee_check')) {
             $updates['allow_shopee_check'] = (bool) ($data['allow_shopee_check'] ?? false);

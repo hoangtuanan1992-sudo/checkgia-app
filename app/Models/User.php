@@ -14,7 +14,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'allow_shopee_check'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'service_start_date', 'service_end_date', 'admin_note', 'allow_compare_match', 'allow_shopee_check'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -33,6 +33,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'service_start_date' => 'date',
             'service_end_date' => 'date',
+            'allow_compare_match' => 'boolean',
             'allow_shopee_check' => 'boolean',
         ];
     }
@@ -109,6 +110,17 @@ class User extends Authenticatable
         return (bool) static::query()
             ->whereKey($userId)
             ->value('allow_shopee_check');
+    }
+
+    public static function compareMatchEnabledForId(int $userId): bool
+    {
+        if ($userId <= 0 || ! Schema::hasColumn('users', 'allow_compare_match')) {
+            return false;
+        }
+
+        return (bool) static::query()
+            ->whereKey($userId)
+            ->value('allow_compare_match');
     }
 
     public function products(): HasMany

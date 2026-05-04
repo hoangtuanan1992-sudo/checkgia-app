@@ -8,10 +8,13 @@
                     <h1 class="card-title">Nhập link sản phẩm</h1>
                     <p class="card-sub">Thêm nhanh sản phẩm và link đối thủ để so sánh</p>
                 </div>
-                <div id="addProductChevron" style="width:28px;height:28px;border-radius:999px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
+                <div style="display:flex;gap:10px;align-items:center">
+                    <a class="btn btn-secondary" href="{{ route('dashboard.quick-scan') }}" onclick="event.stopPropagation()">Quét nhanh</a>
+                    <div id="addProductChevron" style="width:28px;height:28px;border-radius:999px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
                 </div>
             </div>
             <div id="addProductBody" class="card-body">
@@ -148,6 +151,9 @@
                             <button class="btn btn-secondary" type="submit">Cập nhật</button>
                         </form>
                         <button class="btn btn-secondary" type="button" id="compareViewToggle" style="display:none">Dạng thẻ</button>
+                        @if($compareMatchEnabled ?? false)
+                            <button class="btn btn-secondary" type="button" id="compareMatchOpen">So Khớp</button>
+                        @endif
                         <button class="btn btn-secondary" type="button" id="filterReset">Reset</button>
                     </div>
                 </div>
@@ -528,6 +534,32 @@
         </div>
     </div>
 
+    @if($compareMatchEnabled ?? false)
+        <dialog id="compareMatchDialog" class="dialog">
+            <div class="dialog-header">
+                <h3 class="card-title" style="font-size:18px">So khớp link đối thủ</h3>
+                <p class="card-sub">Tìm ứng viên từ dữ liệu scanner rồi dùng AI đang chọn trong Admin để xác nhận sản phẩm trùng.</p>
+            </div>
+            <div class="dialog-body">
+                <div id="compareMatchChoices" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+                    <button class="btn" type="button" data-compare-mode="all">So khớp toàn bộ</button>
+                    <button class="btn btn-secondary" type="button" data-compare-mode="empty">So khớp ô trống</button>
+                    <button class="btn btn-secondary" type="button" data-compare-mode="empty_skip_checked">Ô trống mới, bỏ qua ô đã so khớp</button>
+                </div>
+                <div id="compareMatchProgress" style="display:none;margin-top:14px">
+                    <div class="hint" id="compareMatchProgressText" style="margin-top:0">Đang chuẩn bị...</div>
+                    <div style="height:10px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px">
+                        <div id="compareMatchProgressBar" style="height:100%;width:0%;background:#1677ff"></div>
+                    </div>
+                    <div class="hint" id="compareMatchMessage" style="margin-top:8px"></div>
+                </div>
+                <div class="actions" style="justify-content:flex-end;margin-top:14px">
+                    <button class="btn btn-secondary" type="button" id="compareMatchCancel">Huỷ</button>
+                </div>
+            </div>
+        </dialog>
+    @endif
+
     <dialog id="urlDialog" class="dialog">
         <div class="dialog-header">
             <h3 class="card-title" style="font-size:18px">Sửa URL</h3>
@@ -723,6 +755,112 @@
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
             const csrfToken = '{{ csrf_token() }}';
             let lastAdjustButton = null;
+
+            const compareMatchOpen = document.getElementById('compareMatchOpen');
+            const compareMatchDialog = document.getElementById('compareMatchDialog');
+            const compareMatchCancel = document.getElementById('compareMatchCancel');
+            const compareMatchChoices = document.getElementById('compareMatchChoices');
+            const compareMatchProgress = document.getElementById('compareMatchProgress');
+            const compareMatchProgressText = document.getElementById('compareMatchProgressText');
+            const compareMatchProgressBar = document.getElementById('compareMatchProgressBar');
+            const compareMatchMessage = document.getElementById('compareMatchMessage');
+            const compareMatchRunUrl = '{{ route('dashboard.compare-match.run') }}';
+            const compareMatchTickUrlTemplate = '{{ route('dashboard.compare-match.tick', ['compareMatchRun' => '__RUN_ID__']) }}';
+            let compareMatchRunning = false;
+
+            function updateCompareProgress(run, fallbackMessage) {
+                const total = Number(run?.totalCells || 0);
+                const processed = Number(run?.processedCells || 0);
+                const remaining = Math.max(0, Number(run?.remainingCells || 0));
+                const percent = Math.max(0, Math.min(100, Number(run?.percent ?? (total > 0 ? Math.floor((processed / total) * 100) : 0))));
+                if (compareMatchProgressText) {
+                    compareMatchProgressText.textContent = total > 0
+                        ? `Đang so khớp ${processed}/${total} ô, còn ${remaining} ô.`
+                        : (fallbackMessage || 'Đang chuẩn bị...');
+                }
+                if (compareMatchProgressBar) {
+                    compareMatchProgressBar.style.width = `${percent}%`;
+                }
+                if (compareMatchMessage) {
+                    compareMatchMessage.textContent = run?.message || fallbackMessage || '';
+                }
+            }
+
+            async function postCompareJson(url, body) {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                    },
+                    body: JSON.stringify(body || {}),
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || payload.ok === false) {
+                    throw new Error(payload.message || 'Không chạy được so khớp.');
+                }
+
+                return payload;
+            }
+
+            async function tickCompareMatch(runId) {
+                const url = compareMatchTickUrlTemplate.replace('__RUN_ID__', String(runId));
+                while (compareMatchRunning) {
+                    const payload = await postCompareJson(url);
+                    updateCompareProgress(payload.run);
+                    if (['done', 'failed'].includes(String(payload.run?.status || ''))) {
+                        compareMatchRunning = false;
+                        if (payload.run?.status === 'done') {
+                            setTimeout(() => window.location.reload(), 900);
+                        }
+                        return;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 250));
+                }
+            }
+
+            async function startCompareMatch(mode) {
+                compareMatchRunning = true;
+                if (compareMatchChoices) compareMatchChoices.style.display = 'none';
+                if (compareMatchProgress) compareMatchProgress.style.display = '';
+                updateCompareProgress(null, 'Đang tạo tiến trình so khớp...');
+                try {
+                    const payload = await postCompareJson(compareMatchRunUrl, {mode});
+                    updateCompareProgress(payload.run);
+                    if (payload.run?.id && !['done', 'failed'].includes(String(payload.run?.status || ''))) {
+                        await tickCompareMatch(payload.run.id);
+                    } else {
+                        compareMatchRunning = false;
+                    }
+                } catch (error) {
+                    compareMatchRunning = false;
+                    if (compareMatchMessage) {
+                        compareMatchMessage.textContent = error instanceof Error ? error.message : 'Không chạy được so khớp.';
+                    }
+                }
+            }
+
+            if (compareMatchOpen && compareMatchDialog) {
+                compareMatchOpen.addEventListener('click', () => {
+                    compareMatchRunning = false;
+                    if (compareMatchChoices) compareMatchChoices.style.display = 'grid';
+                    if (compareMatchProgress) compareMatchProgress.style.display = 'none';
+                    updateCompareProgress(null, '');
+                    showDialog(compareMatchDialog);
+                });
+            }
+
+            document.querySelectorAll('[data-compare-mode]').forEach((button) => {
+                button.addEventListener('click', () => startCompareMatch(button.dataset.compareMode || 'empty'));
+            });
+
+            if (compareMatchCancel && compareMatchDialog) {
+                compareMatchCancel.addEventListener('click', () => {
+                    compareMatchRunning = false;
+                    closeDialog(compareMatchDialog);
+                });
+            }
 
             function openAdjust(action, value) {
                 adjustForm.action = action;

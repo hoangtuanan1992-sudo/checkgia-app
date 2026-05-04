@@ -100,6 +100,13 @@
                             <p class="card-sub">Bật chức năng riêng cho shop này</p>
                         </div>
                         <div class="card-body" style="padding:8px 16px 16px">
+                            <label style="display:flex;align-items:center;gap:10px;font-weight:700;margin-bottom:12px">
+                                <input type="hidden" name="allow_compare_match" value="0">
+                                <input type="checkbox" name="allow_compare_match" value="1" @checked(old('allow_compare_match', (bool) $user->allow_compare_match)) style="width:20px;height:20px">
+                                Hiện nút So khớp ở bảng Kết quả so sánh
+                            </label>
+                            @error('allow_compare_match')<div class="error">{{ $message }}</div>@enderror
+
                             <label style="display:flex;align-items:center;gap:10px;font-weight:700">
                                 <input type="hidden" name="allow_shopee_check" value="0">
                                 <input type="checkbox" name="allow_shopee_check" value="1" @checked(old('allow_shopee_check', (bool) $user->allow_shopee_check)) style="width:20px;height:20px">

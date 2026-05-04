@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CompetitorSite;
 use App\Models\Product;
 use App\Models\ProductGroup;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\View\View;
@@ -79,6 +80,7 @@ class DashboardController extends Controller
             'competitorSites' => $competitorSites,
             'productGroups' => $productGroups,
             'priceEvents' => $priceEvents,
+            'compareMatchEnabled' => User::compareMatchEnabledForId($userId),
         ]);
     }
 

@@ -7,10 +7,12 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\CompetitorController;
 use App\Http\Controllers\CompetitorHistoryController;
+use App\Http\Controllers\DashboardCompareMatchController;
 use App\Http\Controllers\DashboardCompetitorSetupController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardExportController;
 use App\Http\Controllers\DashboardProductController;
+use App\Http\Controllers\DashboardQuickScanController;
 use App\Http\Controllers\DashboardScrapeNowController;
 use App\Http\Controllers\DemoController;
 use App\Http\Controllers\ProductController;
@@ -42,10 +44,15 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard/quick-scan', [DashboardQuickScanController::class, 'index'])->name('dashboard.quick-scan');
+    Route::post('/dashboard/quick-scan/request', [DashboardQuickScanController::class, 'requestScan'])->name('dashboard.quick-scan.request');
+    Route::post('/dashboard/quick-scan/add-to-compare', [DashboardQuickScanController::class, 'addToCompare'])->name('dashboard.quick-scan.add-to-compare');
     Route::get('/dashboard/reports', [ReportController::class, 'index'])->name('dashboard.reports');
     Route::get('/dashboard/competitors', [DashboardCompetitorSetupController::class, 'index'])->name('dashboard.competitors');
     Route::get('/dashboard/export/products', [DashboardExportController::class, 'products'])->name('dashboard.export.products');
     Route::post('/dashboard/scrape-now', [DashboardScrapeNowController::class, 'run'])->name('dashboard.scrape.now');
+    Route::post('/dashboard/compare-match', [DashboardCompareMatchController::class, 'run'])->name('dashboard.compare-match.run');
+    Route::post('/dashboard/compare-match/{compareMatchRun}/tick', [DashboardCompareMatchController::class, 'tick'])->name('dashboard.compare-match.tick');
 
     Route::get('/shopee', [ShopeeDashboardController::class, 'index'])->name('shopee.dashboard');
     Route::middleware('owner')->group(function () {
