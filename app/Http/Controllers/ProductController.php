@@ -386,6 +386,32 @@ class ProductController extends Controller
         return back()->with('status', 'Đã xoá '.$deleted.' sản phẩm');
     }
 
+    public function assignFilteredGroupFromDashboard(Request $request, ProductGroup $productGroup): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user, 403);
+        abort_if($user->isViewer(), 403);
+
+        $userId = $user->effectiveUserId();
+        abort_unless((int) $productGroup->user_id === (int) $userId, 404);
+
+        $query = Product::query()->where('user_id', $userId);
+        $this->applyDashboardDeleteFilters($query, $request);
+
+        $count = (clone $query)->count();
+        $updated = $query->update(['product_group_id' => $productGroup->id]);
+
+        return response()->json([
+            'ok' => true,
+            'matched' => $count,
+            'updated' => $updated,
+            'group' => [
+                'id' => (int) $productGroup->id,
+                'name' => (string) $productGroup->name,
+            ],
+        ]);
+    }
+
     private function applyDashboardDeleteFilters($query, Request $request): void
     {
         $search = trim((string) $request->query('q', $request->input('q', '')));

@@ -30,6 +30,9 @@ class DashboardPaginationControlTest extends TestCase
             ->assertOk()
             ->assertSee('id="comparisonPagination"', false)
             ->assertSee('id="comparePerPage"', false)
+            ->assertSee('id="filterGroupPicker"', false)
+            ->assertSee('id="filterGroupTrigger"', false)
+            ->assertSee('id="assignGroupDialog"', false)
             ->assertSee('id="compareCardColumnsWrap"', false)
             ->assertSee('id="compareCardColumns"', false)
             ->assertSee('value="50" selected', false)
@@ -168,5 +171,64 @@ class DashboardPaginationControlTest extends TestCase
         $this->assertDatabaseMissing('products', ['id' => $deleteB->id]);
         $this->assertDatabaseHas('products', ['id' => $keepSameGroup->id]);
         $this->assertDatabaseHas('products', ['id' => $keepSameSearch->id]);
+    }
+
+    public function test_dashboard_can_assign_filtered_products_to_group(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $targetGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Dien thoai',
+        ]);
+        $otherGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Laptop',
+        ]);
+
+        $assign = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Phone Alpha',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/phone-alpha',
+        ]);
+        $keepNotMatched = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Laptop Alpha',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/laptop-alpha',
+        ]);
+        $keepAlreadyGrouped = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $otherGroup->id,
+            'name' => 'Phone Beta',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/phone-beta',
+        ]);
+
+        $this->actingAs($owner)
+            ->postJson(route('dashboard.products.assign-group', [
+                'productGroup' => $targetGroup,
+                'q' => 'Phone',
+                'group' => '__none__',
+            ]))
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'matched' => 1,
+                'updated' => 1,
+            ]);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $assign->id,
+            'product_group_id' => $targetGroup->id,
+        ]);
+        $this->assertDatabaseHas('products', [
+            'id' => $keepNotMatched->id,
+            'product_group_id' => null,
+        ]);
+        $this->assertDatabaseHas('products', [
+            'id' => $keepAlreadyGrouped->id,
+            'product_group_id' => $otherGroup->id,
+        ]);
     }
 }

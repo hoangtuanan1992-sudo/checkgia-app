@@ -94,6 +94,78 @@
                 height:42px;
                 padding:0 10px;
             }
+            .group-filter-picker{
+                position:relative;
+            }
+            .group-filter-select{
+                position:absolute;
+                width:1px;
+                height:1px;
+                opacity:0;
+                pointer-events:none;
+            }
+            .group-filter-trigger{
+                width:100%;
+                min-height:42px;
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                gap:8px;
+                text-align:left;
+                cursor:pointer;
+            }
+            .group-filter-menu{
+                position:absolute;
+                left:0;
+                right:0;
+                top:calc(100% + 6px);
+                z-index:1200;
+                max-height:280px;
+                overflow:auto;
+                border:1px solid var(--border);
+                border-radius:12px;
+                background:#fff;
+                box-shadow:0 18px 45px rgba(15,23,42,.14);
+                padding:6px;
+            }
+            .group-filter-row{
+                display:flex;
+                align-items:center;
+                gap:4px;
+            }
+            .group-filter-option,
+            .group-filter-add{
+                border:0;
+                background:transparent;
+                color:#111827;
+                cursor:pointer;
+            }
+            .group-filter-option{
+                flex:1;
+                min-height:36px;
+                padding:8px 10px;
+                text-align:left;
+                border-radius:8px;
+            }
+            .group-filter-option:hover,
+            .group-filter-option.is-active{
+                background:#eff6ff;
+                color:#1d4ed8;
+            }
+            .group-filter-add{
+                width:34px;
+                height:34px;
+                border:1px solid var(--border);
+                border-radius:9px;
+                font-size:18px;
+                font-weight:800;
+                line-height:1;
+            }
+            .group-filter-add:hover{
+                border-color:#2563eb;
+                background:#eff6ff;
+                color:#1d4ed8;
+            }
             .comparison-page-btn{
                 min-width:42px;
                 height:42px;
@@ -269,13 +341,35 @@
                     </div>
                     <div class="field" style="margin-top:0;min-width:220px">
                         <label class="label" for="filterGroup">Nhóm</label>
-                        <select class="input" id="filterGroup">
+                        <div class="group-filter-picker" id="filterGroupPicker">
+                        <select class="input group-filter-select" id="filterGroup" tabindex="-1" aria-hidden="true">
                             <option value="">Tất cả</option>
                             <option value="__none__" @selected(request('group') === '__none__')>Chưa có nhóm</option>
                             @foreach($productGroups as $g)
                                 <option value="{{ $g->id }}" @selected((string) request('group') === (string) $g->id)>{{ $g->name }}</option>
                             @endforeach
                         </select>
+                        <button class="input group-filter-trigger" id="filterGroupTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                            <span id="filterGroupLabel">Tất cả</span>
+                            <span aria-hidden="true">▾</span>
+                        </button>
+                        <div class="group-filter-menu" id="filterGroupMenu" hidden>
+                            <div class="group-filter-row">
+                                <button class="group-filter-option" type="button" data-group-filter-value="">Tất cả</button>
+                            </div>
+                            <div class="group-filter-row">
+                                <button class="group-filter-option" type="button" data-group-filter-value="__none__">Chưa có nhóm</button>
+                            </div>
+                            @foreach($productGroups as $g)
+                                <div class="group-filter-row">
+                                    <button class="group-filter-option" type="button" data-group-filter-value="{{ $g->id }}">{{ $g->name }}</button>
+                                    @unless(auth()->user()?->isViewer())
+                                        <button class="group-filter-add" type="button" data-group-id="{{ $g->id }}" data-group-name="{{ e($g->name) }}" data-action="{{ route('dashboard.products.assign-group', $g) }}" title="Thêm sản phẩm đang xem vào nhóm {{ $g->name }}" aria-label="Thêm vào nhóm {{ $g->name }}">+</button>
+                                    @endunless
+                                </div>
+                            @endforeach
+                        </div>
+                        </div>
                     </div>
                     <div class="field" style="margin-top:0;min-width:240px">
                         <label class="label" for="sortSelect">Sắp xếp</label>
@@ -842,6 +936,20 @@
             <div class="actions" style="justify-content:flex-end">
                 <button class="btn btn-secondary" type="button" id="bulkDeleteCancel">Huỷ</button>
                 <button class="btn" type="button" id="bulkDeleteConfirm">Xóa</button>
+            </div>
+        </div>
+    </dialog>
+
+    <dialog id="assignGroupDialog" class="dialog">
+        <div class="dialog-header">
+            <h3 class="card-title" style="font-size:18px">Thêm vào nhóm sản phẩm?</h3>
+            <p class="card-sub" id="assignGroupDialogText"></p>
+        </div>
+        <div class="dialog-body">
+            <p class="card-sub" id="assignGroupDialogCount" style="margin-top:0"></p>
+            <div class="actions" style="justify-content:flex-end">
+                <button class="btn btn-secondary" type="button" id="assignGroupCancel">Huỷ</button>
+                <button class="btn" type="button" id="assignGroupConfirm">Thêm vào nhóm</button>
             </div>
         </div>
     </dialog>
@@ -1646,6 +1754,15 @@
 
             const filterSearch = document.getElementById('filterSearch');
             const filterGroup = document.getElementById('filterGroup');
+            const filterGroupPicker = document.getElementById('filterGroupPicker');
+            const filterGroupTrigger = document.getElementById('filterGroupTrigger');
+            const filterGroupLabel = document.getElementById('filterGroupLabel');
+            const filterGroupMenu = document.getElementById('filterGroupMenu');
+            const assignGroupDialog = document.getElementById('assignGroupDialog');
+            const assignGroupDialogText = document.getElementById('assignGroupDialogText');
+            const assignGroupDialogCount = document.getElementById('assignGroupDialogCount');
+            const assignGroupCancel = document.getElementById('assignGroupCancel');
+            const assignGroupConfirm = document.getElementById('assignGroupConfirm');
             const sortSelect = document.getElementById('sortSelect');
             const filterReset = document.getElementById('filterReset');
             const exportAll = document.getElementById('exportAll');
@@ -1668,6 +1785,128 @@
             let compareLastPageCount = 0;
             let comparisonRequest = null;
             let floatingPagerObserver = null;
+            let pendingAssignGroup = null;
+
+            function syncGroupFilterPicker() {
+                if (!filterGroup || !filterGroupLabel) return;
+                const selected = filterGroup.options[filterGroup.selectedIndex];
+                filterGroupLabel.textContent = selected ? selected.textContent : 'Tất cả';
+                document.querySelectorAll('.group-filter-option').forEach((button) => {
+                    button.classList.toggle('is-active', String(button.dataset.groupFilterValue || '') === String(filterGroup.value || ''));
+                });
+            }
+
+            function setGroupFilterValue(value) {
+                if (!filterGroup) return;
+                filterGroup.value = value;
+                syncGroupFilterPicker();
+                filterGroup.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+
+            function closeGroupFilterMenu() {
+                if (!filterGroupMenu || !filterGroupTrigger) return;
+                filterGroupMenu.hidden = true;
+                filterGroupTrigger.setAttribute('aria-expanded', 'false');
+            }
+
+            function openAssignGroupDialog(button) {
+                if (!assignGroupDialog) return;
+                const meta = comparisonMetaFromDom();
+                const count = Number(meta.total || 0);
+                if (count <= 0) {
+                    alert('Không có sản phẩm nào trong bảng đang xem để thêm vào nhóm.');
+                    return;
+                }
+
+                pendingAssignGroup = {
+                    action: button.dataset.action || '',
+                    name: button.dataset.groupName || '',
+                };
+                const countText = count.toLocaleString('vi-VN');
+                if (assignGroupDialogText) {
+                    assignGroupDialogText.textContent = `Bạn muốn thêm ${countText} sản phẩm đang hiển thị ở bảng kết quả so sánh hiện tại vào nhóm "${pendingAssignGroup.name}" này không?`;
+                }
+                if (assignGroupDialogCount) {
+                    assignGroupDialogCount.textContent = 'Chỉ áp dụng cho các sản phẩm đang khớp tìm kiếm và bộ lọc nhóm hiện tại.';
+                }
+                closeGroupFilterMenu();
+                if (typeof assignGroupDialog.showModal === 'function') {
+                    assignGroupDialog.showModal();
+                }
+            }
+
+            if (filterGroupTrigger && filterGroupMenu) {
+                filterGroupTrigger.addEventListener('click', () => {
+                    const nextHidden = !filterGroupMenu.hidden;
+                    filterGroupMenu.hidden = nextHidden;
+                    filterGroupTrigger.setAttribute('aria-expanded', nextHidden ? 'false' : 'true');
+                });
+                document.addEventListener('click', (event) => {
+                    if (filterGroupPicker && !filterGroupPicker.contains(event.target)) {
+                        closeGroupFilterMenu();
+                    }
+                });
+                document.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape') {
+                        closeGroupFilterMenu();
+                    }
+                });
+            }
+            document.querySelectorAll('.group-filter-option').forEach((button) => {
+                button.addEventListener('click', () => {
+                    setGroupFilterValue(button.dataset.groupFilterValue || '');
+                    closeGroupFilterMenu();
+                });
+            });
+            document.querySelectorAll('.group-filter-add').forEach((button) => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openAssignGroupDialog(button);
+                });
+            });
+            if (assignGroupCancel && assignGroupDialog) {
+                assignGroupCancel.addEventListener('click', () => assignGroupDialog.close());
+                assignGroupDialog.addEventListener('click', (event) => {
+                    if (event.target === assignGroupDialog) {
+                        assignGroupDialog.close();
+                    }
+                });
+            }
+            if (assignGroupConfirm) {
+                assignGroupConfirm.addEventListener('click', async () => {
+                    if (!pendingAssignGroup?.action) return;
+                    assignGroupConfirm.disabled = true;
+                    const params = bulkDeleteQueryParams();
+                    const action = pendingAssignGroup.action + (params.toString() ? `?${params.toString()}` : '');
+
+                    try {
+                        const response = await fetch(action, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': csrf,
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json',
+                            },
+                            credentials: 'include',
+                        });
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok || data.ok === false) {
+                            alert(data.message || `Thêm vào nhóm thất bại (HTTP ${response.status}).`);
+                            return;
+                        }
+
+                        assignGroupDialog?.close();
+                        pendingAssignGroup = null;
+                        await loadComparisonPage(1);
+                    } catch (e) {
+                        alert('Thêm vào nhóm thất bại. Vui lòng thử lại.');
+                    } finally {
+                        assignGroupConfirm.disabled = false;
+                    }
+                });
+            }
+            syncGroupFilterPicker();
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1965,7 +2204,10 @@
                     comparisonSearchTimer = setTimeout(() => applyFiltersAndSort(true), 250);
                 });
             }
-            if (filterGroup) filterGroup.addEventListener('change', () => applyFiltersAndSort(true));
+            if (filterGroup) filterGroup.addEventListener('change', () => {
+                syncGroupFilterPicker();
+                applyFiltersAndSort(true);
+            });
             if (sortSelect) sortSelect.addEventListener('change', () => applyFiltersAndSort(true));
             if (comparePerPage) {
                 comparePerPage.addEventListener('change', () => {
@@ -2030,6 +2272,7 @@
                 filterReset.addEventListener('click', () => {
                     if (filterSearch) filterSearch.value = '';
                     if (filterGroup) filterGroup.value = '';
+                    syncGroupFilterPicker();
                     if (sortSelect) sortSelect.value = 'row_asc';
                     applyFiltersAndSort(true);
                 });
