@@ -117,8 +117,11 @@ Route::middleware('auth')->group(function () {
         Route::put('/account/subusers/{user}', [AccountController::class, 'updateSubUser'])->name('account.subusers.update');
         Route::delete('/account/subusers/{user}', [AccountController::class, 'destroySubUser'])->name('account.subusers.destroy');
         Route::post('/account/product-groups', [AccountController::class, 'createGroup'])->name('account.product-groups.store');
+        Route::post('/account/product-groups/{productGroup}/update', [AccountController::class, 'updateGroupFromPost'])->name('account.product-groups.update-post');
+        Route::post('/account/product-groups/{productGroup}/delete', [AccountController::class, 'destroyGroupFromPost'])->name('account.product-groups.delete-post');
         Route::put('/account/product-groups/{productGroup}', [AccountController::class, 'updateGroup'])->name('account.product-groups.update');
         Route::delete('/account/product-groups/{productGroup}', [AccountController::class, 'destroyGroup'])->name('account.product-groups.destroy');
+        Route::match(['get', 'post'], '/account/product-groups/{productGroup}', [AccountController::class, 'legacyProductGroupRequest'])->name('account.product-groups.show');
         Route::post('/account/competitor-site-groups', [AccountController::class, 'createCompetitorGroup'])->name('account.competitor-site-groups.store');
         Route::put('/account/competitor-site-groups/{competitorSiteGroup}', [AccountController::class, 'updateCompetitorGroup'])->name('account.competitor-site-groups.update');
         Route::delete('/account/competitor-site-groups/{competitorSiteGroup}', [AccountController::class, 'destroyCompetitorGroup'])->name('account.competitor-site-groups.destroy');
@@ -133,7 +136,6 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/dashboard/competitor-sites/{competitorSite}', fn () => redirect()->route('dashboard.competitors'))->name('dashboard.competitors.sites.show');
     Route::get('/dashboard/products/{product}/competitor-sites/{competitorSite}', fn () => redirect()->route('dashboard'))->name('dashboard.products.competitors.show');
-    Route::get('/account/product-groups/{productGroup}', fn () => redirect()->route('account'))->name('account.product-groups.show');
     Route::get('/account/competitor-site-groups/{competitorSiteGroup}', fn () => redirect()->route('account'))->name('account.competitor-site-groups.show');
 
     Route::match(['put', 'post'], '/competitors/{competitor}/price-adjustment', [CompetitorController::class, 'updatePriceAdjustment'])->name('competitors.adjustment.update');

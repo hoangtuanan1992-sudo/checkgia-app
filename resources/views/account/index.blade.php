@@ -128,18 +128,16 @@
                                                     @foreach($groups as $g)
                                                         <tr>
                                                             <td>
-                                                                <form id="product-group-form-{{ $g->id }}" method="POST" action="{{ route('account.product-groups.update', $g) }}">
+                                                                <form method="POST" action="{{ route('account.product-groups.update-post', $g) }}" style="display:flex;gap:8px;align-items:center">
                                                                     @csrf
-                                                                    @method('PUT')
-                                                                    <input class="input" name="name" type="text" value="{{ $g->name }}" required>
+                                                                    <input class="input" name="name" type="text" value="{{ $g->name }}" required style="flex:1;min-width:160px">
+                                                                    <button class="btn btn-secondary" type="submit">Sửa</button>
                                                                 </form>
                                                             </td>
                                                             <td>
                                                                 <div class="account-row-actions">
-                                                                    <button class="btn btn-secondary" type="submit" form="product-group-form-{{ $g->id }}">Sửa</button>
-                                                                    <form method="POST" action="{{ route('account.product-groups.destroy', $g) }}" onsubmit="return confirm('Xoá nhóm sản phẩm này?')">
+                                                                    <form method="POST" action="{{ route('account.product-groups.delete-post', $g) }}" onsubmit="return confirm('Xoá nhóm sản phẩm này?')">
                                                                         @csrf
-                                                                        @method('DELETE')
                                                                         <button class="btn" type="submit">Xoá</button>
                                                                     </form>
                                                                 </div>

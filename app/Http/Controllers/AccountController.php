@@ -269,6 +269,11 @@ class AccountController extends Controller
         return back()->with('status', 'Đã sửa nhóm sản phẩm');
     }
 
+    public function updateGroupFromPost(Request $request, ProductGroup $productGroup): RedirectResponse
+    {
+        return $this->updateGroup($request, $productGroup);
+    }
+
     public function destroyGroup(Request $request, ProductGroup $productGroup): RedirectResponse
     {
         $owner = $request->user();
@@ -279,6 +284,38 @@ class AccountController extends Controller
         $productGroup->delete();
 
         return back()->with('status', 'Đã xoá nhóm sản phẩm');
+    }
+
+    public function destroyGroupFromPost(Request $request, ProductGroup $productGroup): RedirectResponse
+    {
+        return $this->destroyGroup($request, $productGroup);
+    }
+
+    public function legacyProductGroupRequest(Request $request, string $productGroup): RedirectResponse
+    {
+        if ($request->isMethod('get')) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Hãy sửa hoặc xoá nhóm sản phẩm trực tiếp trong trang Tài khoản.');
+        }
+
+        $group = ProductGroup::query()->find((int) $productGroup);
+        if (! $group) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Nhóm sản phẩm này không còn tồn tại.');
+        }
+
+        $method = strtoupper((string) $request->input('_method', ''));
+        if ($method === 'DELETE') {
+            return $this->destroyGroup($request, $group);
+        }
+
+        if ($request->filled('name')) {
+            return $this->updateGroup($request, $group);
+        }
+
+        return redirect()->route('account');
     }
 
     public function createCompetitorGroup(Request $request): RedirectResponse
