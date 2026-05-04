@@ -371,6 +371,15 @@
                         </div>
                         </div>
                     </div>
+                    <div class="field" style="margin-top:0;min-width:220px">
+                        <label class="label" for="filterCompetitorGroup">Nhóm đối thủ</label>
+                        <select class="input" id="filterCompetitorGroup">
+                            <option value="">Tất cả</option>
+                            @foreach(($competitorGroups ?? collect()) as $group)
+                                <option value="{{ $group->id }}" @selected((int) ($selectedCompetitorGroupId ?? 0) === (int) $group->id)>{{ $group->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="field" style="margin-top:0;min-width:240px">
                         <label class="label" for="sortSelect">Sắp xếp</label>
                         <select class="input" id="sortSelect">
@@ -436,7 +445,7 @@
                                 <th style="width:52px">#</th>
                                 <th class="compare-sticky-name">Tên sản phẩm</th>
                                 <th class="compare-sticky-price">Giá của bạn</th>
-                                @foreach($competitorSites as $site)
+                                @foreach($comparisonCompetitorSites as $site)
                                     <th style="min-width:160px">{{ $site->name }}</th>
                                 @endforeach
                                 <th style="min-width:160px">Thời gian</th>
@@ -509,7 +518,7 @@
                                             </div>
                                         </div>
                                     </td>
-                                    @foreach($competitorSites as $site)
+                                    @foreach($comparisonCompetitorSites as $site)
                                         @php($c = $map->get($site->id))
                                         @php($latest = $c?->prices->first())
                                         @php($prev = $c?->prices->skip(1)->first())
@@ -634,7 +643,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ 5 + $competitorSites->count() }}" class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm trước.</td>
+                                    <td colspan="{{ 5 + $comparisonCompetitorSites->count() }}" class="hint">Chưa có dữ liệu. Hãy thêm sản phẩm trước.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -656,7 +665,7 @@
 
                             return (int) $p + (int) ($c->price_adjustment ?? 0) - $own;
                         })->filter(fn ($v) => ! is_null($v))->min() : null)
-                        @php($missingSites = $competitorSites->filter(fn ($s) => ! $map->has($s->id)))
+                        @php($missingSites = $comparisonCompetitorSites->filter(fn ($s) => ! $map->has($s->id)))
 
                         <div
                             class="card compare-card"
@@ -709,7 +718,7 @@
                                     <div style="text-align:right">Hành động</div>
                                 </div>
 
-                                @foreach($competitorSites as $site)
+                                @foreach($comparisonCompetitorSites as $site)
                                     @php($c = $map->get($site->id))
                                     @if(! $c)
                                         @continue
@@ -1754,6 +1763,7 @@
 
             const filterSearch = document.getElementById('filterSearch');
             const filterGroup = document.getElementById('filterGroup');
+            const filterCompetitorGroup = document.getElementById('filterCompetitorGroup');
             const filterGroupPicker = document.getElementById('filterGroupPicker');
             const filterGroupTrigger = document.getElementById('filterGroupTrigger');
             const filterGroupLabel = document.getElementById('filterGroupLabel');
@@ -1780,6 +1790,7 @@
             const compareFloatingNext = document.getElementById('compareFloatingNext');
             const comparePerPageKey = 'checkgia_compare_per_page';
             const comparisonFetchUrl = '{{ route('dashboard') }}';
+            const exportBaseUrl = '{{ route('dashboard.export.products') }}';
             let compareCurrentPage = 1;
             let comparisonBottomVisible = false;
             let compareLastPageCount = 0;
@@ -2034,10 +2045,12 @@
                 const params = new URLSearchParams();
                 const q = (filterSearch?.value || '').trim();
                 const group = filterGroup?.value || '';
+                const competitorGroup = filterCompetitorGroup?.value || '';
                 const sort = sortSelect?.value || 'row_asc';
                 const perPage = comparePerPage?.value || '50';
                 if (q) params.set('q', q);
                 if (group) params.set('group', group);
+                if (competitorGroup) params.set('competitor_group', competitorGroup);
                 if (sort && sort !== 'row_asc') params.set('sort', sort);
                 params.set('per_page', perPage);
                 params.set('page', String(Math.max(1, Number(page) || 1)));
@@ -2208,6 +2221,7 @@
                 syncGroupFilterPicker();
                 applyFiltersAndSort(true);
             });
+            if (filterCompetitorGroup) filterCompetitorGroup.addEventListener('change', () => applyFiltersAndSort(true));
             if (sortSelect) sortSelect.addEventListener('change', () => applyFiltersAndSort(true));
             if (comparePerPage) {
                 comparePerPage.addEventListener('change', () => {
@@ -2272,7 +2286,9 @@
                 filterReset.addEventListener('click', () => {
                     if (filterSearch) filterSearch.value = '';
                     if (filterGroup) filterGroup.value = '';
+                    if (filterCompetitorGroup) filterCompetitorGroup.value = '';
                     syncGroupFilterPicker();
+                    syncExportLinks();
                     if (sortSelect) sortSelect.value = 'row_asc';
                     applyFiltersAndSort(true);
                 });
@@ -2281,16 +2297,23 @@
             function syncExportLinks() {
                 if (!exportAll || !exportGroup || !filterGroup) return;
                 const group = filterGroup.value || '';
+                const competitorGroup = filterCompetitorGroup?.value || '';
+                const baseParams = new URLSearchParams();
+                if (competitorGroup) baseParams.set('competitor_group_id', competitorGroup);
+                exportAll.href = baseParams.toString() ? `${exportBaseUrl}?${baseParams.toString()}` : exportBaseUrl;
                 if (!group) {
                     exportGroup.style.display = 'none';
                     exportGroup.href = exportAll.href;
                     return;
                 }
+                const groupParams = new URLSearchParams(baseParams);
+                groupParams.set('group_id', group);
                 exportGroup.style.display = '';
-                exportGroup.href = `${exportAll.href}?group_id=${encodeURIComponent(group)}`;
+                exportGroup.href = `${exportBaseUrl}?${groupParams.toString()}`;
             }
 
             if (filterGroup) filterGroup.addEventListener('change', syncExportLinks);
+            if (filterCompetitorGroup) filterCompetitorGroup.addEventListener('change', syncExportLinks);
             syncExportLinks();
             renderComparisonFromCurrentResults();
         })();

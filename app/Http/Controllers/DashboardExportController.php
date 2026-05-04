@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteGroup;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use Illuminate\Http\Request;
@@ -18,8 +19,9 @@ class DashboardExportController extends Controller
         $userId = $authUser->effectiveUserId();
         $productGroupRestrictionIds = $authUser->isViewer() ? $authUser->visibleProductGroupIds() : [];
         $hasProductGroupRestriction = $authUser->isViewer() && $productGroupRestrictionIds !== [];
-        $restrictedCompetitorSiteIds = $authUser->isViewer()
-            ? $this->competitorSiteIdsForGroups($userId, $authUser->visibleCompetitorSiteGroupIds())
+        $viewerCompetitorGroupIds = $authUser->isViewer() ? $authUser->visibleCompetitorSiteGroupIds() : [];
+        $viewerCompetitorSiteIds = $authUser->isViewer()
+            ? $this->competitorSiteIdsForGroups($userId, $viewerCompetitorGroupIds)
             : null;
 
         $groupId = $request->query('group_id');
@@ -29,6 +31,25 @@ class DashboardExportController extends Controller
         } elseif (is_numeric($groupId)) {
             $groupFilter = (int) $groupId;
         }
+
+        $selectedCompetitorGroupId = null;
+        $competitorGroupId = $request->query('competitor_group_id', $request->query('competitor_group'));
+        if (is_numeric($competitorGroupId) && Schema::hasTable('competitor_site_groups')) {
+            $competitorGroupQuery = CompetitorSiteGroup::query()
+                ->where('user_id', $userId)
+                ->where('id', (int) $competitorGroupId);
+            if ($authUser->isViewer() && $viewerCompetitorGroupIds !== []) {
+                $competitorGroupQuery->whereIn('id', $viewerCompetitorGroupIds);
+            }
+            if ($competitorGroupQuery->exists()) {
+                $selectedCompetitorGroupId = (int) $competitorGroupId;
+            }
+        }
+
+        $selectedCompetitorSiteIds = $selectedCompetitorGroupId
+            ? $this->competitorSiteIdsForGroups($userId, [$selectedCompetitorGroupId])
+            : null;
+        $restrictedCompetitorSiteIds = $this->intersectIdFilters($viewerCompetitorSiteIds, $selectedCompetitorSiteIds);
 
         $competitorSitesQuery = CompetitorSite::query()
             ->where('user_id', $userId)
@@ -201,5 +222,23 @@ class DashboardExportController extends Controller
         }
 
         $query->whereIn($column, $ids);
+    }
+
+    /**
+     * @param array<int, int>|null $base
+     * @param array<int, int>|null $selected
+     * @return array<int, int>|null
+     */
+    private function intersectIdFilters(?array $base, ?array $selected): ?array
+    {
+        if (! is_array($base)) {
+            return $selected;
+        }
+
+        if (! is_array($selected)) {
+            return $base;
+        }
+
+        return array_values(array_intersect($base, $selected));
     }
 }

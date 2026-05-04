@@ -204,9 +204,8 @@
                                                         @php($selectedSiteIds = $cg->competitorSites->pluck('id')->map(fn ($id) => (int) $id)->all())
                                                         <tr>
                                                             <td>
-                                                                <form id="competitor-group-form-{{ $cg->id }}" method="POST" action="{{ route('account.competitor-site-groups.update', $cg) }}">
+                                                                <form id="competitor-group-form-{{ $cg->id }}" method="POST" action="{{ route('account.competitor-site-groups.update-post', $cg) }}">
                                                                     @csrf
-                                                                    @method('PUT')
                                                                     <input class="input" name="name" type="text" value="{{ $cg->name }}" required>
                                                                     <div class="account-check-list" style="grid-template-columns:1fr;margin-top:8px;max-height:150px">
                                                                         @foreach($competitorSites as $site)
@@ -230,9 +229,8 @@
                                                             <td>
                                                                 <div class="account-row-actions">
                                                                     <button class="btn btn-secondary" type="submit" form="competitor-group-form-{{ $cg->id }}">Sửa</button>
-                                                                    <form method="POST" action="{{ route('account.competitor-site-groups.destroy', $cg) }}" onsubmit="return confirm('Xoá nhóm đối thủ này?')">
+                                                                    <form method="POST" action="{{ route('account.competitor-site-groups.delete-post', $cg) }}" onsubmit="return confirm('Xoá nhóm đối thủ này?')">
                                                                         @csrf
-                                                                        @method('DELETE')
                                                                         <button class="btn" type="submit">Xoá</button>
                                                                     </form>
                                                                 </div>

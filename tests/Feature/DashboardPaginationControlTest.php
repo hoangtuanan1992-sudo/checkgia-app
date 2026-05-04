@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteGroup;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\User;
@@ -32,6 +34,7 @@ class DashboardPaginationControlTest extends TestCase
             ->assertSee('id="comparePerPage"', false)
             ->assertSee('id="filterGroupPicker"', false)
             ->assertSee('id="filterGroupTrigger"', false)
+            ->assertSee('id="filterCompetitorGroup"', false)
             ->assertSee('id="assignGroupDialog"', false)
             ->assertSee('id="compareCardColumnsWrap"', false)
             ->assertSee('id="compareCardColumns"', false)
@@ -112,6 +115,47 @@ class DashboardPaginationControlTest extends TestCase
                 'Beta Product',
                 'Charlie Product',
             ]);
+    }
+
+    public function test_dashboard_can_filter_competitor_columns_by_competitor_group(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $siteInGroup = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Site In Group',
+            'domain' => 'site-in-group.test',
+            'position' => 1,
+        ]);
+        $siteOutsideGroup = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Site Outside Group',
+            'domain' => 'site-outside-group.test',
+            'position' => 2,
+        ]);
+        $group = CompetitorSiteGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Nhom doi thu A',
+        ]);
+        $group->competitorSites()->attach($siteInGroup->id);
+
+        Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'San pham can loc cot doi thu',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/product-filter-competitors',
+        ]);
+
+        $response = $this->actingAs($owner)
+            ->get(route('dashboard', ['competitor_group' => $group->id]));
+
+        $response->assertOk()
+            ->assertSee('id="filterCompetitorGroup"', false)
+            ->assertSee('value="'.$group->id.'" selected', false);
+
+        preg_match('/<div id="comparisonResults"[\s\S]*?<div id="comparisonBottomSentinel"/', $response->getContent(), $matches);
+        $this->assertNotEmpty($matches);
+        $this->assertStringContainsString($siteInGroup->name, $matches[0]);
+        $this->assertStringNotContainsString($siteOutsideGroup->name, $matches[0]);
     }
 
     public function test_dashboard_bulk_delete_removes_only_filtered_products(): void

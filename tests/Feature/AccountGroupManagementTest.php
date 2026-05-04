@@ -121,7 +121,48 @@ class AccountGroupManagementTest extends TestCase
         $this->assertSame([$siteB->id], $group->competitorSites()->pluck('competitor_sites.id')->all());
 
         $this->actingAs($owner)
-            ->delete(route('account.competitor-site-groups.destroy', $group))
+            ->get(route('account.competitor-site-groups.show', $group))
+            ->assertRedirect(route('account'));
+
+        $this->actingAs($owner)
+            ->post(route('account.competitor-site-groups.update-post', $group), [
+                'name' => 'Di dong POST',
+                'competitor_site_ids' => [$siteA->id, $siteB->id],
+            ])
+            ->assertRedirect();
+
+        $group->refresh();
+        $this->assertSame('Di dong POST', $group->name);
+        $syncedSiteIds = $group->competitorSites()->pluck('competitor_sites.id')->sort()->values()->all();
+        $this->assertSame([$siteA->id, $siteB->id], $syncedSiteIds);
+
+        $this->actingAs($owner)
+            ->get(route('account.competitor-site-groups.update-post', [
+                'competitorSiteGroup' => $group,
+                'name' => 'Di dong GET fallback',
+                'competitor_site_ids' => [$siteA->id],
+            ]))
+            ->assertRedirect();
+
+        $group->refresh();
+        $this->assertSame('Di dong GET fallback', $group->name);
+        $this->assertSame([$siteA->id], $group->competitorSites()->pluck('competitor_sites.id')->all());
+
+        $this->actingAs($owner)
+            ->get(route('account', [
+                'competitor_group_action' => 'update',
+                'competitor_group_id' => $group->id,
+                'competitor_group_name' => 'Di dong query',
+                'competitor_site_ids' => [$siteB->id],
+            ]))
+            ->assertRedirect(route('account'));
+
+        $group->refresh();
+        $this->assertSame('Di dong query', $group->name);
+        $this->assertSame([$siteB->id], $group->competitorSites()->pluck('competitor_sites.id')->all());
+
+        $this->actingAs($owner)
+            ->post(route('account.competitor-site-groups.delete-post', $group))
             ->assertRedirect();
 
         $this->assertDatabaseMissing('competitor_site_groups', [

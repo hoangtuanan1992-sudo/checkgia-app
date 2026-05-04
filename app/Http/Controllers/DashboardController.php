@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteGroup;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\User;
@@ -20,16 +21,46 @@ class DashboardController extends Controller
         $userId = $authUser->effectiveUserId();
         $productGroupRestrictionIds = $authUser->isViewer() ? $authUser->visibleProductGroupIds() : [];
         $hasProductGroupRestriction = $authUser->isViewer() && $productGroupRestrictionIds !== [];
-        $restrictedCompetitorSiteIds = $authUser->isViewer()
-            ? $this->competitorSiteIdsForGroups($userId, $authUser->visibleCompetitorSiteGroupIds())
+        $viewerCompetitorGroupIds = $authUser->isViewer() ? $authUser->visibleCompetitorSiteGroupIds() : [];
+        $viewerCompetitorSiteIds = $authUser->isViewer()
+            ? $this->competitorSiteIdsForGroups($userId, $viewerCompetitorGroupIds)
             : null;
+
+        $competitorGroupsQuery = CompetitorSiteGroup::query()
+            ->where('user_id', $userId)
+            ->orderBy('name');
+        if ($authUser->isViewer() && $viewerCompetitorGroupIds !== []) {
+            $competitorGroupsQuery->whereIn('id', $viewerCompetitorGroupIds);
+        }
+        $competitorGroups = Schema::hasTable('competitor_site_groups')
+            ? $competitorGroupsQuery->get(['id', 'name'])
+            : collect();
+
+        $selectedCompetitorGroupId = null;
+        $competitorGroup = (string) $request->query('competitor_group', '');
+        if (ctype_digit($competitorGroup) && $competitorGroups->contains('id', (int) $competitorGroup)) {
+            $selectedCompetitorGroupId = (int) $competitorGroup;
+        }
+
+        $selectedCompetitorSiteIds = $selectedCompetitorGroupId
+            ? $this->competitorSiteIdsForGroups($userId, [$selectedCompetitorGroupId])
+            : null;
+        $restrictedCompetitorSiteIds = $this->intersectIdFilters($viewerCompetitorSiteIds, $selectedCompetitorSiteIds);
 
         $competitorSitesQuery = CompetitorSite::query()
             ->where('user_id', $userId)
             ->orderBy('position')
             ->orderBy('name');
-        $this->constrainToIds($competitorSitesQuery, $restrictedCompetitorSiteIds, 'id');
+        $this->constrainToIds($competitorSitesQuery, $viewerCompetitorSiteIds, 'id');
         $competitorSites = $competitorSitesQuery
+            ->get(['id', 'name', 'position']);
+
+        $comparisonCompetitorSitesQuery = CompetitorSite::query()
+            ->where('user_id', $userId)
+            ->orderBy('position')
+            ->orderBy('name');
+        $this->constrainToIds($comparisonCompetitorSitesQuery, $restrictedCompetitorSiteIds, 'id');
+        $comparisonCompetitorSites = $comparisonCompetitorSitesQuery
             ->get(['id', 'name', 'position']);
 
         $productGroupsQuery = ProductGroup::query()
@@ -125,7 +156,7 @@ class DashboardController extends Controller
             $compareMatchProducts = $compareMatchProductsQuery->get(['id', 'user_id', 'product_group_id']);
         }
         $compareMatchCounts = $compareMatchEnabled
-            ? $this->compareMatchCounts($userId, $compareMatchProducts, $competitorSites)
+            ? $this->compareMatchCounts($userId, $compareMatchProducts, $comparisonCompetitorSites)
             : ['allCells' => 0, 'emptyCells' => 0, 'emptyCheckedCells' => 0, 'emptySkipRemainingCells' => 0];
 
         return view('dashboard.index', [
@@ -133,6 +164,9 @@ class DashboardController extends Controller
             'productsTotal' => $productsTotal,
             'comparisonMeta' => $comparisonMeta,
             'competitorSites' => $competitorSites,
+            'comparisonCompetitorSites' => $comparisonCompetitorSites,
+            'competitorGroups' => $competitorGroups,
+            'selectedCompetitorGroupId' => $selectedCompetitorGroupId,
             'productGroups' => $productGroups,
             'priceEvents' => $priceEvents,
             'compareMatchEnabled' => $compareMatchEnabled,
@@ -366,5 +400,23 @@ class DashboardController extends Controller
         }
 
         $query->whereIn($column, $ids);
+    }
+
+    /**
+     * @param array<int, int>|null $base
+     * @param array<int, int>|null $selected
+     * @return array<int, int>|null
+     */
+    private function intersectIdFilters(?array $base, ?array $selected): ?array
+    {
+        if (! is_array($base)) {
+            return $selected;
+        }
+
+        if (! is_array($selected)) {
+            return $base;
+        }
+
+        return array_values(array_intersect($base, $selected));
     }
 }

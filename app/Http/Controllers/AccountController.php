@@ -30,6 +30,10 @@ class AccountController extends Controller
             return $this->handleProductGroupQueryAction($request, $user, $ownerId);
         }
 
+        if ($request->query('competitor_group_action')) {
+            return $this->handleCompetitorGroupQueryAction($request, $user, $ownerId);
+        }
+
         if ($request->query('subuser_action')) {
             return $this->handleSubUserQueryAction($request, $user, $ownerId);
         }
@@ -546,6 +550,106 @@ class AccountController extends Controller
         $competitorSiteGroup->delete();
 
         return back()->with('status', 'Đã xoá nhóm đối thủ');
+    }
+
+    public function updateCompetitorGroupFromPost(Request $request, CompetitorSiteGroup $competitorSiteGroup): RedirectResponse
+    {
+        if ($request->isMethod('get') && ! $request->filled('name')) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Hãy nhập tên nhóm đối thủ rồi bấm Sửa trong trang Tài khoản.');
+        }
+
+        return $this->updateCompetitorGroup($request, $competitorSiteGroup);
+    }
+
+    public function destroyCompetitorGroupFromPost(Request $request, CompetitorSiteGroup $competitorSiteGroup): RedirectResponse
+    {
+        return $this->destroyCompetitorGroup($request, $competitorSiteGroup);
+    }
+
+    public function legacyCompetitorGroupRequest(Request $request, string $competitorSiteGroup): RedirectResponse
+    {
+        if ($request->isMethod('get')) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Hãy sửa hoặc xoá nhóm đối thủ trực tiếp trong trang Tài khoản.');
+        }
+
+        $group = CompetitorSiteGroup::query()->find((int) $competitorSiteGroup);
+        if (! $group) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Nhóm đối thủ này không còn tồn tại.');
+        }
+
+        $method = strtoupper((string) $request->input('_method', ''));
+        if ($method === 'DELETE') {
+            return $this->destroyCompetitorGroup($request, $group);
+        }
+
+        if ($request->filled('name')) {
+            return $this->updateCompetitorGroup($request, $group);
+        }
+
+        return redirect()->route('account');
+    }
+
+    private function handleCompetitorGroupQueryAction(Request $request, User $user, int $ownerId): RedirectResponse
+    {
+        abort_if($user->isViewer(), 403);
+
+        if (! Schema::hasTable('competitor_site_groups')) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Chưa có bảng nhóm đối thủ. Hãy chạy migration trên hosting.');
+        }
+
+        $action = (string) $request->query('competitor_group_action', '');
+        $groupId = (int) $request->query('competitor_group_id', 0);
+
+        if ($groupId <= 0) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Không tìm thấy nhóm đối thủ cần xử lý.');
+        }
+
+        $group = CompetitorSiteGroup::query()
+            ->where('user_id', $ownerId)
+            ->whereKey($groupId)
+            ->first();
+
+        if (! $group) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Nhóm đối thủ này không còn tồn tại.');
+        }
+
+        if ($action === 'delete') {
+            $group->delete();
+
+            return redirect()
+                ->route('account')
+                ->with('status', 'Đã xoá nhóm đối thủ');
+        }
+
+        if ($action === 'update') {
+            $name = trim((string) $request->query('competitor_group_name', ''));
+            if ($name === '') {
+                return redirect()
+                    ->route('account')
+                    ->with('status', 'Tên nhóm đối thủ không được để trống.');
+            }
+
+            $group->update(['name' => mb_substr($name, 0, 255)]);
+            $group->competitorSites()->sync($this->ownedCompetitorSiteIds((array) $request->query('competitor_site_ids', []), $ownerId));
+
+            return redirect()
+                ->route('account')
+                ->with('status', 'Đã sửa nhóm đối thủ');
+        }
+
+        return redirect()->route('account');
     }
 
     /**
