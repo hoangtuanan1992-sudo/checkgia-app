@@ -2,6 +2,25 @@
 
 @section('content')
     <div style="width:100%;max-width:1500px">
+        <style>
+            #comparisonCardView{
+                grid-template-columns:repeat(2,minmax(0,1fr));
+                gap:12px;
+                width:100%;
+                align-items:start;
+            }
+            #comparisonCardView .compare-card{
+                max-width:none;
+                width:100%;
+                height:100%;
+            }
+            @media (max-width: 1100px){
+                #comparisonCardView{
+                    grid-template-columns:1fr;
+                }
+            }
+        </style>
+
         <div class="card" style="max-width:none;margin-bottom:16px">
             <div id="addProductHeader" style="display:flex;justify-content:space-between;gap:12px;align-items:center;cursor:pointer;user-select:none;padding:16px 16px 6px">
                 <div>
@@ -369,7 +388,7 @@
                     </table>
                 </div>
 
-                <div id="comparisonCardView" style="display:none;flex-direction:column;gap:12px;width:100%">
+                <div id="comparisonCardView" style="display:none">
                     @forelse($products as $idx => $product)
                         @php($own = (int) $product->price)
                         @php($map = $product->competitors->keyBy('competitor_site_id'))
@@ -1185,7 +1204,7 @@
                 const nextMode = mode === 'cards' ? 'cards' : 'table';
 
                 if (comparisonCardView) {
-                    comparisonCardView.style.display = nextMode === 'cards' ? 'flex' : 'none';
+                    comparisonCardView.style.display = nextMode === 'cards' ? 'grid' : 'none';
                 }
                 if (comparisonTableView) {
                     comparisonTableView.style.display = nextMode === 'cards' ? 'none' : '';
