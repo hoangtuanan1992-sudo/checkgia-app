@@ -1458,7 +1458,7 @@
             const comparePageSummary = document.getElementById('comparePageSummary');
             const comparePageJump = document.getElementById('comparePageJump');
             const comparePageButtons = document.getElementById('comparePageButtons');
-            const comparisonBottomSentinel = document.getElementById('comparisonBottomSentinel');
+            let comparisonBottomSentinel = document.getElementById('comparisonBottomSentinel');
             const comparisonFloatingPager = document.getElementById('comparisonFloatingPager');
             const compareFloatingPrev = document.getElementById('compareFloatingPrev');
             const compareFloatingNext = document.getElementById('compareFloatingNext');
@@ -1468,6 +1468,7 @@
             let comparisonBottomVisible = false;
             let compareLastPageCount = 0;
             let comparisonRequest = null;
+            let floatingPagerObserver = null;
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1646,6 +1647,7 @@
 
                     const activeMode = compareViewToggle?.dataset.mode || (isMobileView() ? 'cards' : getStoredCompareView());
                     currentComparisonResults()?.replaceWith(nextResults);
+                    setupFloatingPagerObserver();
                     bindDynamicComparisonControls(nextResults);
                     renderComparisonFromCurrentResults();
                     setCompareView(activeMode, false);
@@ -1789,8 +1791,14 @@
             if (compareFloatingNext) {
                 compareFloatingNext.addEventListener('click', () => goToComparePage(compareCurrentPage + 1));
             }
+            function currentComparisonBottomSentinel() {
+                return document.getElementById('comparisonBottomSentinel');
+            }
             function refreshFloatingPagerVisibility() {
+                comparisonBottomSentinel = currentComparisonBottomSentinel();
                 if (!comparisonBottomSentinel) {
+                    comparisonBottomVisible = false;
+                    updateFloatingPager(compareLastPageCount);
                     return;
                 }
 
@@ -1798,16 +1806,26 @@
                 comparisonBottomVisible = rect.top <= window.innerHeight && rect.bottom >= 0;
                 updateFloatingPager(compareLastPageCount);
             }
-            if (comparisonBottomSentinel && 'IntersectionObserver' in window) {
-                const floatingPagerObserver = new IntersectionObserver((entries) => {
-                    comparisonBottomVisible = entries.some((entry) => entry.isIntersecting);
-                    updateFloatingPager(compareLastPageCount);
-                }, {threshold: 0});
-                floatingPagerObserver.observe(comparisonBottomSentinel);
-            } else {
+            function setupFloatingPagerObserver() {
+                comparisonBottomSentinel = currentComparisonBottomSentinel();
+                if (floatingPagerObserver) {
+                    floatingPagerObserver.disconnect();
+                    floatingPagerObserver = null;
+                }
+                if (comparisonBottomSentinel && 'IntersectionObserver' in window) {
+                    floatingPagerObserver = new IntersectionObserver((entries) => {
+                        comparisonBottomVisible = entries.some((entry) => entry.isIntersecting);
+                        updateFloatingPager(compareLastPageCount);
+                    }, {threshold: 0});
+                    floatingPagerObserver.observe(comparisonBottomSentinel);
+                }
+                refreshFloatingPagerVisibility();
+            }
+            if (!('IntersectionObserver' in window)) {
                 window.addEventListener('scroll', refreshFloatingPagerVisibility, {passive: true});
                 window.addEventListener('resize', refreshFloatingPagerVisibility);
             }
+            setupFloatingPagerObserver();
             if (filterReset) {
                 filterReset.addEventListener('click', () => {
                     if (filterSearch) filterSearch.value = '';

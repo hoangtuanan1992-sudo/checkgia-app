@@ -62,7 +62,9 @@ class DashboardPaginationControlTest extends TestCase
             ->assertSee('data-shown="20"', false);
 
         $html = $response->getContent();
-        $this->assertSame(20, substr_count($html, 'data-product-row="'));
-        $this->assertSame(20, substr_count($html, 'data-product-card="'));
+        preg_match_all('/<tr\b[^>]*data-product-row="/', $html, $rowMatches);
+        preg_match_all('/<div\b[^>]*data-product-card="/', $html, $cardMatches);
+        $this->assertSame(20, count($rowMatches[0]));
+        $this->assertSame(20, count($cardMatches[0]));
     }
 }
