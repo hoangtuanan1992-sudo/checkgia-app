@@ -16,6 +16,7 @@ use App\Http\Controllers\DemoController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductHistoryController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ScannedProductFullController;
 use App\Http\Controllers\Shopee\ShopeeAdminController;
 use App\Http\Controllers\Shopee\ShopeeDashboardController;
 use App\Http\Controllers\Shopee\ShopeeSettingsController;
@@ -30,6 +31,7 @@ Route::get('/', function () {
 })->name('home');
 
 Route::get('/demo', DemoController::class)->name('demo');
+Route::get('/san-pham-full', ScannedProductFullController::class)->name('scanner.full-products');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
