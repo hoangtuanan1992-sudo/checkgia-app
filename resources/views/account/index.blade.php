@@ -128,16 +128,18 @@
                                                     @foreach($groups as $g)
                                                         <tr>
                                                             <td>
-                                                                <form method="POST" action="{{ route('account.product-groups.update-post', $g) }}" style="display:flex;gap:8px;align-items:center">
-                                                                    @csrf
-                                                                    <input class="input" name="name" type="text" value="{{ $g->name }}" required style="flex:1;min-width:160px">
+                                                                <form method="GET" action="{{ route('account') }}" style="display:flex;gap:8px;align-items:center">
+                                                                    <input type="hidden" name="product_group_action" value="update">
+                                                                    <input type="hidden" name="product_group_id" value="{{ $g->id }}">
+                                                                    <input class="input" name="product_group_name" type="text" value="{{ $g->name }}" required style="flex:1;min-width:160px">
                                                                     <button class="btn btn-secondary" type="submit">Sửa</button>
                                                                 </form>
                                                             </td>
                                                             <td>
                                                                 <div class="account-row-actions">
-                                                                    <form method="POST" action="{{ route('account.product-groups.delete-post', $g) }}" onsubmit="return confirm('Xoá nhóm sản phẩm này?')">
-                                                                        @csrf
+                                                                    <form method="GET" action="{{ route('account') }}" onsubmit="return confirm('Xoá nhóm sản phẩm này?')">
+                                                                        <input type="hidden" name="product_group_action" value="delete">
+                                                                        <input type="hidden" name="product_group_id" value="{{ $g->id }}">
                                                                         <button class="btn" type="submit">Xoá</button>
                                                                     </form>
                                                                 </div>

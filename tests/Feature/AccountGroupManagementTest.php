@@ -61,7 +61,23 @@ class AccountGroupManagementTest extends TestCase
         ]);
 
         $this->actingAs($owner)
-            ->get(route('account.product-groups.delete-post', $group))
+            ->get(route('account', [
+                'product_group_action' => 'update',
+                'product_group_id' => $group->id,
+                'product_group_name' => 'Laptop route cũ',
+            ]))
+            ->assertRedirect(route('account'));
+
+        $this->assertDatabaseHas('product_groups', [
+            'id' => $group->id,
+            'name' => 'Laptop route cũ',
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('account', [
+                'product_group_action' => 'delete',
+                'product_group_id' => $group->id,
+            ]))
             ->assertRedirect();
 
         $this->assertDatabaseMissing('product_groups', [

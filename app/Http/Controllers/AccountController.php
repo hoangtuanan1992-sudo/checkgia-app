@@ -16,7 +16,7 @@ use Illuminate\View\View;
 
 class AccountController extends Controller
 {
-    public function show(Request $request): View
+    public function show(Request $request): View|RedirectResponse
     {
         $authUser = $request->user();
         $ownerId = $authUser->effectiveUserId();
@@ -24,6 +24,10 @@ class AccountController extends Controller
 
         $isImpersonating = $authUser->isAdmin() && (int) session('impersonate_user_id', 0) > 0;
         $user = $isImpersonating ? (User::query()->find($ownerId) ?? $authUser) : $authUser;
+
+        if ($request->query('product_group_action')) {
+            return $this->handleProductGroupQueryAction($request, $user, $ownerId);
+        }
 
         $notification = UserNotificationSetting::query()->firstOrCreate([
             'user_id' => $ownerId,
@@ -319,6 +323,56 @@ class AccountController extends Controller
 
         if ($request->filled('name')) {
             return $this->updateGroup($request, $group);
+        }
+
+        return redirect()->route('account');
+    }
+
+    private function handleProductGroupQueryAction(Request $request, User $user, int $ownerId): RedirectResponse
+    {
+        abort_if($user->isViewer(), 403);
+
+        $action = (string) $request->query('product_group_action', '');
+        $groupId = (int) $request->query('product_group_id', 0);
+
+        if ($groupId <= 0) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Không tìm thấy nhóm sản phẩm cần xử lý.');
+        }
+
+        $group = ProductGroup::query()
+            ->where('user_id', $ownerId)
+            ->whereKey($groupId)
+            ->first();
+
+        if (! $group) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Nhóm sản phẩm này không còn tồn tại.');
+        }
+
+        if ($action === 'delete') {
+            $group->delete();
+
+            return redirect()
+                ->route('account')
+                ->with('status', 'Đã xoá nhóm sản phẩm');
+        }
+
+        if ($action === 'update') {
+            $name = trim((string) $request->query('product_group_name', ''));
+            if ($name === '') {
+                return redirect()
+                    ->route('account')
+                    ->with('status', 'Tên nhóm sản phẩm không được để trống.');
+            }
+
+            $group->update(['name' => mb_substr($name, 0, 255)]);
+
+            return redirect()
+                ->route('account')
+                ->with('status', 'Đã sửa nhóm sản phẩm');
         }
 
         return redirect()->route('account');
