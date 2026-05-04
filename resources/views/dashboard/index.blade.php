@@ -81,6 +81,19 @@
                 height:42px;
                 padding:0 10px;
             }
+            .comparison-card-column-control{
+                display:none;
+                align-items:center;
+                gap:8px;
+            }
+            .comparison-card-column-control.is-visible{
+                display:flex;
+            }
+            .comparison-card-columns{
+                width:92px;
+                height:42px;
+                padding:0 10px;
+            }
             .comparison-page-btn{
                 min-width:42px;
                 height:42px;
@@ -304,6 +317,13 @@
                         </select>
                         <label class="label" for="comparePageJump" style="margin:0">Bạn muốn xem trang:</label>
                         <input class="input comparison-page-input" id="comparePageJump" type="number" min="1" value="{{ (int) ($comparisonMeta['page'] ?? 1) }}" inputmode="numeric">
+                        <span class="comparison-card-column-control" id="compareCardColumnsWrap">
+                            <label class="label" for="compareCardColumns" style="margin:0">Số cột thẻ</label>
+                            <select class="input comparison-card-columns" id="compareCardColumns">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                            </select>
+                        </span>
                     </div>
                     <div class="comparison-page-buttons" id="comparePageButtons" aria-label="Phân trang kết quả so sánh"></div>
                 </div>
@@ -1440,7 +1460,10 @@
             const compareViewToggle = document.getElementById('compareViewToggle');
             const comparisonTableView = document.getElementById('comparisonTableView');
             const comparisonCardView = document.getElementById('comparisonCardView');
+            const compareCardColumnsWrap = document.getElementById('compareCardColumnsWrap');
+            const compareCardColumns = document.getElementById('compareCardColumns');
             const compareViewKey = 'checkgia_compare_view';
+            const compareCardColumnsKey = 'checkgia_compare_card_columns';
 
             function isMobileView() {
                 return window.matchMedia('(max-width: 768px)').matches;
@@ -1452,6 +1475,31 @@
                     return v === 'cards' || v === 'table' ? v : 'table';
                 } catch (e) {
                     return 'table';
+                }
+            }
+
+            function getStoredCardColumns() {
+                try {
+                    const v = localStorage.getItem(compareCardColumnsKey);
+                    return v === '1' || v === '2' ? v : '2';
+                } catch (e) {
+                    return '2';
+                }
+            }
+
+            function applyCardColumns() {
+                const cardView = document.getElementById('comparisonCardView');
+                if (!cardView) {
+                    return;
+                }
+
+                const columns = isMobileView() ? '1' : getStoredCardColumns();
+                cardView.style.gridTemplateColumns = columns === '2'
+                    ? 'repeat(2,minmax(0,1fr))'
+                    : '1fr';
+
+                if (compareCardColumns && compareCardColumns.value !== columns) {
+                    compareCardColumns.value = columns;
                 }
             }
 
@@ -1472,6 +1520,10 @@
                     compareViewToggle.textContent = nextMode === 'cards' ? 'Dạng bảng' : 'Dạng thẻ';
                     compareViewToggle.style.display = isMobileView() ? 'none' : '';
                 }
+                if (compareCardColumnsWrap) {
+                    compareCardColumnsWrap.classList.toggle('is-visible', nextMode === 'cards');
+                }
+                applyCardColumns();
 
                 if (persist) {
                     try {
@@ -1490,6 +1542,17 @@
                     setCompareView(current === 'cards' ? 'table' : 'cards', true);
                 });
             }
+            if (compareCardColumns) {
+                compareCardColumns.value = getStoredCardColumns();
+                compareCardColumns.addEventListener('change', () => {
+                    const value = compareCardColumns.value === '1' ? '1' : '2';
+                    try {
+                        localStorage.setItem(compareCardColumnsKey, value);
+                    } catch (e) {
+                    }
+                    applyCardColumns();
+                });
+            }
 
             window.addEventListener('resize', () => {
                 const nowMobile = isMobileView();
@@ -1497,6 +1560,7 @@
                     setCompareView(nowMobile ? 'cards' : getStoredCompareView(), false);
                     lastMobile = nowMobile;
                 }
+                applyCardColumns();
             });
 
             document.querySelectorAll('.js-add-link').forEach((btn) => {

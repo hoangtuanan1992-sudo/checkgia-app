@@ -30,6 +30,8 @@ class DashboardPaginationControlTest extends TestCase
             ->assertOk()
             ->assertSee('id="comparisonPagination"', false)
             ->assertSee('id="comparePerPage"', false)
+            ->assertSee('id="compareCardColumnsWrap"', false)
+            ->assertSee('id="compareCardColumns"', false)
             ->assertSee('value="50" selected', false)
             ->assertSee('Bạn muốn xem trang:', false)
             ->assertSee('id="comparePageButtons"', false)
@@ -41,7 +43,8 @@ class DashboardPaginationControlTest extends TestCase
             ->assertDontSee('id="filterReset"', false)
             ->assertSee('class="compare-sticky-name"', false)
             ->assertSee('class="compare-sticky-price"', false)
-            ->assertSee('checkgia_compare_per_page', false);
+            ->assertSee('checkgia_compare_per_page', false)
+            ->assertSee('checkgia_compare_card_columns', false);
     }
 
     public function test_dashboard_comparison_table_is_paginated_on_server(): void
