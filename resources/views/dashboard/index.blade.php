@@ -14,6 +14,42 @@
                 width:100%;
                 height:100%;
             }
+            #comparisonTableView{
+                --compare-name-col-width:360px;
+                --compare-price-col-width:170px;
+            }
+            #comparisonTableView .compare-sticky-name,
+            #comparisonTableView .compare-sticky-price{
+                position:sticky !important;
+                background:#fff;
+                z-index:35;
+                background-clip:padding-box;
+            }
+            #comparisonTableView .compare-sticky-name{
+                left:0;
+                min-width:var(--compare-name-col-width);
+                width:var(--compare-name-col-width);
+                max-width:var(--compare-name-col-width);
+            }
+            #comparisonTableView .compare-sticky-price{
+                left:var(--compare-name-col-width);
+                min-width:var(--compare-price-col-width);
+                width:var(--compare-price-col-width);
+                max-width:var(--compare-price-col-width);
+                box-shadow:12px 0 18px rgba(15,23,42,.08);
+            }
+            #comparisonTableView thead .compare-sticky-name,
+            #comparisonTableView thead .compare-sticky-price{
+                background-color:#007bff !important;
+                color:#fff !important;
+                z-index:1001 !important;
+            }
+            @media (max-width: 768px){
+                #comparisonTableView{
+                    --compare-name-col-width:280px;
+                    --compare-price-col-width:150px;
+                }
+            }
             .comparison-pagination{
                 display:flex;
                 justify-content:space-between;
@@ -284,8 +320,8 @@
                         <thead>
                             <tr>
                                 <th style="width:52px">#</th>
-                                <th style="min-width:340px">Tên sản phẩm</th>
-                                <th style="min-width:150px">Giá của bạn</th>
+                                <th class="compare-sticky-name">Tên sản phẩm</th>
+                                <th class="compare-sticky-price">Giá của bạn</th>
                                 @foreach($competitorSites as $site)
                                     <th style="min-width:160px">{{ $site->name }}</th>
                                 @endforeach
@@ -319,7 +355,7 @@
                                     data-min-diff="{{ is_null($minDiff) ? '' : $minDiff }}"
                                 >
                                     <td>{{ $rowOffset + $idx + 1 }}</td>
-                                    <td>
+                                    <td class="compare-sticky-name">
                                         <div style="display:flex;gap:10px;align-items:center">
                                             <div style="display:flex;flex-direction:column;gap:4px">
                                                 <span style="font-weight:600">{{ $product->name }}</span>
@@ -330,7 +366,7 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td>
+                                    <td class="compare-sticky-price">
                                         <div style="display:flex;flex-direction:column;gap:4px;padding-top:0px">
                                             <div style="display:flex;align-items:center;gap:8px">
                                                 <button

@@ -39,6 +39,8 @@ class DashboardPaginationControlTest extends TestCase
             ->assertSee('id="bulkDeleteOpen"', false)
             ->assertSee('id="bulkDeleteDialog"', false)
             ->assertDontSee('id="filterReset"', false)
+            ->assertSee('class="compare-sticky-name"', false)
+            ->assertSee('class="compare-sticky-price"', false)
             ->assertSee('checkgia_compare_per_page', false);
     }
 
