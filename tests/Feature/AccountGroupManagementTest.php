@@ -110,6 +110,14 @@ class AccountGroupManagementTest extends TestCase
         $this->assertSame([$siteA->id], $group->competitorSites()->pluck('competitor_sites.id')->all());
 
         $this->actingAs($owner)
+            ->get(route('account'))
+            ->assertOk()
+            ->assertSee('name="competitor_group_action" value="update"', false)
+            ->assertSee('name="competitor_group_action" value="delete"', false)
+            ->assertDontSee('/account/competitor-site-groups/'.$group->id.'/update', false)
+            ->assertDontSee('/account/competitor-site-groups/'.$group->id.'/delete', false);
+
+        $this->actingAs($owner)
             ->put(route('account.competitor-site-groups.update', $group), [
                 'name' => 'Di động',
                 'competitor_site_ids' => [$siteB->id],

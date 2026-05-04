@@ -204,8 +204,9 @@
                                                         @php($selectedSiteIds = $cg->competitorSites->pluck('id')->map(fn ($id) => (int) $id)->all())
                                                         <tr>
                                                             <td>
-                                                                <form id="competitor-group-form-{{ $cg->id }}" method="POST" action="{{ route('account.competitor-site-groups.update-post', $cg) }}">
-                                                                    @csrf
+                                                                <form id="competitor-group-form-{{ $cg->id }}" method="GET" action="{{ route('account') }}">
+                                                                    <input type="hidden" name="competitor_group_action" value="update">
+                                                                    <input type="hidden" name="competitor_group_id" value="{{ $cg->id }}">
                                                                     <input class="input" name="name" type="text" value="{{ $cg->name }}" required>
                                                                     <div class="account-check-list" style="grid-template-columns:1fr;margin-top:8px;max-height:150px">
                                                                         @foreach($competitorSites as $site)
@@ -229,8 +230,9 @@
                                                             <td>
                                                                 <div class="account-row-actions">
                                                                     <button class="btn btn-secondary" type="submit" form="competitor-group-form-{{ $cg->id }}">Sửa</button>
-                                                                    <form method="POST" action="{{ route('account.competitor-site-groups.delete-post', $cg) }}" onsubmit="return confirm('Xoá nhóm đối thủ này?')">
-                                                                        @csrf
+                                                                    <form method="GET" action="{{ route('account') }}" onsubmit="return confirm('Xoá nhóm đối thủ này?')">
+                                                                        <input type="hidden" name="competitor_group_action" value="delete">
+                                                                        <input type="hidden" name="competitor_group_id" value="{{ $cg->id }}">
                                                                         <button class="btn" type="submit">Xoá</button>
                                                                     </form>
                                                                 </div>

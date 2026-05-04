@@ -634,7 +634,7 @@ class AccountController extends Controller
         }
 
         if ($action === 'update') {
-            $name = trim((string) $request->query('competitor_group_name', ''));
+            $name = trim((string) $request->query('competitor_group_name', $request->query('name', '')));
             if ($name === '') {
                 return redirect()
                     ->route('account')
