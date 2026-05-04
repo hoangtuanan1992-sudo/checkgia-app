@@ -10,6 +10,7 @@ use App\Models\UserNotificationSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -27,6 +28,10 @@ class AccountController extends Controller
 
         if ($request->query('product_group_action')) {
             return $this->handleProductGroupQueryAction($request, $user, $ownerId);
+        }
+
+        if ($request->query('subuser_action')) {
+            return $this->handleSubUserQueryAction($request, $user, $ownerId);
         }
 
         $notification = UserNotificationSetting::query()->firstOrCreate([
@@ -224,6 +229,11 @@ class AccountController extends Controller
         return back()->with('status', 'Đã lưu tài khoản con');
     }
 
+    public function updateSubUserFromPost(Request $request, User $user): RedirectResponse
+    {
+        return $this->updateSubUser($request, $user);
+    }
+
     public function destroySubUser(Request $request, User $user): RedirectResponse
     {
         $owner = $request->user();
@@ -235,6 +245,27 @@ class AccountController extends Controller
         $user->delete();
 
         return back()->with('status', 'Đã xoá tài khoản con');
+    }
+
+    public function destroySubUserFromPost(Request $request, User $user): RedirectResponse
+    {
+        return $this->destroySubUser($request, $user);
+    }
+
+    public function legacySubUserRequest(Request $request, User $user): RedirectResponse
+    {
+        if ($request->isMethod('get')) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Hãy bấm Xem rồi Lưu trực tiếp trong trang Tài khoản.');
+        }
+
+        $method = strtoupper((string) $request->input('_method', ''));
+        if ($method === 'DELETE') {
+            return $this->destroySubUser($request, $user);
+        }
+
+        return $this->updateSubUser($request, $user);
     }
 
     public function createGroup(Request $request): RedirectResponse
@@ -376,6 +407,91 @@ class AccountController extends Controller
         }
 
         return redirect()->route('account');
+    }
+
+    private function handleSubUserQueryAction(Request $request, User $user, int $ownerId): RedirectResponse
+    {
+        abort_if($user->isViewer(), 403);
+
+        $action = (string) $request->query('subuser_action', '');
+        $subUserId = (int) $request->query('subuser_id', 0);
+
+        if ($subUserId <= 0) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Không tìm thấy tài khoản con cần xử lý.');
+        }
+
+        $subUser = User::query()
+            ->where('parent_user_id', $ownerId)
+            ->where('role', 'viewer')
+            ->whereKey($subUserId)
+            ->first();
+
+        if (! $subUser) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Tài khoản con này không còn tồn tại.');
+        }
+
+        if ($action === 'delete') {
+            $subUser->delete();
+
+            return redirect()
+                ->route('account')
+                ->with('status', 'Đã xoá tài khoản con');
+        }
+
+        if ($action !== 'update') {
+            return redirect()->route('account');
+        }
+
+        $data = [
+            'name' => trim((string) $request->query('name', '')),
+            'email' => trim((string) $request->query('email', '')),
+            'product_group_ids' => (array) $request->query('product_group_ids', []),
+            'competitor_site_group_ids' => (array) $request->query('competitor_site_group_ids', []),
+        ];
+
+        $validator = Validator::make($data, [
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($subUser->id)],
+            'product_group_ids' => ['nullable', 'array'],
+            'product_group_ids.*' => ['integer'],
+            'competitor_site_group_ids' => ['nullable', 'array'],
+            'competitor_site_group_ids.*' => ['integer'],
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()
+                ->route('account')
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        $canonical = User::canonicalEmail($data['email']);
+        $existsCanonical = User::query()
+            ->where('email_canonical', $canonical)
+            ->whereKeyNot($subUser->id)
+            ->exists();
+
+        if ($existsCanonical) {
+            return redirect()
+                ->route('account')
+                ->withErrors(['email' => 'Email này đã được dùng để tạo tài khoản (theo quy tắc Gmail).'])
+                ->withInput();
+        }
+
+        $subUser->update([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'visible_product_group_ids' => $this->ownedProductGroupIds($data['product_group_ids'], $ownerId),
+            'visible_competitor_site_group_ids' => $this->ownedCompetitorGroupIds($data['competitor_site_group_ids'], $ownerId),
+        ]);
+
+        return redirect()
+            ->route('account')
+            ->with('status', 'Đã lưu tài khoản con');
     }
 
     public function createCompetitorGroup(Request $request): RedirectResponse

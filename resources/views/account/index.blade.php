@@ -341,9 +341,9 @@
                                                     </tr>
                                                     <tr class="account-detail-row" data-subuser-detail="{{ $su->id }}">
                                                         <td colspan="3">
-                                                            <form method="POST" action="{{ route('account.subusers.update', $su) }}" autocomplete="off">
-                                                                @csrf
-                                                                @method('PUT')
+                                                            <form method="GET" action="{{ route('account') }}" autocomplete="off">
+                                                                <input type="hidden" name="subuser_action" value="update">
+                                                                <input type="hidden" name="subuser_id" value="{{ $su->id }}">
                                                                 <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
                                                                     <div class="field" style="margin-top:0">
                                                                         <label class="label">Tên</label>
@@ -352,14 +352,6 @@
                                                                     <div class="field" style="margin-top:0">
                                                                         <label class="label">Email</label>
                                                                         <input class="input" name="email" type="email" value="{{ $su->email }}" required autocomplete="off">
-                                                                    </div>
-                                                                    <div class="field" style="margin-top:0">
-                                                                        <label class="label">Mật khẩu mới</label>
-                                                                        <input class="input" name="password" type="password" autocomplete="new-password" placeholder="Để trống nếu không đổi">
-                                                                    </div>
-                                                                    <div class="field" style="margin-top:0">
-                                                                        <label class="label">Nhập lại mật khẩu mới</label>
-                                                                        <input class="input" name="password_confirmation" type="password" autocomplete="new-password">
                                                                     </div>
                                                                 </div>
                                                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
@@ -401,9 +393,9 @@
                                                                     <button class="btn" type="submit">Lưu</button>
                                                                 </div>
                                                             </form>
-                                                            <form method="POST" action="{{ route('account.subusers.destroy', $su) }}" onsubmit="return confirm('Xoá tài khoản con này?')" style="margin-top:10px;display:flex;justify-content:flex-end">
-                                                                @csrf
-                                                                @method('DELETE')
+                                                            <form method="GET" action="{{ route('account') }}" onsubmit="return confirm('Xoá tài khoản con này?')" style="margin-top:10px;display:flex;justify-content:flex-end">
+                                                                <input type="hidden" name="subuser_action" value="delete">
+                                                                <input type="hidden" name="subuser_id" value="{{ $su->id }}">
                                                                 <button class="btn" type="submit">Xoá tài khoản con</button>
                                                             </form>
                                                         </td>

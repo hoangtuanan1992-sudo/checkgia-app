@@ -128,4 +128,50 @@ class AccountGroupManagementTest extends TestCase
             'id' => $group->id,
         ]);
     }
+
+    public function test_owner_can_update_subuser_groups_through_account_query_route(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'name' => 'Viewer cũ',
+            'email' => 'viewer-old@example.com',
+        ]);
+        $productGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Tủ lạnh',
+        ]);
+        $site = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'dienmaydo.vn',
+            'position' => 1,
+        ]);
+        $competitorGroup = CompetitorSiteGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Điện máy',
+        ]);
+        $competitorGroup->competitorSites()->sync([$site->id]);
+
+        $this->actingAs($owner)
+            ->get(route('account.subusers.show', $subUser))
+            ->assertRedirect(route('account'));
+
+        $this->actingAs($owner)
+            ->get(route('account', [
+                'subuser_action' => 'update',
+                'subuser_id' => $subUser->id,
+                'name' => 'Viewer mới',
+                'email' => 'viewer-new@example.com',
+                'product_group_ids' => [$productGroup->id],
+                'competitor_site_group_ids' => [$competitorGroup->id],
+            ]))
+            ->assertRedirect(route('account'));
+
+        $subUser->refresh();
+        $this->assertSame('Viewer mới', $subUser->name);
+        $this->assertSame('viewer-new@example.com', $subUser->email);
+        $this->assertSame([$productGroup->id], $subUser->visibleProductGroupIds());
+        $this->assertSame([$competitorGroup->id], $subUser->visibleCompetitorSiteGroupIds());
+    }
 }
