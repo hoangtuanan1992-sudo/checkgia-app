@@ -164,6 +164,12 @@ class DashboardController extends Controller
     {
         $sort = (string) $request->query('sort', 'row_asc');
 
+        if ($sort === 'name_asc') {
+            $query->orderBy('products.name')->orderByDesc('products.id');
+
+            return;
+        }
+
         if ($sort === 'price_asc') {
             $query->orderBy('products.price')->orderByDesc('products.id');
 

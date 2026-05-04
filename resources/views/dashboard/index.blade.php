@@ -267,6 +267,7 @@
                     <div class="field" style="margin-top:0;min-width:240px">
                         <label class="label" for="sortSelect">Sắp xếp</label>
                         <select class="input" id="sortSelect">
+                            <option value="name_asc" @selected(request('sort') === 'name_asc')>ABC (A-Z)</option>
                             <option value="row_asc" @selected(request('sort', 'row_asc') === 'row_asc')>Số thứ tự</option>
                             <option value="last_desc" @selected(request('sort') === 'last_desc')>Cập nhật gần nhất</option>
                             <option value="last_asc" @selected(request('sort') === 'last_asc')>Cập nhật cũ nhất</option>
@@ -1659,6 +1660,7 @@
                 const bDiffVal = bDiff === null ? Number.POSITIVE_INFINITY : bDiff;
 
                 if (sort === 'row_asc') return aRow - bRow;
+                if (sort === 'name_asc') return String(a.dataset.productName || '').localeCompare(String(b.dataset.productName || ''), 'vi', {sensitivity: 'base'}) || (bRow - aRow);
                 if (sort === 'last_desc') return bLast - aLast;
                 if (sort === 'last_asc') return aLast - bLast;
                 if (sort === 'price_asc') return aPrice - bPrice;

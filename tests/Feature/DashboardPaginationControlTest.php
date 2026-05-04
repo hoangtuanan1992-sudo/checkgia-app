@@ -74,6 +74,40 @@ class DashboardPaginationControlTest extends TestCase
         $this->assertSame(20, count($cardMatches[0]));
     }
 
+    public function test_dashboard_comparison_table_can_sort_products_by_abc(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+
+        Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Charlie Product',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/charlie',
+        ]);
+        Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Alpha Product',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/alpha',
+        ]);
+        Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Beta Product',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/beta',
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard', ['sort' => 'name_asc']))
+            ->assertOk()
+            ->assertSee('value="name_asc" selected', false)
+            ->assertSeeInOrder([
+                'Alpha Product',
+                'Beta Product',
+                'Charlie Product',
+            ]);
+    }
+
     public function test_dashboard_bulk_delete_removes_only_filtered_products(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);
