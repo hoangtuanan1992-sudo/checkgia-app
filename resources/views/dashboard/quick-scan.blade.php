@@ -197,7 +197,6 @@
                                 <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
                                 <input type="hidden" id="quickScanIdsJson" name="scanner_product_ids_json" value="[]">
                                 <div class="field" style="margin-top:0;min-width:220px">
-                                    <label class="label" for="quickScanProductGroup">Nhóm sản phẩm</label>
                                     <select class="input" id="quickScanProductGroup" name="product_group_id">
                                         <option value="">-- Không chọn nhóm --</option>
                                         @foreach($productGroups as $group)
