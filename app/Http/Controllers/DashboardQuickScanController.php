@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Models\ProductGroup;
 use App\Models\ProductPriceHistory;
 use App\Services\ProductCodeExtractor;
 use Illuminate\Http\RedirectResponse;
@@ -19,11 +20,13 @@ class DashboardQuickScanController extends Controller
     {
         $websiteUrl = $this->normalizeWebsiteUrl($this->websiteInput($request));
         $websiteKey = $this->websiteKey($websiteUrl);
+        $userId = $request->user()->effectiveUserId();
         $q = trim((string) $request->query('q', ''));
         $perPage = $this->perPage($request);
         $selectedJob = null;
         $latestRequest = null;
         $error = null;
+        $allProductIds = collect();
         $products = new LengthAwarePaginator(
             collect(),
             0,
@@ -54,6 +57,12 @@ class DashboardQuickScanController extends Controller
                     });
                 }
 
+                $allProductIds = (clone $query)
+                    ->orderBy('id')
+                    ->pluck('id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->values();
+
                 $products = $query
                     ->orderBy('id')
                     ->paginate($perPage)
@@ -73,12 +82,17 @@ class DashboardQuickScanController extends Controller
         return view('dashboard.quick-scan', [
             'websiteUrl' => $websiteUrl,
             'websiteKey' => $websiteKey,
+            'productGroups' => ProductGroup::query()
+                ->where('user_id', $userId)
+                ->orderBy('name')
+                ->get(['id', 'name']),
             'q' => $q,
             'perPage' => $perPage,
             'error' => $error,
             'selectedJob' => $selectedJob,
             'latestRequest' => $latestRequest,
             'products' => $products,
+            'allProductIds' => $allProductIds,
         ]);
     }
 
@@ -136,6 +150,7 @@ class DashboardQuickScanController extends Controller
     {
         $data = $request->validate([
             'website_url' => ['nullable', 'string', 'max:2048'],
+            'product_group_id' => ['nullable', 'integer'],
             'scanner_product_ids_json' => ['required', 'string'],
         ]);
 
@@ -155,6 +170,18 @@ class DashboardQuickScanController extends Controller
         }
 
         $userId = $request->user()->effectiveUserId();
+        $productGroupId = null;
+        if (! empty($data['product_group_id'])) {
+            $productGroupId = ProductGroup::query()
+                ->where('user_id', $userId)
+                ->whereKey((int) $data['product_group_id'])
+                ->value('id');
+
+            if (! $productGroupId) {
+                return back()->with('status', 'Nhóm sản phẩm không hợp lệ hoặc không thuộc tài khoản này.');
+            }
+        }
+
         $scannerProducts = DB::table('scanner_import_products')
             ->whereIn('id', $ids->all())
             ->orderBy('id')
@@ -175,6 +202,7 @@ class DashboardQuickScanController extends Controller
                     'product_url' => $url,
                 ],
                 [
+                    'product_group_id' => $productGroupId,
                     'name' => $name,
                     'price' => $price,
                 ]
@@ -182,6 +210,7 @@ class DashboardQuickScanController extends Controller
 
             if (! $product->wasRecentlyCreated) {
                 $product->update([
+                    'product_group_id' => $productGroupId,
                     'name' => $name,
                     'price' => $price,
                 ]);

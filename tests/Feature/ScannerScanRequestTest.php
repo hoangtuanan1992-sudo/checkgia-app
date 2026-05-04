@@ -67,6 +67,12 @@ class ScannerScanRequestTest extends TestCase
     {
         $user = User::factory()->create();
         $now = now();
+        $productGroupId = DB::table('product_groups')->insertGetId([
+            'user_id' => $user->id,
+            'name' => 'Tủ lạnh',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
 
         $jobId = DB::table('scanner_import_jobs')->insertGetId([
             'external_job_id' => 'job-add-compare',
@@ -105,6 +111,7 @@ class ScannerScanRequestTest extends TestCase
         $response = $this->actingAs($user)
             ->post(route('dashboard.quick-scan.add-to-compare'), [
                 'website_url' => 'https://dienmaydo.vn/',
+                'product_group_id' => $productGroupId,
                 'scanner_product_ids_json' => json_encode([$scannerProductId]),
             ]);
 
@@ -112,6 +119,7 @@ class ScannerScanRequestTest extends TestCase
 
         $this->assertDatabaseHas('products', [
             'user_id' => $user->id,
+            'product_group_id' => $productGroupId,
             'name' => 'Tu lanh Toshiba Inverter 596 lit GR-RS780WI-PGV(22)-XK',
             'price' => 14500000,
             'product_url' => $url,

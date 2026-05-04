@@ -7,6 +7,7 @@
         $q = (string) ($q ?? '');
         $perPage = (int) ($perPage ?? 200);
         $products = $products ?? null;
+        $productGroups = collect($productGroups ?? []);
         $formatPrice = static function (int $value, string $text = ''): string {
             if ($value > 0) {
                 return number_format($value, 0, ',', '.').'đ';
@@ -191,10 +192,19 @@
                         <div class="actions" style="margin-top:0">
                             <button class="btn btn-secondary" type="button" id="quickScanSelectAll">Chọn tất cả</button>
                             <button class="btn btn-secondary" type="button" id="quickScanClear">Bỏ chọn</button>
-                            <form id="quickScanAddForm" method="POST" action="{{ route('dashboard.quick-scan.add-to-compare') }}" style="display:inline">
+                            <form id="quickScanAddForm" method="POST" action="{{ route('dashboard.quick-scan.add-to-compare') }}" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
                                 @csrf
                                 <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
                                 <input type="hidden" id="quickScanIdsJson" name="scanner_product_ids_json" value="[]">
+                                <div class="field" style="margin-top:0;min-width:220px">
+                                    <label class="label" for="quickScanProductGroup">Nhóm sản phẩm</label>
+                                    <select class="input" id="quickScanProductGroup" name="product_group_id">
+                                        <option value="">-- Không chọn nhóm --</option>
+                                        @foreach($productGroups as $group)
+                                            <option value="{{ $group->id }}">{{ $group->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
                                 <button class="btn" type="submit" id="quickScanAddButton" disabled>Thêm so sánh giá</button>
                             </form>
                         </div>
@@ -210,6 +220,7 @@
             if (!checkboxes.length) return;
 
             const storageKey = 'checkgia.quickScan.selected.' + @json($websiteKey !== '' ? $websiteKey : 'default');
+            const allProductIds = @json(collect($allProductIds ?? [])->map(fn ($id) => (string) $id)->values());
             const selectedCount = document.getElementById('quickScanSelectedCount');
             const checkPage = document.getElementById('quickScanCheckPage');
             const selectAll = document.getElementById('quickScanSelectAll');
@@ -226,6 +237,8 @@
             }
 
             const save = () => localStorage.setItem(storageKey, JSON.stringify(Array.from(selected)));
+            const allFilteredSelected = () => allProductIds.length > 0 && allProductIds.every((id) => selected.has(String(id)));
+            const anyFilteredSelected = () => allProductIds.some((id) => selected.has(String(id)));
             const paintRow = (checkbox) => {
                 const row = checkbox.closest('tr');
                 if (!row) return;
@@ -244,8 +257,8 @@
                 if (idsJson) idsJson.value = JSON.stringify(Array.from(selected));
                 if (addButton) addButton.disabled = selected.size === 0;
                 if (checkPage) {
-                    checkPage.checked = checkboxes.length > 0 && checkboxes.every((checkbox) => selected.has(String(checkbox.value)));
-                    checkPage.indeterminate = checkboxes.some((checkbox) => selected.has(String(checkbox.value))) && !checkPage.checked;
+                    checkPage.checked = allFilteredSelected();
+                    checkPage.indeterminate = anyFilteredSelected() && !checkPage.checked;
                 }
             };
 
@@ -263,11 +276,11 @@
 
             if (checkPage) {
                 checkPage.addEventListener('change', () => {
-                    checkboxes.forEach((checkbox) => {
+                    allProductIds.forEach((id) => {
                         if (checkPage.checked) {
-                            selected.add(String(checkbox.value));
+                            selected.add(String(id));
                         } else {
-                            selected.delete(String(checkbox.value));
+                            selected.delete(String(id));
                         }
                     });
                     save();
@@ -277,7 +290,7 @@
 
             if (selectAll) {
                 selectAll.addEventListener('click', () => {
-                    checkboxes.forEach((checkbox) => selected.add(String(checkbox.value)));
+                    allProductIds.forEach((id) => selected.add(String(id)));
                     save();
                     render();
                 });
