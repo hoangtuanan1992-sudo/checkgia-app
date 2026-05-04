@@ -117,8 +117,8 @@ Route::middleware('auth')->group(function () {
         Route::put('/account/subusers/{user}', [AccountController::class, 'updateSubUser'])->name('account.subusers.update');
         Route::delete('/account/subusers/{user}', [AccountController::class, 'destroySubUser'])->name('account.subusers.destroy');
         Route::post('/account/product-groups', [AccountController::class, 'createGroup'])->name('account.product-groups.store');
-        Route::post('/account/product-groups/{productGroup}/update', [AccountController::class, 'updateGroupFromPost'])->name('account.product-groups.update-post');
-        Route::post('/account/product-groups/{productGroup}/delete', [AccountController::class, 'destroyGroupFromPost'])->name('account.product-groups.delete-post');
+        Route::match(['get', 'post'], '/account/product-groups/{productGroup}/update', [AccountController::class, 'updateGroupFromPost'])->name('account.product-groups.update-post');
+        Route::match(['get', 'post'], '/account/product-groups/{productGroup}/delete', [AccountController::class, 'destroyGroupFromPost'])->name('account.product-groups.delete-post');
         Route::put('/account/product-groups/{productGroup}', [AccountController::class, 'updateGroup'])->name('account.product-groups.update');
         Route::delete('/account/product-groups/{productGroup}', [AccountController::class, 'destroyGroup'])->name('account.product-groups.destroy');
         Route::match(['get', 'post'], '/account/product-groups/{productGroup}', [AccountController::class, 'legacyProductGroupRequest'])->name('account.product-groups.show');

@@ -271,6 +271,12 @@ class AccountController extends Controller
 
     public function updateGroupFromPost(Request $request, ProductGroup $productGroup): RedirectResponse
     {
+        if ($request->isMethod('get') && ! $request->filled('name')) {
+            return redirect()
+                ->route('account')
+                ->with('status', 'Hãy nhập tên nhóm rồi bấm Sửa trong trang Tài khoản.');
+        }
+
         return $this->updateGroup($request, $productGroup);
     }
 
