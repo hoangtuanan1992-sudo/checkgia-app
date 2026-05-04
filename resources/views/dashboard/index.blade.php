@@ -66,6 +66,27 @@
                 background:#f9fafb;
                 cursor:not-allowed;
             }
+            .comparison-floating-pager{
+                position:fixed;
+                right:18px;
+                bottom:18px;
+                z-index:9999;
+                display:none;
+                gap:8px;
+                align-items:center;
+                padding:8px;
+                border:1px solid var(--border);
+                border-radius:12px;
+                background:rgba(255,255,255,.96);
+                box-shadow:0 18px 45px rgba(15,23,42,.18);
+                backdrop-filter:blur(8px);
+            }
+            .comparison-floating-pager.is-visible{
+                display:flex;
+            }
+            .comparison-floating-pager .btn{
+                min-width:76px;
+            }
             .comparison-page-ellipsis{
                 min-width:34px;
                 text-align:center;
@@ -626,8 +647,14 @@
                     @endforelse
                 </div>
 
+                <div id="comparisonBottomSentinel" style="height:1px"></div>
             </div>
         </div>
+    </div>
+
+    <div id="comparisonFloatingPager" class="comparison-floating-pager" aria-label="Phân trang nhanh kết quả so sánh">
+        <button class="btn btn-secondary" type="button" id="compareFloatingPrev">Trước</button>
+        <button class="btn" type="button" id="compareFloatingNext">Sau</button>
     </div>
 
     @if($compareMatchEnabled ?? false)
@@ -1365,8 +1392,13 @@
             const comparePageSummary = document.getElementById('comparePageSummary');
             const comparePageJump = document.getElementById('comparePageJump');
             const comparePageButtons = document.getElementById('comparePageButtons');
+            const comparisonBottomSentinel = document.getElementById('comparisonBottomSentinel');
+            const comparisonFloatingPager = document.getElementById('comparisonFloatingPager');
+            const compareFloatingPrev = document.getElementById('compareFloatingPrev');
+            const compareFloatingNext = document.getElementById('compareFloatingNext');
             const comparePerPageKey = 'checkgia_compare_per_page';
             let compareCurrentPage = 1;
+            let comparisonBottomVisible = false;
 
             function parseNum(v) {
                 if (v === null || v === undefined) return null;
@@ -1516,6 +1548,18 @@
                 }
 
                 addButton('Sau', compareCurrentPage + 1, pageCount <= 1 || compareCurrentPage >= pageCount, false);
+                updateFloatingPager(pageCount);
+            }
+
+            function updateFloatingPager(pageCount) {
+                if (!comparisonFloatingPager || !compareFloatingPrev || !compareFloatingNext) {
+                    return;
+                }
+
+                const hasPages = Number(pageCount || 0) > 1;
+                comparisonFloatingPager.classList.toggle('is-visible', comparisonBottomVisible && hasPages);
+                compareFloatingPrev.disabled = !hasPages || compareCurrentPage <= 1;
+                compareFloatingNext.disabled = !hasPages || compareCurrentPage >= pageCount;
             }
 
             function applyPageVisibility(items, appendTo, visibleItems, q, group, sort, info) {
@@ -1592,6 +1636,39 @@
                         goToComparePage(comparePageJump.value);
                     }
                 });
+            }
+            if (compareFloatingPrev) {
+                compareFloatingPrev.addEventListener('click', () => goToComparePage(compareCurrentPage - 1));
+            }
+            if (compareFloatingNext) {
+                compareFloatingNext.addEventListener('click', () => goToComparePage(compareCurrentPage + 1));
+            }
+            function refreshFloatingPagerVisibility() {
+                if (!comparisonBottomSentinel) {
+                    return;
+                }
+
+                const rect = comparisonBottomSentinel.getBoundingClientRect();
+                comparisonBottomVisible = rect.top <= window.innerHeight && rect.bottom >= 0;
+                const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-product-row]')) : [];
+                const q = (filterSearch?.value || '').trim().toLowerCase();
+                const group = filterGroup?.value || '';
+                const total = rows.filter((el) => itemMatchesFilter(el, q, group)).length;
+                updateFloatingPager(pageInfoFor(total).pageCount);
+            }
+            if (comparisonBottomSentinel && 'IntersectionObserver' in window) {
+                const floatingPagerObserver = new IntersectionObserver((entries) => {
+                    comparisonBottomVisible = entries.some((entry) => entry.isIntersecting);
+                    const rows = tbody ? Array.from(tbody.querySelectorAll('tr[data-product-row]')) : [];
+                    const q = (filterSearch?.value || '').trim().toLowerCase();
+                    const group = filterGroup?.value || '';
+                    const total = rows.filter((el) => itemMatchesFilter(el, q, group)).length;
+                    updateFloatingPager(pageInfoFor(total).pageCount);
+                }, {threshold: 0});
+                floatingPagerObserver.observe(comparisonBottomSentinel);
+            } else {
+                window.addEventListener('scroll', refreshFloatingPagerVisibility, {passive: true});
+                window.addEventListener('resize', refreshFloatingPagerVisibility);
             }
             if (filterReset) {
                 filterReset.addEventListener('click', () => {

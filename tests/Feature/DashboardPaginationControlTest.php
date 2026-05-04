@@ -32,6 +32,9 @@ class DashboardPaginationControlTest extends TestCase
             ->assertSee('value="50" selected', false)
             ->assertSee('Bạn muốn xem trang:', false)
             ->assertSee('id="comparePageButtons"', false)
+            ->assertSee('id="comparisonFloatingPager"', false)
+            ->assertSee('id="compareFloatingPrev"', false)
+            ->assertSee('id="compareFloatingNext"', false)
             ->assertSee('checkgia_compare_per_page', false);
     }
 }
