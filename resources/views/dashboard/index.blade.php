@@ -234,6 +234,24 @@
                         <button class="btn btn-secondary" type="button" id="filterReset">Reset</button>
                     </div>
                 </div>
+                <div id="comparisonPagination" class="comparison-pagination" style="margin-top:0;margin-bottom:12px;padding-top:0;border-top:0">
+                    <div class="comparison-page-left">
+                        <span id="comparePageSummary">Trang 1/1 • Hiển thị 0/0</span>
+                        <label class="label" for="comparePerPage" style="margin:0">Số dòng</label>
+                        <select class="input comparison-per-page" id="comparePerPage">
+                            <option value="20">20</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="200">200</option>
+                            <option value="500">500</option>
+                            <option value="all">Tất cả</option>
+                        </select>
+                        <label class="label" for="comparePageJump" style="margin:0">Bạn muốn xem trang:</label>
+                        <input class="input comparison-page-input" id="comparePageJump" type="number" min="1" value="1" inputmode="numeric">
+                    </div>
+                    <div class="comparison-page-buttons" id="comparePageButtons" aria-label="Phân trang kết quả so sánh"></div>
+                </div>
+
                 <div class="table-wrap" id="comparisonTableView">
                     <table class="table">
                         <thead>
@@ -608,23 +626,6 @@
                     @endforelse
                 </div>
 
-                <div id="comparisonPagination" class="comparison-pagination">
-                    <div class="comparison-page-left">
-                        <span id="comparePageSummary">Trang 1/1 • Hiển thị 0/0</span>
-                        <label class="label" for="comparePerPage" style="margin:0">Số dòng</label>
-                        <select class="input comparison-per-page" id="comparePerPage">
-                            <option value="20">20</option>
-                            <option value="50" selected>50</option>
-                            <option value="100">100</option>
-                            <option value="200">200</option>
-                            <option value="500">500</option>
-                            <option value="all">Tất cả</option>
-                        </select>
-                        <label class="label" for="comparePageJump" style="margin:0">Bạn muốn xem trang:</label>
-                        <input class="input comparison-page-input" id="comparePageJump" type="number" min="1" value="1" inputmode="numeric">
-                    </div>
-                    <div class="comparison-page-buttons" id="comparePageButtons" aria-label="Phân trang kết quả so sánh"></div>
-                </div>
             </div>
         </div>
     </div>
