@@ -48,9 +48,15 @@ class ReportController extends Controller
         $topProductsCheaper = $products
             ->map(function ($product) {
                 $own = (int) $product->price;
+                if ($own <= 0) {
+                    return null;
+                }
                 $best = null;
 
                 foreach ($product->competitors as $c) {
+                    if ($c->price_missing_at) {
+                        continue;
+                    }
                     $p = $c->prices->first()?->price;
                     if (is_null($p)) {
                         continue;
@@ -85,8 +91,14 @@ class ReportController extends Controller
         $topCompetitorsOftenCheaper = $products
             ->flatMap(function ($product) {
                 $own = (int) $product->price;
+                if ($own <= 0) {
+                    return collect();
+                }
 
                 return $product->competitors->map(function ($c) use ($own) {
+                    if ($c->price_missing_at) {
+                        return null;
+                    }
                     $p = $c->prices->first()?->price;
                     if (is_null($p)) {
                         return null;

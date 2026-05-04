@@ -76,6 +76,9 @@ class DashboardController extends Controller
         $priceEvents = [];
         foreach ($products as $product) {
             foreach ($product->competitors as $competitor) {
+                if ($competitor->price_missing_at) {
+                    continue;
+                }
                 $latest = $competitor->prices->get(0);
                 $prev = $competitor->prices->get(1);
                 if (! $latest || ! $prev) {
@@ -193,7 +196,10 @@ class DashboardController extends Controller
         if (in_array($sort, ['diff_asc', 'diff_desc'], true)) {
             $minDiff = DB::table('competitors as c')
                 ->whereColumn('c.product_id', 'products.id')
-                ->selectRaw('MIN((SELECT cp.price FROM competitor_prices cp WHERE cp.competitor_id = c.id ORDER BY cp.fetched_at DESC, cp.id DESC LIMIT 1) + COALESCE(c.price_adjustment, 0) - products.price)');
+                ->selectRaw('MIN(CASE WHEN products.price > 0 THEN (SELECT cp.price FROM competitor_prices cp WHERE cp.competitor_id = c.id ORDER BY cp.fetched_at DESC, cp.id DESC LIMIT 1) + COALESCE(c.price_adjustment, 0) - products.price ELSE NULL END)');
+            if (Schema::hasColumn('competitors', 'price_missing_at')) {
+                $minDiff->whereNull('c.price_missing_at');
+            }
             $this->constrainToIds($minDiff, $restrictedCompetitorSiteIds, 'c.competitor_site_id');
 
             $query->select('products.*')

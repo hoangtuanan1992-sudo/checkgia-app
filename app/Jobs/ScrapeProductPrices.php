@@ -79,8 +79,10 @@ class ScrapeProductPrices implements ShouldQueue
             $name = $scraper->extractFirstByXPaths($html, $nameXpaths) ?? $scraper->extractTitle($html);
             $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
             $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
+            $isContactPrice = $scraper->isContactPriceText($priceRaw);
 
-            if ($name && ! is_null($price)) {
+            if ($name && (! is_null($price) || $isContactPrice)) {
+                $price = is_null($price) ? 0 : (int) $price;
                 $updates = [
                     'name' => $name,
                     'price' => $price,
@@ -92,7 +94,7 @@ class ScrapeProductPrices implements ShouldQueue
                 $ownScrapeSucceeded = true;
 
                 $latestOwn = ProductPriceHistory::query()->where('product_id', $product->id)->latest('fetched_at')->first();
-                if (! $latestOwn || (int) $latestOwn->price !== (int) $price) {
+                if ($price > 0 && (! $latestOwn || (int) $latestOwn->price !== (int) $price)) {
                     ProductPriceHistory::create([
                         'product_id' => $product->id,
                         'price' => $price,
@@ -124,6 +126,7 @@ class ScrapeProductPrices implements ShouldQueue
                 $price = $scraper->parsePriceToInt($raw, $site->price_regex);
 
                 if (! is_null($price)) {
+                    $competitor->markPriceAvailable();
                     $latest = $competitor->prices()->latest('fetched_at')->first();
                     if (! $latest || (int) $latest->price !== (int) $price) {
                         $previousPrice = $latest ? (int) $latest->price : null;
@@ -134,8 +137,11 @@ class ScrapeProductPrices implements ShouldQueue
                         ]);
                         $notifier->notifyOnCompetitorPriceChange($product, $competitor, (int) $price, $previousPrice);
                     }
+                } else {
+                    $competitor->markPriceMissing();
                 }
             } catch (\Throwable $e) {
+                $competitor->markPriceMissing();
             }
         }
 

@@ -143,6 +143,16 @@ class PriceScraper
         return $value >= 0 ? $value : null;
     }
 
+    public function isContactPriceText(?string $raw): bool
+    {
+        $text = mb_strtolower($this->cleanText($raw) ?? '');
+        if ($text === '') {
+            return false;
+        }
+
+        return preg_match('/(li[êe]n\s*h[ệe]|lien\s*he|contact|call|g[oọ]i)/iu', $text) === 1;
+    }
+
     /**
      * @return array{name: string, price: int}|null
      */

@@ -93,6 +93,7 @@ class CompetitorController extends Controller
         $scraper = new PriceScraper;
         $knownProduct = $scraper->scrapeKnownSitePriceAndName($competitor->url);
         if ($knownProduct) {
+            $competitor->markPriceAvailable();
             $latest = $competitor->prices()->latest('fetched_at')->first();
             if (! $latest || (int) $latest->price !== (int) $knownProduct['price']) {
                 CompetitorPrice::create([
@@ -109,6 +110,7 @@ class CompetitorController extends Controller
                 $price = $scraper->parsePriceToInt($raw, $site->price_regex);
 
                 if (! is_null($price)) {
+                    $competitor->markPriceAvailable();
                     $latest = $competitor->prices()->latest('fetched_at')->first();
                     if (! $latest || (int) $latest->price !== (int) $price) {
                         CompetitorPrice::create([
@@ -117,9 +119,14 @@ class CompetitorController extends Controller
                             'fetched_at' => now(),
                         ]);
                     }
+                } else {
+                    $competitor->markPriceMissing();
                 }
             } catch (\Throwable $e) {
+                $competitor->markPriceMissing();
             }
+        } else {
+            $competitor->markPriceMissing();
         }
 
         return back()->with('status', 'Đã cập nhật URL');
@@ -164,6 +171,7 @@ class CompetitorController extends Controller
         $scraper = new PriceScraper;
         $knownProduct = $scraper->scrapeKnownSitePriceAndName($competitor->url);
         if ($knownProduct) {
+            $competitor->markPriceAvailable();
             CompetitorPrice::create([
                 'competitor_id' => $competitor->id,
                 'price' => $knownProduct['price'],
@@ -177,14 +185,20 @@ class CompetitorController extends Controller
                 $price = $scraper->parsePriceToInt($raw, $competitorSite->price_regex);
 
                 if (! is_null($price)) {
+                    $competitor->markPriceAvailable();
                     CompetitorPrice::create([
                         'competitor_id' => $competitor->id,
                         'price' => $price,
                         'fetched_at' => now(),
                     ]);
+                } else {
+                    $competitor->markPriceMissing();
                 }
             } catch (\Throwable $e) {
+                $competitor->markPriceMissing();
             }
+        } else {
+            $competitor->markPriceMissing();
         }
 
         return back()->with('status', 'Đã cập nhật URL');
@@ -204,6 +218,7 @@ class CompetitorController extends Controller
             'price' => $data['price'],
             'fetched_at' => now(),
         ]);
+        $competitor->markPriceAvailable();
 
         return back()->with('status', 'Đã thêm giá đối thủ');
     }
@@ -271,6 +286,7 @@ class CompetitorController extends Controller
         $scraper = new PriceScraper;
         $knownProduct = $scraper->scrapeKnownSitePriceAndName($competitor->url);
         if ($knownProduct) {
+            $competitor->markPriceAvailable();
             $latest = $competitor->prices()->latest('fetched_at')->first();
             if (! $latest || (int) $latest->price !== (int) $knownProduct['price']) {
                 CompetitorPrice::create([
@@ -294,10 +310,12 @@ class CompetitorController extends Controller
             $price = $scraper->parsePriceToInt($raw, $site->price_regex);
 
             if (is_null($price)) {
+                $competitor->markPriceMissing();
                 return back()->withErrors(['price' => 'Không lấy được giá. Vui lòng kiểm tra lại XPath/Regex.']);
             }
 
             $latest = $competitor->prices()->latest('fetched_at')->first();
+            $competitor->markPriceAvailable();
             if (! $latest || (int) $latest->price !== (int) $price) {
                 CompetitorPrice::create([
                     'competitor_id' => $competitor->id,
@@ -308,6 +326,7 @@ class CompetitorController extends Controller
 
             return back()->with('status', 'Đã cập nhật giá: '.number_format($price, 0, ',', '.').' đ');
         } catch (\Throwable $e) {
+            $competitor->markPriceMissing();
             return back()->withErrors(['price' => 'Không truy cập được trang đối thủ hoặc bị chặn.']);
         }
     }

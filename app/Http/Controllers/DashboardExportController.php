@@ -115,7 +115,7 @@ class DashboardExportController extends Controller
         foreach ($products as $i => $product) {
             $own = (int) $product->price;
             $map = $product->competitors->keyBy('competitor_site_id');
-            $latestTimes = $product->competitors->map(fn ($c) => $c->prices->first()?->fetched_at)->filter();
+            $latestTimes = $product->competitors->map(fn ($c) => $c->price_missing_at ? null : $c->prices->first()?->fetched_at)->filter();
             $lastTime = $latestTimes->max();
             $lastUpdated = collect([$lastTime, $product->last_scraped_at])->filter()->max();
 
@@ -130,9 +130,9 @@ class DashboardExportController extends Controller
             foreach ($competitorSites as $site) {
                 $c = $map->get($site->id);
                 $url = $c?->url ?? '';
-                $cPrice = $c?->prices->first()?->price;
+                $cPrice = $c?->price_missing_at ? null : $c?->prices->first()?->price;
                 $cPrice = is_null($cPrice) ? null : (int) $cPrice;
-                $diff = is_null($cPrice) ? null : ($cPrice - $own);
+                $diff = is_null($cPrice) || $own <= 0 ? null : ($cPrice - $own);
 
                 $rows .= '<td>'.htmlspecialchars((string) $url, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'</td>';
                 $rows .= '<td>'.(is_null($cPrice) ? '' : $cPrice).'</td>';

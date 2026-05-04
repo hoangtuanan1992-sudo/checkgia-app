@@ -800,10 +800,12 @@ class DashboardCompareMatchController extends Controller
 
             $price = $candidate['priceValue'] ?? null;
             if (! is_int($price) || $price <= 0) {
+                $competitor->markPriceMissing();
                 return;
             }
 
             $latest = $competitor->prices()->latest('fetched_at')->first();
+            $competitor->markPriceAvailable();
             if ($latest && (int) $latest->price === $price && $oldUrl === (string) $candidate['url']) {
                 return;
             }

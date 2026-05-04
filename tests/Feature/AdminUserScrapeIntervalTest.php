@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Jobs\ScrapeProductPrices;
+use App\Models\CompetitorPrice;
+use App\Models\CompetitorSite;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\UserScrapeSetting;
@@ -154,6 +156,145 @@ class AdminUserScrapeIntervalTest extends TestCase
         $this->assertDatabaseMissing('products', [
             'id' => $product->id,
         ]);
+        Carbon::setTestNow();
+    }
+
+    public function test_scrape_job_treats_contact_price_as_valid_and_resets_failure_counter(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 5, 4, 10, 0, 0, 'Asia/Ho_Chi_Minh'));
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        UserScrapeSetting::query()->create([
+            'user_id' => $owner->id,
+            'own_name_xpath' => '//h1',
+            'own_price_xpath' => '//*[@id="price"]',
+            'auto_delete_failed_products_enabled' => true,
+            'auto_delete_failed_products_days' => 1,
+        ]);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Old product',
+            'price' => 10000000,
+            'product_url' => 'https://example.com/contact-price',
+            'own_scrape_failed_since' => now()->subDays(3),
+        ]);
+
+        Http::fake([
+            'https://example.com/contact-price' => Http::response('<html><body><h1>Old product contact</h1><div id="price">Lien he</div></body></html>', 200),
+        ]);
+
+        (new ScrapeProductPrices($product->id))->handle();
+
+        $this->assertDatabaseHas('products', [
+            'id' => $product->id,
+            'name' => 'Old product contact',
+            'price' => 0,
+            'own_scrape_failed_since' => null,
+        ]);
+        $this->assertDatabaseMissing('product_price_histories', [
+            'product_id' => $product->id,
+            'price' => 0,
+        ]);
+        Carbon::setTestNow();
+    }
+
+    public function test_scrape_job_marks_competitor_price_missing_when_latest_check_has_no_price(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 5, 4, 10, 0, 0, 'Asia/Ho_Chi_Minh'));
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        UserScrapeSetting::query()->create([
+            'user_id' => $owner->id,
+            'own_name_xpath' => '//h1',
+            'own_price_xpath' => '//*[@id="own-price"]',
+        ]);
+        $site = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Shop test',
+            'price_xpath' => '//*[@id="price"]',
+        ]);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Product',
+            'price' => 10000000,
+            'product_url' => 'https://own.test/product',
+        ]);
+        $competitor = $product->competitors()->create([
+            'competitor_site_id' => $site->id,
+            'name' => 'Shop test',
+            'url' => 'https://shop.test/product',
+        ]);
+        CompetitorPrice::query()->create([
+            'competitor_id' => $competitor->id,
+            'price' => 8888000,
+            'fetched_at' => now()->subDay(),
+        ]);
+
+        Http::fake([
+            'https://own.test/product' => Http::response('<html><body><h1>Product</h1><div id="own-price">10.000.000d</div></body></html>', 200),
+            'https://shop.test/product' => Http::response('<html><body><div id="price">Lien he</div></body></html>', 200),
+        ]);
+
+        (new ScrapeProductPrices($product->id))->handle();
+
+        $this->assertNotNull($competitor->fresh()->price_missing_at);
+        $this->assertDatabaseHas('competitor_prices', [
+            'competitor_id' => $competitor->id,
+            'price' => 8888000,
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('8.888.000', false);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_scrape_job_clears_competitor_missing_flag_when_price_returns(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 5, 4, 10, 0, 0, 'Asia/Ho_Chi_Minh'));
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        UserScrapeSetting::query()->create([
+            'user_id' => $owner->id,
+            'own_name_xpath' => '//h1',
+            'own_price_xpath' => '//*[@id="own-price"]',
+        ]);
+        $site = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Shop test',
+            'price_xpath' => '//*[@id="price"]',
+        ]);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Product',
+            'price' => 10000000,
+            'product_url' => 'https://own.test/product',
+        ]);
+        $competitor = $product->competitors()->create([
+            'competitor_site_id' => $site->id,
+            'name' => 'Shop test',
+            'url' => 'https://shop.test/product',
+            'price_missing_at' => now()->subHour(),
+        ]);
+
+        Http::fake([
+            'https://own.test/product' => Http::response('<html><body><h1>Product</h1><div id="own-price">10.000.000d</div></body></html>', 200),
+            'https://shop.test/product' => Http::response('<html><body><div id="price">8.500.000d</div></body></html>', 200),
+        ]);
+
+        (new ScrapeProductPrices($product->id))->handle();
+
+        $this->assertDatabaseHas('competitors', [
+            'id' => $competitor->id,
+            'price_missing_at' => null,
+        ]);
+        $this->assertDatabaseHas('competitor_prices', [
+            'competitor_id' => $competitor->id,
+            'price' => 8500000,
+        ]);
+
         Carbon::setTestNow();
     }
 

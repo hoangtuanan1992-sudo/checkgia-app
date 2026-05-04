@@ -332,17 +332,17 @@
                             @forelse($products as $idx => $product)
                                 @php($own = (int) $product->price)
                                 @php($map = $product->competitors->keyBy('competitor_site_id'))
-                                @php($latestTimes = $product->competitors->map(fn($c) => $c->prices->first()?->fetched_at)->filter())
+                                @php($latestTimes = $product->competitors->map(fn($c) => $c->price_missing_at ? null : $c->prices->first()?->fetched_at)->filter())
                                 @php($lastTime = $latestTimes->max())
                                 @php($lastUpdated = collect([$lastTime, $product->last_scraped_at])->filter()->max())
-                                @php($minDiff = $product->competitors->map(function ($c) use ($own) {
-                                    $p = $c->prices->first()?->price;
+                                @php($minDiff = $own > 0 ? $product->competitors->map(function ($c) use ($own) {
+                                    $p = $c->price_missing_at ? null : $c->prices->first()?->price;
                                     if (is_null($p)) {
                                         return null;
                                     }
 
                                     return (int) $p + (int) ($c->price_adjustment ?? 0) - $own;
-                                })->filter(fn ($v) => ! is_null($v))->min())
+                                })->filter(fn ($v) => ! is_null($v))->min() : null)
                                 <tr
                                     data-product-row="{{ $product->id }}"
                                     data-row-order="{{ $rowOffset + $idx }}"
@@ -389,7 +389,7 @@
                                             </div>
                                             <div style="font-weight:600">
                                                 <a href="{{ route('products.history', $product) }}" style="color:#111827">
-                                                    {{ number_format($own, 0, ',', '.') }}đ
+                                                    {{ $own > 0 ? number_format($own, 0, ',', '.').'đ' : 'Liên hệ' }}
                                                 </a>
                                             </div>
                                         </div>
@@ -398,11 +398,11 @@
                                         @php($c = $map->get($site->id))
                                         @php($latest = $c?->prices->first())
                                         @php($prev = $c?->prices->skip(1)->first())
-                                        @php($cPrice = $latest?->price)
+                                        @php($cPrice = $c?->price_missing_at ? null : $latest?->price)
                                         @php($prevPrice = $prev?->price)
-                                        @php($diff = is_null($cPrice) ? null : ((int) $cPrice - $own))
+                                        @php($diff = is_null($cPrice) || $own <= 0 ? null : ((int) $cPrice - $own))
                                         @php($adj = (int) ($c?->price_adjustment ?? 0))
-                                        @php($adjDiff = is_null($cPrice) ? null : ((int) $cPrice + $adj - $own))
+                                        @php($adjDiff = is_null($cPrice) || $own <= 0 ? null : ((int) $cPrice + $adj - $own))
                                         @php($delta = (! is_null($cPrice) && ! is_null($prevPrice)) ? ((int) $cPrice - (int) $prevPrice) : null)
                                         <td>
                                             @if($c)
@@ -530,17 +530,17 @@
                     @forelse($products as $idx => $product)
                         @php($own = (int) $product->price)
                         @php($map = $product->competitors->keyBy('competitor_site_id'))
-                        @php($latestTimes = $product->competitors->map(fn($c) => $c->prices->first()?->fetched_at)->filter())
+                        @php($latestTimes = $product->competitors->map(fn($c) => $c->price_missing_at ? null : $c->prices->first()?->fetched_at)->filter())
                         @php($lastTime = $latestTimes->max())
                         @php($lastUpdated = collect([$lastTime, $product->last_scraped_at])->filter()->max())
-                        @php($minDiff = $product->competitors->map(function ($c) use ($own) {
-                            $p = $c->prices->first()?->price;
+                        @php($minDiff = $own > 0 ? $product->competitors->map(function ($c) use ($own) {
+                            $p = $c->price_missing_at ? null : $c->prices->first()?->price;
                             if (is_null($p)) {
                                 return null;
                             }
 
                             return (int) $p + (int) ($c->price_adjustment ?? 0) - $own;
-                        })->filter(fn ($v) => ! is_null($v))->min())
+                        })->filter(fn ($v) => ! is_null($v))->min() : null)
                         @php($missingSites = $competitorSites->filter(fn ($s) => ! $map->has($s->id)))
 
                         <div
@@ -582,7 +582,7 @@
                             <div class="compare-card-own-row">
                                 <div class="compare-card-own-label">Giá bạn</div>
                                 <a href="{{ route('products.history', $product) }}" class="compare-card-own-price">
-                                    {{ number_format($own, 0, ',', '.') }}đ
+                                    {{ $own > 0 ? number_format($own, 0, ',', '.').'đ' : 'Liên hệ' }}
                                 </a>
                             </div>
 
@@ -602,10 +602,10 @@
 
                                     @php($latest = $c?->prices->first())
                                     @php($prev = $c?->prices->skip(1)->first())
-                                    @php($cPrice = $latest?->price)
+                                    @php($cPrice = $c?->price_missing_at ? null : $latest?->price)
                                     @php($prevPrice = $prev?->price)
                                     @php($adj = (int) ($c?->price_adjustment ?? 0))
-                                    @php($adjDiff = is_null($cPrice) ? null : ((int) $cPrice + $adj - $own))
+                                    @php($adjDiff = is_null($cPrice) || $own <= 0 ? null : ((int) $cPrice + $adj - $own))
                                     @php($diffSign = is_null($adjDiff) ? 'na' : ($adjDiff > 0 ? 'pos' : ($adjDiff < 0 ? 'neg' : 'zero')))
                                     @php($diffArrow = is_null($adjDiff) ? '' : ($adjDiff > 0 ? '↑' : ($adjDiff < 0 ? '↓' : '←')))
 

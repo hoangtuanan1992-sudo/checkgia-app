@@ -27,6 +27,9 @@ class DashboardProductController extends Controller
 
         $userId = $request->user()->effectiveUserId();
         $scraper = new PriceScraper;
+        $settings = null;
+        $nameDebug = ['tried' => []];
+        $priceDebug = ['tried' => []];
         $knownProduct = $scraper->scrapeKnownSitePriceAndName($validated['product_url']);
         if ($knownProduct) {
             $name = $knownProduct['name'];
@@ -60,7 +63,11 @@ class DashboardProductController extends Controller
             $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
         }
 
-        if (! $name || is_null($price)) {
+        if (is_null($price)) {
+            $price = 0;
+        }
+
+        if (! $name) {
             $parts = [];
             if (! $name) {
                 $lines = ['Tên: không trích xuất được bằng XPath.'];
@@ -114,11 +121,13 @@ class DashboardProductController extends Controller
             'product_url' => $validated['product_url'],
         ]);
 
-        ProductPriceHistory::create([
-            'product_id' => $product->id,
-            'price' => $price,
-            'fetched_at' => now(),
-        ]);
+        if ((int) $price > 0) {
+            ProductPriceHistory::create([
+                'product_id' => $product->id,
+                'price' => $price,
+                'fetched_at' => now(),
+            ]);
+        }
 
         $sites = CompetitorSite::query()
             ->where('user_id', $userId)
@@ -150,6 +159,7 @@ class DashboardProductController extends Controller
 
             $knownCompetitor = $scraper->scrapeKnownSitePriceAndName($url);
             if ($knownCompetitor) {
+                $competitor->markPriceAvailable();
                 $latest = $competitor->prices()->latest('fetched_at')->first();
                 if (! $latest || (int) $latest->price !== (int) $knownCompetitor['price']) {
                     CompetitorPrice::create([
@@ -165,6 +175,7 @@ class DashboardProductController extends Controller
                     $cPriceRaw = $scraper->extractFirstByXPaths($cHtml, array_merge([(string) $site->price_xpath], $fallbacks));
                     $cPrice = $scraper->parsePriceToInt($cPriceRaw, $site->price_regex);
                     if (! is_null($cPrice)) {
+                        $competitor->markPriceAvailable();
                         $latest = $competitor->prices()->latest('fetched_at')->first();
                         if (! $latest || (int) $latest->price !== (int) $cPrice) {
                             CompetitorPrice::create([
@@ -173,9 +184,14 @@ class DashboardProductController extends Controller
                                 'fetched_at' => now(),
                             ]);
                         }
+                    } else {
+                        $competitor->markPriceMissing();
                     }
                 } catch (\Throwable $e) {
+                    $competitor->markPriceMissing();
                 }
+            } else {
+                $competitor->markPriceMissing();
             }
         }
 

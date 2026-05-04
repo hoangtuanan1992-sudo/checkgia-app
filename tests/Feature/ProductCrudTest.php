@@ -275,4 +275,38 @@ class ProductCrudTest extends TestCase
             'product_url' => $url,
         ]);
     }
+
+    public function test_dashboard_can_add_product_when_own_price_is_contact_text(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://example.com/contact-price-product';
+
+        UserScrapeSetting::create([
+            'user_id' => $user->id,
+            'own_name_xpath' => '//h1',
+            'own_price_xpath' => '//*[@id="price"]',
+            'price_regex' => null,
+        ]);
+
+        Http::fake([
+            $url => Http::response('<html><body><h1>San pham dang lien he</h1><div id="price">Lien he</div></body></html>', 200),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'San pham dang lien he',
+            'price' => 0,
+            'product_url' => $url,
+        ]);
+
+        $this->assertDatabaseMissing('product_price_histories', [
+            'price' => 0,
+        ]);
+    }
 }
