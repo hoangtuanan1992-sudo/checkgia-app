@@ -48,7 +48,7 @@
                     </div>
                 @endif
 
-                <form method="GET" action="{{ route('dashboard.quick-scan') }}" style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(220px,340px) minmax(130px,180px) auto;gap:14px;align-items:end">
+                <form method="GET" action="{{ route('dashboard.quick-scan') }}" style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(220px,340px) auto;gap:14px;align-items:end">
                     <div class="field" style="margin-top:0">
                         <label class="label" for="website_url">Link website muốn hiển thị</label>
                         <input class="input" id="website_url" name="website_url" value="{{ $websiteUrl }}" placeholder="https://dienmaydo.vn/" autocomplete="off">
@@ -58,7 +58,7 @@
                         <label class="label" for="q">Tìm kiếm</label>
                         <input class="input" id="q" name="q" value="{{ $q }}" placeholder="Tên, mã hoặc link...">
                     </div>
-                    <div class="field" style="margin-top:0">
+                    <div class="field" style="display:none">
                         <label class="label" for="per_page">Số dòng</label>
                         <select class="input" id="per_page" name="per_page">
                             @foreach([50, 100, 200, 500] as $pp)
@@ -170,18 +170,36 @@
                     </table>
                 </div>
 
-                @if($products && $products->lastPage() > 1)
-                    <div class="actions" style="justify-content:flex-end;flex-wrap:wrap">
-                        <span class="hint" style="margin-top:0">Trang {{ $products->currentPage() }}/{{ $products->lastPage() }}</span>
-                        @if($products->onFirstPage())
-                            <span class="btn btn-secondary" style="opacity:.55;pointer-events:none">Trước</span>
-                        @else
-                            <a class="btn btn-secondary" href="{{ $products->previousPageUrl() }}">Trước</a>
-                        @endif
-                        @if($products->hasMorePages())
-                            <a class="btn btn-secondary" href="{{ $products->nextPageUrl() }}">Sau</a>
-                        @else
-                            <span class="btn btn-secondary" style="opacity:.55;pointer-events:none">Sau</span>
+                @if($selectedJob)
+                    <div class="actions" style="justify-content:space-between;align-items:end;flex-wrap:wrap">
+                        <form method="GET" action="{{ route('dashboard.quick-scan') }}" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+                            <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
+                            @if($q !== '')
+                                <input type="hidden" name="q" value="{{ $q }}">
+                            @endif
+                            <div class="field" style="margin-top:0;min-width:130px">
+                                <label class="label" for="quickScanPerPage">Số dòng</label>
+                                <select class="input" id="quickScanPerPage" name="per_page" onchange="this.form.submit()">
+                                    @foreach([50, 100, 200, 500] as $pp)
+                                        <option value="{{ $pp }}" @selected($perPage === $pp)>{{ $pp }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </form>
+                        @if($products && $products->lastPage() > 1)
+                            <div class="actions" style="justify-content:flex-end;flex-wrap:wrap;margin-top:0">
+                                <span class="hint" style="margin-top:0">Trang {{ $products->currentPage() }}/{{ $products->lastPage() }}</span>
+                                @if($products->onFirstPage())
+                                    <span class="btn btn-secondary" style="opacity:.55;pointer-events:none">Trước</span>
+                                @else
+                                    <a class="btn btn-secondary" href="{{ $products->previousPageUrl() }}">Trước</a>
+                                @endif
+                                @if($products->hasMorePages())
+                                    <a class="btn btn-secondary" href="{{ $products->nextPageUrl() }}">Sau</a>
+                                @else
+                                    <span class="btn btn-secondary" style="opacity:.55;pointer-events:none">Sau</span>
+                                @endif
+                            </div>
                         @endif
                     </div>
                 @endif
