@@ -115,7 +115,7 @@ class ScannerScanRequestTest extends TestCase
                 'scanner_product_ids_json' => json_encode([$scannerProductId]),
             ]);
 
-        $response->assertRedirect(route('dashboard').'#comparisonCard');
+        $response->assertRedirect(route('dashboard.quick-scan', ['website_url' => 'https://dienmaydo.vn']));
 
         $this->assertDatabaseHas('products', [
             'user_id' => $user->id,
@@ -130,5 +130,62 @@ class ScannerScanRequestTest extends TestCase
             'product_id' => $productId,
             'price' => 14500000,
         ]);
+    }
+
+    public function test_add_scanned_products_redirects_back_to_same_quick_scan_filters(): void
+    {
+        $user = User::factory()->create();
+        $now = now();
+        $jobId = DB::table('scanner_import_jobs')->insertGetId([
+            'external_job_id' => 'job-add-compare-filters',
+            'app' => 'windows-product-scanner',
+            'start_url' => 'https://dienmaydo.vn/',
+            'mode' => 'all',
+            'product_count' => 1,
+            'imported_product_count' => 1,
+            'priced_product_count' => 1,
+            'last_pushed_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $url = 'https://dienmaydo.vn/product-filter-keep';
+        $scannerProductId = DB::table('scanner_import_products')->insertGetId([
+            'scanner_import_job_id' => $jobId,
+            'external_id' => 'filter-keep-1',
+            'external_job_id' => 'job-add-compare-filters',
+            'product_code' => 'FILTER-KEEP',
+            'name' => 'Filter Keep Product',
+            'price_text' => '1.000.000 d',
+            'price_value' => 1000000,
+            'currency' => 'VND',
+            'url' => $url,
+            'link' => $url,
+            'source_url' => 'https://dienmaydo.vn/',
+            'url_hash' => sha1(mb_strtolower($url)),
+            'source_url_hash' => sha1('https://dienmaydo.vn/'),
+            'dedupe_hash' => sha1('https://dienmaydo.vn/|'.mb_strtolower($url)),
+            'imported_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->post(route('dashboard.quick-scan.add-to-compare'), [
+                'website_url' => 'https://dienmaydo.vn/',
+                'q' => 'Filter',
+                'product_filter' => 'priced',
+                'per_page' => 50,
+                'page' => 2,
+                'scanner_product_ids_json' => json_encode([$scannerProductId]),
+            ]);
+
+        $response->assertRedirect(route('dashboard.quick-scan', [
+            'website_url' => 'https://dienmaydo.vn',
+            'q' => 'Filter',
+            'product_filter' => 'priced',
+            'per_page' => 50,
+            'page' => 2,
+        ]));
     }
 }

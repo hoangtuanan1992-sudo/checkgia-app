@@ -181,6 +181,10 @@ class DashboardQuickScanController extends Controller
     {
         $data = $request->validate([
             'website_url' => ['nullable', 'string', 'max:2048'],
+            'q' => ['nullable', 'string', 'max:255'],
+            'product_filter' => ['nullable', 'in:all,newest,priced,unpriced'],
+            'per_page' => ['nullable', 'integer', 'in:50,100,200,500'],
+            'page' => ['nullable', 'integer', 'min:1'],
             'product_group_id' => ['nullable', 'integer'],
             'scanner_product_ids_json' => ['required', 'string'],
         ]);
@@ -256,7 +260,18 @@ class DashboardQuickScanController extends Controller
             $added++;
         }
 
-        return redirect(route('dashboard').'#comparisonCard')
+        $redirectQuery = $this->queryForLinks(
+            $this->normalizeWebsiteUrl((string) ($data['website_url'] ?? '')),
+            trim((string) ($data['q'] ?? '')),
+            (string) ($data['product_filter'] ?? 'all'),
+            (int) ($data['per_page'] ?? 200)
+        );
+        if (! empty($data['page']) && (int) $data['page'] > 1) {
+            $redirectQuery['page'] = (int) $data['page'];
+        }
+
+        return redirect()
+            ->route('dashboard.quick-scan', $redirectQuery)
             ->with('status', 'Đã thêm '.$added.' sản phẩm vào bảng so sánh.');
     }
 

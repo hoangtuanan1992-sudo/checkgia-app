@@ -224,6 +224,18 @@
                             <form id="quickScanAddForm" method="POST" action="{{ route('dashboard.quick-scan.add-to-compare') }}" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
                                 @csrf
                                 <input type="hidden" name="website_url" value="{{ $websiteUrl }}">
+                                @if($q !== '')
+                                    <input type="hidden" name="q" value="{{ $q }}">
+                                @endif
+                                @if($productFilter !== 'all')
+                                    <input type="hidden" name="product_filter" value="{{ $productFilter }}">
+                                @endif
+                                @if($perPage !== 200)
+                                    <input type="hidden" name="per_page" value="{{ $perPage }}">
+                                @endif
+                                @if(method_exists($products, 'currentPage') && $products->currentPage() > 1)
+                                    <input type="hidden" name="page" value="{{ $products->currentPage() }}">
+                                @endif
                                 <input type="hidden" id="quickScanIdsJson" name="scanner_product_ids_json" value="[]">
                                 <div class="field" style="margin-top:0;min-width:220px">
                                     <select class="input" id="quickScanProductGroup" name="product_group_id">
