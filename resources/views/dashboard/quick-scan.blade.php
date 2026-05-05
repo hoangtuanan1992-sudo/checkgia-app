@@ -257,13 +257,15 @@
             const idsJson = document.getElementById('quickScanIdsJson');
             const addButton = document.getElementById('quickScanAddButton');
 
-            let selected = new Set();
-            try {
-                selected = new Set(JSON.parse(localStorage.getItem(storageKey) || '[]').map(String));
-            } catch (error) {
-                selected = new Set();
-            }
+            const loadSelected = () => {
+                try {
+                    return new Set(JSON.parse(localStorage.getItem(storageKey) || '[]').map(String));
+                } catch (error) {
+                    return new Set();
+                }
+            };
 
+            let selected = loadSelected();
             const save = () => localStorage.setItem(storageKey, JSON.stringify(Array.from(selected)));
             const allFilteredSelected = () => allProductIds.length > 0 && allProductIds.every((id) => selected.has(String(id)));
             const anyFilteredSelected = () => allProductIds.some((id) => selected.has(String(id)));
@@ -283,6 +285,14 @@
 
                 if (selectedCount) selectedCount.textContent = String(selected.size);
                 if (idsJson) idsJson.value = JSON.stringify(Array.from(selected));
+                if (addButton) addButton.disabled = selected.size === 0;
+                if (checkPage) {
+                    checkPage.checked = allFilteredSelected();
+                    checkPage.indeterminate = anyFilteredSelected() && !checkPage.checked;
+                }
+            };
+            const syncControlsAfterSelectionChange = () => {
+                if (selectedCount) selectedCount.textContent = String(selected.size);
                 if (addButton) addButton.disabled = selected.size === 0;
                 if (checkPage) {
                     checkPage.checked = allFilteredSelected();
@@ -339,7 +349,18 @@
                         return;
                     }
 
-                    if (idsJson) idsJson.value = JSON.stringify(Array.from(selected));
+                    const submittedIds = Array.from(selected);
+                    if (idsJson) idsJson.value = JSON.stringify(submittedIds);
+
+                    const submittedSet = new Set(submittedIds.map(String));
+                    submittedSet.forEach((id) => selected.delete(id));
+                    save();
+                    checkboxes.forEach((checkbox) => {
+                        if (submittedSet.has(String(checkbox.value))) {
+                            checkbox.checked = false;
+                        }
+                    });
+                    syncControlsAfterSelectionChange();
                 });
             }
 
