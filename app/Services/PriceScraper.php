@@ -762,10 +762,16 @@ class PriceScraper
 
     private function extractMinhTuanMobileVisiblePrice(string $html): ?int
     {
-        if (preg_match('/<p[^>]*class=["\'][^"\']*\bprodetail__price\b[^"\']*\bprodetail__price--buynow\b[^"\']*["\'][^>]*>\s*<b[^>]*class=["\'][^"\']*\bprice\b[^"\']*["\'][^>]*>(?<price>.*?)<\/b>/isu', $html, $match) === 1) {
-            $price = $this->parsePriceToInt($this->cleanText((string) ($match['price'] ?? '')));
-            if (! is_null($price) && $price > 0) {
-                return $price;
+        if (preg_match_all('/<p[^>]*class=["\'][^"\']*\bprodetail__price\b[^"\']*["\'][^>]*>(?<content>.*?)<\/p>/is', $html, $matches) > 0) {
+            foreach ($matches['content'] as $content) {
+                if (preg_match('/<b[^>]*class=["\'][^"\']*\bprice\b[^"\']*["\'][^>]*>(?<price>.*?)<\/b>/is', (string) $content, $match) !== 1) {
+                    continue;
+                }
+
+                $price = $this->parsePriceToInt($this->cleanText((string) ($match['price'] ?? '')));
+                if (! is_null($price) && $price > 0) {
+                    return $price;
+                }
             }
         }
 
