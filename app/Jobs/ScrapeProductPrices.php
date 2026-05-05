@@ -6,8 +6,8 @@ use App\Models\CompetitorPrice;
 use App\Models\Product;
 use App\Models\ProductPriceHistory;
 use App\Models\UserScrapeSetting;
-use App\Models\UserScrapeXpath;
 use App\Services\AlertNotifier;
+use App\Services\ConfiguredProductScraper;
 use App\Services\PriceScraper;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -45,46 +45,17 @@ class ScrapeProductPrices implements ShouldQueue
             return;
         }
 
-        $settings = UserScrapeSetting::query()->where('user_id', $product->user_id)->first();
-        if (! $settings || ! $settings->own_name_xpath || ! $settings->own_price_xpath) {
-            return;
-        }
-
-        $scraper = new PriceScraper;
+        $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $product->user_id]);
+        $scraper = new ConfiguredProductScraper(new PriceScraper);
         $notifier = new AlertNotifier;
         $ownScrapeSucceeded = false;
 
         try {
-            $html = $scraper->fetchHtml($product->product_url);
-
-            $nameXpaths = array_merge(
-                [(string) $settings->own_name_xpath],
-                UserScrapeXpath::query()
-                    ->where('user_id', $product->user_id)
-                    ->where('type', 'name')
-                    ->orderBy('position')
-                    ->pluck('xpath')
-                    ->all()
-            );
-            $priceXpaths = array_merge(
-                [(string) $settings->own_price_xpath],
-                UserScrapeXpath::query()
-                    ->where('user_id', $product->user_id)
-                    ->where('type', 'price')
-                    ->orderBy('position')
-                    ->pluck('xpath')
-                    ->all()
-            );
-
-            $name = $scraper->extractFirstByXPaths($html, $nameXpaths) ?? $scraper->extractTitle($html);
-            $priceRaw = $scraper->extractFirstByXPaths($html, $priceXpaths);
-            $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
-            $isContactPrice = $scraper->isContactPriceText($priceRaw);
-
-            if ($name && (! is_null($price) || $isContactPrice)) {
-                $price = is_null($price) ? 0 : (int) $price;
+            $own = $scraper->scrapeOwnProduct($product->product_url, (int) $product->user_id, false);
+            if ($own['name'] && ! is_null($own['price'])) {
+                $price = (int) $own['price'];
                 $updates = [
-                    'name' => $name,
+                    'name' => $own['name'],
                     'price' => $price,
                 ];
                 if (Schema::hasColumn('products', 'own_scrape_failed_since')) {
@@ -94,7 +65,7 @@ class ScrapeProductPrices implements ShouldQueue
                 $ownScrapeSucceeded = true;
 
                 $latestOwn = ProductPriceHistory::query()->where('product_id', $product->id)->latest('fetched_at')->first();
-                if ($price > 0 && (! $latestOwn || (int) $latestOwn->price !== (int) $price)) {
+                if ($price > 0 && (! $latestOwn || (int) $latestOwn->price !== $price)) {
                     ProductPriceHistory::create([
                         'product_id' => $product->id,
                         'price' => $price,
@@ -110,32 +81,26 @@ class ScrapeProductPrices implements ShouldQueue
         }
 
         foreach ($product->competitors as $competitor) {
-            $site = $competitor->competitorSite;
-            if (! $site || ! $site->price_xpath || ! $competitor->url) {
+            if (! $competitor->url) {
                 continue;
             }
 
             try {
-                $cHtml = $scraper->fetchHtml($competitor->url);
-                $fallbacks = $site->scrapeXpaths
-                    ->where('type', 'price')
-                    ->sortBy('position')
-                    ->pluck('xpath')
-                    ->all();
-                $raw = $scraper->extractFirstByXPaths($cHtml, array_merge([(string) $site->price_xpath], $fallbacks));
-                $price = $scraper->parsePriceToInt($raw, $site->price_regex);
+                $priceResult = $scraper->scrapeCompetitorPrice($competitor->url, $competitor->competitorSite);
+                $price = $priceResult['price'] ?? null;
 
                 if (! is_null($price)) {
+                    $price = (int) $price;
                     $competitor->markPriceAvailable();
                     $latest = $competitor->prices()->latest('fetched_at')->first();
-                    if (! $latest || (int) $latest->price !== (int) $price) {
+                    if (! $latest || (int) $latest->price !== $price) {
                         $previousPrice = $latest ? (int) $latest->price : null;
                         CompetitorPrice::create([
                             'competitor_id' => $competitor->id,
                             'price' => $price,
                             'fetched_at' => now(),
                         ]);
-                        $notifier->notifyOnCompetitorPriceChange($product, $competitor, (int) $price, $previousPrice);
+                        $notifier->notifyOnCompetitorPriceChange($product, $competitor, $price, $previousPrice);
                     }
                 } else {
                     $competitor->markPriceMissing();

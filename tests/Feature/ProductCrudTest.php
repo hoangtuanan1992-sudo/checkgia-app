@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\CompetitorSiteTemplate;
 use App\Models\UserScrapeSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -33,6 +34,39 @@ class ProductCrudTest extends TestCase
         ])->assertRedirect('/dashboard');
 
         $this->get('/dashboard')->assertSee('iPhone 15');
+    }
+
+    public function test_dashboard_can_add_product_from_approved_xpath_domain_template_without_shop_xpath(): void
+    {
+        $user = User::factory()->create();
+        $url = 'https://shop.example.com/product-a';
+
+        CompetitorSiteTemplate::query()->create([
+            'domain' => 'example.com',
+            'name' => 'Example Shop',
+            'name_xpath' => '//h1',
+            'price_xpath' => '//*[@data-price]',
+            'price_regex' => null,
+            'is_approved' => true,
+            'approved_at' => now(),
+        ]);
+
+        Http::fake([
+            $url => Http::response('<html><body><h1>Template Product</h1><div data-price>12.340.000d</div></body></html>', 200),
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => $url,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $user->id,
+            'name' => 'Template Product',
+            'price' => 12340000,
+            'product_url' => $url,
+        ]);
     }
 
     public function test_dashboard_can_add_topzone_product_without_manual_xpath(): void

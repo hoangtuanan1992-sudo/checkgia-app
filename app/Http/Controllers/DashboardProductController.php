@@ -7,8 +7,7 @@ use App\Models\CompetitorSite;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\ProductPriceHistory;
-use App\Models\UserScrapeSetting;
-use App\Models\UserScrapeXpath;
+use App\Services\ConfiguredProductScraper;
 use App\Services\PriceScraper;
 use App\Support\ProductLimit;
 use Illuminate\Http\RedirectResponse;
@@ -33,74 +32,15 @@ class DashboardProductController extends Controller
                 ->withErrors(['product_url' => ProductLimit::message($userId)]);
         }
 
-        $scraper = new PriceScraper;
-        $settings = null;
-        $nameDebug = ['tried' => []];
-        $priceDebug = ['tried' => []];
-        $knownProduct = $scraper->scrapeKnownSitePriceAndName($validated['product_url']);
-        if ($knownProduct) {
-            $name = $knownProduct['name'];
-            $price = $knownProduct['price'];
-        } else {
-            $settings = UserScrapeSetting::query()->firstOrCreate(['user_id' => $userId]);
-            if (! $settings->own_name_xpath || ! $settings->own_price_xpath) {
-                return redirect()
-                    ->route('dashboard.competitors')
-                    ->with('status', 'Vui lòng cài đặt XPath lấy tên và giá của bạn trước.');
-            }
+        $configuredScraper = new ConfiguredProductScraper(new PriceScraper);
+        $scrapedProduct = $configuredScraper->scrapeOwnProduct($validated['product_url'], $userId, true);
+        $name = $scrapedProduct['name'];
+        $price = $scrapedProduct['price'];
 
-            $html = $scraper->fetchHtml($validated['product_url']);
-
-            $nameXpaths = array_merge(
-                [(string) $settings->own_name_xpath],
-                UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'name')->orderBy('position')->pluck('xpath')->all()
-            );
-            $priceXpaths = array_merge(
-                [(string) $settings->own_price_xpath],
-                UserScrapeXpath::query()->where('user_id', $userId)->where('type', 'price')->orderBy('position')->pluck('xpath')->all()
-            );
-
-            $nameDebug = $scraper->extractFirstByXPathsWithDebug($html, $nameXpaths);
-            $name = $nameDebug['value'] ?? null;
-            if (! $name) {
-                $name = $scraper->extractTitle($html);
-            }
-            $priceDebug = $scraper->extractFirstByXPathsWithDebug($html, $priceXpaths);
-            $priceRaw = $priceDebug['value'] ?? null;
-            $price = $scraper->parsePriceToInt($priceRaw, $settings->price_regex);
-        }
-
-        if (is_null($price)) {
-            $price = 0;
-        }
-
-        if (! $name) {
-            $parts = [];
-            if (! $name) {
-                $lines = ['Tên: không trích xuất được bằng XPath.'];
-                $lines[] = '- own_name_xpath: '.(string) ($settings->own_name_xpath ?? '');
-                $fallbacks = array_slice($nameDebug['tried'] ?? [], 1);
-                foreach ($fallbacks as $idx => $xp) {
-                    $lines[] = '- tên dự phòng #'.($idx + 1).': '.$xp;
-                }
-                $parts[] = implode("\n", $lines);
-            }
-            if (is_null($price)) {
-                $lines = ['Giá: không trích xuất được bằng XPath.'];
-                $lines[] = '- own_price_xpath: '.(string) ($settings->own_price_xpath ?? '');
-                $fallbacks = array_slice($priceDebug['tried'] ?? [], 1);
-                foreach ($fallbacks as $idx => $xp) {
-                    $lines[] = '- giá dự phòng #'.($idx + 1).': '.$xp;
-                }
-                if (($settings->price_regex ?? null)) {
-                    $lines[] = '- Regex lọc giá: '.(string) $settings->price_regex;
-                }
-                $parts[] = implode("\n", $lines);
-            }
-
+        if (! $name || is_null($price)) {
             return back()
                 ->withInput()
-                ->withErrors(['product_url' => implode("\n\n", $parts)]);
+                ->withErrors(['product_url' => 'Không lấy được tên/giá. Hãy kiểm tra Thư viện XPath theo domain hoặc XPath riêng của shop.']);
         }
 
         $groupId = $validated['product_group_id'] ?? null;
@@ -124,14 +64,14 @@ class DashboardProductController extends Controller
             'user_id' => $userId,
             'product_group_id' => $groupId,
             'name' => $name,
-            'price' => $price,
+            'price' => (int) $price,
             'product_url' => $validated['product_url'],
         ]);
 
         if ((int) $price > 0) {
             ProductPriceHistory::create([
                 'product_id' => $product->id,
-                'price' => $price,
+                'price' => (int) $price,
                 'fetched_at' => now(),
             ]);
         }
@@ -141,7 +81,7 @@ class DashboardProductController extends Controller
             ->with(['scrapeXpaths' => function ($q) {
                 $q->orderBy('type')->orderBy('position');
             }])
-            ->get(['id', 'name', 'price_xpath', 'price_regex'])
+            ->get(['id', 'name', 'domain', 'price_xpath', 'price_regex'])
             ->keyBy('id');
 
         $urls = $validated['competitor_urls'] ?? [];
@@ -164,38 +104,21 @@ class DashboardProductController extends Controller
                 'url' => $url,
             ]);
 
-            $knownCompetitor = $scraper->scrapeKnownSitePriceAndName($url);
-            if ($knownCompetitor) {
+            try {
+                $priceResult = $configuredScraper->scrapeCompetitorPrice($url, $site);
+            } catch (\Throwable $e) {
+                $priceResult = ['price' => null];
+            }
+
+            if (! is_null($priceResult['price'] ?? null)) {
                 $competitor->markPriceAvailable();
                 $latest = $competitor->prices()->latest('fetched_at')->first();
-                if (! $latest || (int) $latest->price !== (int) $knownCompetitor['price']) {
+                if (! $latest || (int) $latest->price !== (int) $priceResult['price']) {
                     CompetitorPrice::create([
                         'competitor_id' => $competitor->id,
-                        'price' => $knownCompetitor['price'],
+                        'price' => (int) $priceResult['price'],
                         'fetched_at' => now(),
                     ]);
-                }
-            } elseif ($site->price_xpath) {
-                try {
-                    $cHtml = $scraper->fetchHtml($url);
-                    $fallbacks = $site->scrapeXpaths->where('type', 'price')->sortBy('position')->pluck('xpath')->all();
-                    $cPriceRaw = $scraper->extractFirstByXPaths($cHtml, array_merge([(string) $site->price_xpath], $fallbacks));
-                    $cPrice = $scraper->parsePriceToInt($cPriceRaw, $site->price_regex);
-                    if (! is_null($cPrice)) {
-                        $competitor->markPriceAvailable();
-                        $latest = $competitor->prices()->latest('fetched_at')->first();
-                        if (! $latest || (int) $latest->price !== (int) $cPrice) {
-                            CompetitorPrice::create([
-                                'competitor_id' => $competitor->id,
-                                'price' => $cPrice,
-                                'fetched_at' => now(),
-                            ]);
-                        }
-                    } else {
-                        $competitor->markPriceMissing();
-                    }
-                } catch (\Throwable $e) {
-                    $competitor->markPriceMissing();
                 }
             } else {
                 $competitor->markPriceMissing();

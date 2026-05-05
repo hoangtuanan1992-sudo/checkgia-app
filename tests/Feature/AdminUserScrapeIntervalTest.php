@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\ScrapeProductPrices;
 use App\Models\CompetitorPrice;
 use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteTemplate;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\UserScrapeSetting;
@@ -198,6 +199,47 @@ class AdminUserScrapeIntervalTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_scrape_job_uses_approved_xpath_domain_template_without_shop_xpath(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 5, 4, 10, 0, 0, 'Asia/Ho_Chi_Minh'));
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Old name',
+            'price' => 1000000,
+            'product_url' => 'https://shop.example.com/template-product',
+            'own_scrape_failed_since' => now()->subDay(),
+        ]);
+        CompetitorSiteTemplate::query()->create([
+            'domain' => 'example.com',
+            'name' => 'Example Shop',
+            'name_xpath' => '//h1',
+            'price_xpath' => '//*[@id="price"]',
+            'is_approved' => true,
+            'approved_at' => now(),
+        ]);
+
+        Http::fake([
+            'https://shop.example.com/template-product' => Http::response('<html><body><h1>New template name</h1><div id="price">2.345.000d</div></body></html>', 200),
+        ]);
+
+        (new ScrapeProductPrices($product->id))->handle();
+
+        $this->assertDatabaseHas('products', [
+            'id' => $product->id,
+            'name' => 'New template name',
+            'price' => 2345000,
+            'own_scrape_failed_since' => null,
+        ]);
+        $this->assertDatabaseHas('product_price_histories', [
+            'product_id' => $product->id,
+            'price' => 2345000,
+        ]);
+
+        Carbon::setTestNow();
+    }
+
     public function test_scrape_job_marks_competitor_price_missing_when_latest_check_has_no_price(): void
     {
         Carbon::setTestNow(Carbon::create(2026, 5, 4, 10, 0, 0, 'Asia/Ho_Chi_Minh'));
@@ -349,6 +391,26 @@ class AdminUserScrapeIntervalTest extends TestCase
             'name' => 'iPhone 15',
             'price' => 10000000,
             'product_url' => 'https://example.com/iphone-15',
+            'last_scraped_at' => now()->subMinutes(11),
+        ]);
+
+        Artisan::call('checkgia:scrape-due');
+
+        Queue::assertPushed(ScrapeProductPrices::class, 1);
+        Carbon::setTestNow();
+    }
+
+    public function test_scrape_due_dispatches_products_even_without_user_xpath_settings(): void
+    {
+        Queue::fake();
+        Carbon::setTestNow(Carbon::create(2026, 5, 4, 10, 20, 0, 'Asia/Ho_Chi_Minh'));
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Template only product',
+            'price' => 10000000,
+            'product_url' => 'https://shop.example.com/product',
             'last_scraped_at' => now()->subMinutes(11),
         ]);
 

@@ -7,6 +7,7 @@ use App\Models\CompetitorSiteScrapeXpath;
 use App\Models\UserNotificationSetting;
 use App\Models\UserScrapeSetting;
 use App\Models\UserScrapeXpath;
+use App\Services\ConfiguredProductScraper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -67,12 +68,15 @@ class DashboardCompetitorSetupController extends Controller
 
         $position = ((int) CompetitorSite::query()->where('user_id', $userId)->max('position')) + 1;
 
-        CompetitorSite::firstOrCreate([
+        $site = CompetitorSite::firstOrCreate([
             'user_id' => $request->user()->effectiveUserId(),
             'name' => $name,
         ], [
+            'domain' => CompetitorSite::normalizedDomainFromUserInput($name),
             'position' => $position,
         ]);
+
+        (new ConfiguredProductScraper)->applyApprovedTemplateToSite($site, $name);
 
         $this->normalizeSitePositions($userId);
 

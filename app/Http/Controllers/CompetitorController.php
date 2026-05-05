@@ -6,6 +6,7 @@ use App\Models\Competitor;
 use App\Models\CompetitorPrice;
 use App\Models\CompetitorSite;
 use App\Models\Product;
+use App\Services\ConfiguredProductScraper;
 use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -89,45 +90,7 @@ class CompetitorController extends Controller
             'url' => $url,
         ]);
 
-        $site = $competitor->competitorSite;
-        $scraper = new PriceScraper;
-        $knownProduct = $scraper->scrapeKnownSitePriceAndName($competitor->url);
-        if ($knownProduct) {
-            $competitor->markPriceAvailable();
-            $latest = $competitor->prices()->latest('fetched_at')->first();
-            if (! $latest || (int) $latest->price !== (int) $knownProduct['price']) {
-                CompetitorPrice::create([
-                    'competitor_id' => $competitor->id,
-                    'price' => $knownProduct['price'],
-                    'fetched_at' => now(),
-                ]);
-            }
-        } elseif ($site && $site->price_xpath) {
-            try {
-                $html = $scraper->fetchHtml($competitor->url);
-                $fallbacks = $site->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
-                $raw = $scraper->extractFirstByXPaths($html, array_merge([(string) $site->price_xpath], $fallbacks));
-                $price = $scraper->parsePriceToInt($raw, $site->price_regex);
-
-                if (! is_null($price)) {
-                    $competitor->markPriceAvailable();
-                    $latest = $competitor->prices()->latest('fetched_at')->first();
-                    if (! $latest || (int) $latest->price !== (int) $price) {
-                        CompetitorPrice::create([
-                            'competitor_id' => $competitor->id,
-                            'price' => $price,
-                            'fetched_at' => now(),
-                        ]);
-                    }
-                } else {
-                    $competitor->markPriceMissing();
-                }
-            } catch (\Throwable $e) {
-                $competitor->markPriceMissing();
-            }
-        } else {
-            $competitor->markPriceMissing();
-        }
+        $this->scrapeAndStoreCompetitorPrice($competitor, $competitor->competitorSite);
 
         return back()->with('status', 'Đã cập nhật URL');
     }
@@ -174,38 +137,7 @@ class CompetitorController extends Controller
         $competitor->url = $url;
         $competitor->save();
 
-        $scraper = new PriceScraper;
-        $knownProduct = $scraper->scrapeKnownSitePriceAndName($competitor->url);
-        if ($knownProduct) {
-            $competitor->markPriceAvailable();
-            CompetitorPrice::create([
-                'competitor_id' => $competitor->id,
-                'price' => $knownProduct['price'],
-                'fetched_at' => now(),
-            ]);
-        } elseif ($competitorSite->price_xpath) {
-            try {
-                $html = $scraper->fetchHtml($competitor->url);
-                $fallbacks = $competitorSite->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
-                $raw = $scraper->extractFirstByXPaths($html, array_merge([(string) $competitorSite->price_xpath], $fallbacks));
-                $price = $scraper->parsePriceToInt($raw, $competitorSite->price_regex);
-
-                if (! is_null($price)) {
-                    $competitor->markPriceAvailable();
-                    CompetitorPrice::create([
-                        'competitor_id' => $competitor->id,
-                        'price' => $price,
-                        'fetched_at' => now(),
-                    ]);
-                } else {
-                    $competitor->markPriceMissing();
-                }
-            } catch (\Throwable $e) {
-                $competitor->markPriceMissing();
-            }
-        } else {
-            $competitor->markPriceMissing();
-        }
+        $this->scrapeAndStoreCompetitorPrice($competitor, $competitorSite);
 
         return back()->with('status', 'Đã cập nhật URL');
     }
@@ -327,52 +259,49 @@ class CompetitorController extends Controller
         $product = $competitor->product;
         abort_unless($product && $product->user_id === $request->user()->effectiveUserId(), 404);
 
-        $site = $competitor->competitorSite;
-        $scraper = new PriceScraper;
-        $knownProduct = $scraper->scrapeKnownSitePriceAndName($competitor->url);
-        if ($knownProduct) {
-            $competitor->markPriceAvailable();
-            $latest = $competitor->prices()->latest('fetched_at')->first();
-            if (! $latest || (int) $latest->price !== (int) $knownProduct['price']) {
-                CompetitorPrice::create([
-                    'competitor_id' => $competitor->id,
-                    'price' => $knownProduct['price'],
-                    'fetched_at' => now(),
-                ]);
-            }
-
-            return back()->with('status', 'Đã cập nhật giá: '.number_format($knownProduct['price'], 0, ',', '.').' đ');
+        $price = $this->scrapeAndStoreCompetitorPrice($competitor, $competitor->competitorSite);
+        if (! is_null($price)) {
+            return back()->with('status', 'Đã cập nhật giá: '.number_format($price, 0, ',', '.').' đ');
         }
 
-        if (! $site || ! $site->price_xpath) {
-            return back()->withErrors(['price' => 'Chưa cấu hình XPath giá cho đối thủ này.']);
+        return back()->withErrors(['price' => 'Không lấy được giá. Hãy kiểm tra Thư viện XPath theo domain hoặc XPath riêng của shop.']);
+    }
+
+    private function scrapeAndStoreCompetitorPrice(Competitor $competitor, ?CompetitorSite $site): ?int
+    {
+        if (! $competitor->url) {
+            $competitor->markPriceMissing();
+
+            return null;
         }
 
         try {
-            $html = $scraper->fetchHtml($competitor->url);
-            $fallbacks = $site->scrapeXpaths()->where('type', 'price')->orderBy('position')->pluck('xpath')->all();
-            $raw = $scraper->extractFirstByXPaths($html, array_merge([(string) $site->price_xpath], $fallbacks));
-            $price = $scraper->parsePriceToInt($raw, $site->price_regex);
-
-            if (is_null($price)) {
-                $competitor->markPriceMissing();
-                return back()->withErrors(['price' => 'Không lấy được giá. Vui lòng kiểm tra lại XPath/Regex.']);
-            }
-
-            $latest = $competitor->prices()->latest('fetched_at')->first();
-            $competitor->markPriceAvailable();
-            if (! $latest || (int) $latest->price !== (int) $price) {
-                CompetitorPrice::create([
-                    'competitor_id' => $competitor->id,
-                    'price' => $price,
-                    'fetched_at' => now(),
-                ]);
-            }
-
-            return back()->with('status', 'Đã cập nhật giá: '.number_format($price, 0, ',', '.').' đ');
+            $priceResult = (new ConfiguredProductScraper(new PriceScraper))
+                ->scrapeCompetitorPrice($competitor->url, $site);
         } catch (\Throwable $e) {
             $competitor->markPriceMissing();
-            return back()->withErrors(['price' => 'Không truy cập được trang đối thủ hoặc bị chặn.']);
+
+            return null;
         }
+
+        $price = $priceResult['price'] ?? null;
+        if (is_null($price)) {
+            $competitor->markPriceMissing();
+
+            return null;
+        }
+
+        $price = (int) $price;
+        $competitor->markPriceAvailable();
+        $latest = $competitor->prices()->latest('fetched_at')->first();
+        if (! $latest || (int) $latest->price !== $price) {
+            CompetitorPrice::create([
+                'competitor_id' => $competitor->id,
+                'price' => $price,
+                'fetched_at' => now(),
+            ]);
+        }
+
+        return $price;
     }
 }

@@ -27,13 +27,18 @@ Artisan::command('checkgia:scrape-due', function () {
         $columns[] = 'scrape_schedule_times';
     }
 
-    $settings = UserScrapeSetting::query()->get($columns);
+    $settings = UserScrapeSetting::query()->get($columns)->keyBy('user_id');
+    $userIds = Product::query()
+        ->whereNotNull('product_url')
+        ->distinct()
+        ->pluck('user_id');
 
-    foreach ($settings as $setting) {
-        if (! $setting->own_name_xpath || ! $setting->own_price_xpath) {
-            continue;
-        }
-
+    foreach ($userIds as $userId) {
+        $setting = $settings->get($userId) ?? new UserScrapeSetting([
+            'user_id' => $userId,
+            'scrape_interval_minutes' => 10,
+            'scrape_schedule_times' => '',
+        ]);
         $scheduledHours = $hasScheduleTimes ? $setting->scheduledHours() : [];
         if ($scheduledHours !== []) {
             if ((int) $now->minute !== 0 || ! in_array((int) $now->hour, $scheduledHours, true)) {
