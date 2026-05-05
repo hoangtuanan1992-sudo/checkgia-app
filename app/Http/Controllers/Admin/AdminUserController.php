@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\UserScrapeSetting;
+use App\Support\ProductLimit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -132,6 +133,7 @@ class AdminUserController extends Controller
             'auto_delete_failed_products_enabled' => ['nullable', 'boolean'],
             'auto_delete_failed_products_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
+            'product_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'allow_compare_match' => ['nullable', 'boolean'],
             'allow_shopee_check' => ['nullable', 'boolean'],
         ]);
@@ -164,6 +166,10 @@ class AdminUserController extends Controller
             'service_end_date' => $data['service_end_date'] ?? null,
             'admin_note' => $data['admin_note'] ?? null,
         ];
+
+        if (Schema::hasColumn('users', 'product_limit')) {
+            $createData['product_limit'] = $this->normalizeProductLimit($data['product_limit'] ?? null);
+        }
 
         if (Schema::hasColumn('users', 'allow_compare_match')) {
             $createData['allow_compare_match'] = (bool) ($data['allow_compare_match'] ?? false);
@@ -229,6 +235,7 @@ class AdminUserController extends Controller
             'auto_delete_failed_products_enabled' => ['nullable', 'boolean'],
             'auto_delete_failed_products_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
+            'product_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'allow_compare_match' => ['nullable', 'boolean'],
             'allow_shopee_check' => ['nullable', 'boolean'],
         ]);
@@ -250,6 +257,10 @@ class AdminUserController extends Controller
             'service_end_date' => $data['service_end_date'] ?? null,
             'admin_note' => $data['admin_note'] ?? null,
         ];
+
+        if (Schema::hasColumn('users', 'product_limit')) {
+            $updates['product_limit'] = $this->normalizeProductLimit($data['product_limit'] ?? $user->product_limit ?? null);
+        }
 
         if (Schema::hasColumn('users', 'allow_compare_match')) {
             $updates['allow_compare_match'] = (bool) ($data['allow_compare_match'] ?? false);
@@ -312,6 +323,13 @@ class AdminUserController extends Controller
         $normalized = UserScrapeSetting::normalizeScheduleTimes($value);
 
         return $normalized;
+    }
+
+    private function normalizeProductLimit(mixed $value): int
+    {
+        $limit = (int) ($value ?: ProductLimit::default());
+
+        return max(1, min(1000000, $limit));
     }
 
     /**

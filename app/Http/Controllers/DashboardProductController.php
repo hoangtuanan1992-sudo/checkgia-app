@@ -10,6 +10,7 @@ use App\Models\ProductPriceHistory;
 use App\Models\UserScrapeSetting;
 use App\Models\UserScrapeXpath;
 use App\Services\PriceScraper;
+use App\Support\ProductLimit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -26,6 +27,12 @@ class DashboardProductController extends Controller
         ]);
 
         $userId = $request->user()->effectiveUserId();
+        if (ProductLimit::wouldExceed($userId)) {
+            return back()
+                ->withInput()
+                ->withErrors(['product_url' => ProductLimit::message($userId)]);
+        }
+
         $scraper = new PriceScraper;
         $settings = null;
         $nameDebug = ['tried' => []];

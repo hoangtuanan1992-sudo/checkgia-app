@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\ProductPriceHistory;
 use App\Services\ProductCodeExtractor;
+use App\Support\ProductLimit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -265,14 +266,39 @@ class DashboardQuickScanController extends Controller
             ->orderBy('id')
             ->get();
 
-        $added = 0;
-        foreach ($scannerProducts as $scannerProduct) {
+        $validScannerProducts = $scannerProducts->filter(function ($scannerProduct): bool {
             $url = trim((string) (($scannerProduct->url ?? '') ?: ($scannerProduct->link ?? '')));
             $name = trim((string) ($scannerProduct->name ?? ''));
             $price = (int) ($scannerProduct->price_value ?? 0);
-            if ($url === '' || $name === '' || $price <= 0) {
-                continue;
-            }
+
+            return $url !== '' && $name !== '' && $price > 0;
+        })->values();
+
+        $candidateUrls = $validScannerProducts
+            ->map(fn ($scannerProduct): string => trim((string) (($scannerProduct->url ?? '') ?: ($scannerProduct->link ?? ''))))
+            ->filter()
+            ->unique()
+            ->values();
+        $existingUrls = $candidateUrls->isNotEmpty()
+            ? Product::query()
+                ->where('user_id', $userId)
+                ->whereIn('product_url', $candidateUrls->all())
+                ->pluck('product_url')
+                ->mapWithKeys(fn ($url): array => [trim((string) $url) => true])
+            : collect();
+        $newProductCount = $candidateUrls
+            ->reject(fn (string $url): bool => $existingUrls->has($url))
+            ->count();
+
+        if (ProductLimit::wouldExceed($userId, $newProductCount)) {
+            return back()->with('status', ProductLimit::message($userId, $newProductCount));
+        }
+
+        $added = 0;
+        foreach ($validScannerProducts as $scannerProduct) {
+            $url = trim((string) (($scannerProduct->url ?? '') ?: ($scannerProduct->link ?? '')));
+            $name = trim((string) ($scannerProduct->name ?? ''));
+            $price = (int) ($scannerProduct->price_value ?? 0);
 
             $product = Product::query()->firstOrCreate(
                 [

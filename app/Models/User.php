@@ -14,7 +14,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
 
-#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'visible_product_group_ids', 'visible_competitor_site_group_ids', 'service_start_date', 'service_end_date', 'admin_note', 'allow_compare_match', 'allow_shopee_check'])]
+#[Fillable(['name', 'email', 'password', 'role', 'parent_user_id', 'visible_product_group_ids', 'visible_competitor_site_group_ids', 'service_start_date', 'service_end_date', 'admin_note', 'product_limit', 'allow_compare_match', 'allow_shopee_check'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -33,6 +33,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'service_start_date' => 'date',
             'service_end_date' => 'date',
+            'product_limit' => 'integer',
             'visible_product_group_ids' => 'array',
             'visible_competitor_site_group_ids' => 'array',
             'allow_compare_match' => 'boolean',

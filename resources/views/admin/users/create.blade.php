@@ -84,6 +84,21 @@
                         </div>
                     </div>
 
+                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px" id="productLimitCard">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Giới hạn sản phẩm so sánh</h2>
+                            <p class="card-sub">Giới hạn số sản phẩm shop được thêm vào bảng Kết quả so sánh</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            <div class="field" style="margin-top:0;max-width:260px">
+                                <label class="label" for="product_limit">Số sản phẩm tối đa</label>
+                                <input class="input" id="product_limit" name="product_limit" type="number" min="1" max="1000000" step="1" value="{{ old('product_limit', 100) }}">
+                                @error('product_limit')<div class="error">{{ $message }}</div>@enderror
+                                <div class="hint">Mặc định 100. Tăng lên 2000 cho shop cần dùng nhiều sản phẩm.</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px" id="updateIntervalCard">
                         <div class="card-header" style="padding:16px 16px 6px">
                             <h2 class="card-title" style="font-size:18px">Thời gian cập nhật</h2>
@@ -171,6 +186,7 @@
             const role = document.getElementById('role');
             const parentField = document.getElementById('parentField');
             const serviceCard = document.getElementById('serviceCard');
+            const productLimitCard = document.getElementById('productLimitCard');
             const updateIntervalCard = document.getElementById('updateIntervalCard');
             const autoDeleteCard = document.getElementById('autoDeleteCard');
             const noteCard = document.getElementById('noteCard');
@@ -181,6 +197,7 @@
                 parentField.style.display = role.value === 'viewer' ? '' : 'none';
                 const showForShop = role.value === 'owner';
                 if (serviceCard) serviceCard.style.display = showForShop ? '' : 'none';
+                if (productLimitCard) productLimitCard.style.display = showForShop ? '' : 'none';
                 if (updateIntervalCard) updateIntervalCard.style.display = showForShop ? '' : 'none';
                 if (autoDeleteCard) autoDeleteCard.style.display = showForShop ? '' : 'none';
                 if (noteCard) noteCard.style.display = showForShop ? '' : 'none';
