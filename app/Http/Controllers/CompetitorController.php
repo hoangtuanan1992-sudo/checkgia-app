@@ -155,7 +155,13 @@ class CompetitorController extends Controller
         if ($clear || $url === '') {
             $existing = $product->competitors()->where('competitor_site_id', $competitorSite->id)->first();
             if ($existing) {
-                $existing->delete();
+                if (trim((string) ($existing->note ?? '')) !== '') {
+                    $existing->url = '';
+                    $existing->markPriceMissing();
+                    $existing->save();
+                } else {
+                    $existing->delete();
+                }
             }
 
             return back()->with('status', 'Đã xoá URL');
@@ -202,6 +208,45 @@ class CompetitorController extends Controller
         }
 
         return back()->with('status', 'Đã cập nhật URL');
+    }
+
+    public function updateNote(Request $request, Product $product, CompetitorSite $competitorSite): RedirectResponse
+    {
+        if ($request->isMethod('get')) {
+            return redirect()->route('dashboard');
+        }
+
+        $user = $request->user();
+        abort_unless($user, 403);
+        if (! $user->isAdmin() && ((int) $product->user_id !== (int) $user->effectiveUserId() || (int) $competitorSite->user_id !== (int) $user->effectiveUserId())) {
+            abort(404);
+        }
+
+        $data = $request->validate([
+            'note' => ['nullable', 'string', 'max:5000'],
+        ]);
+
+        $note = trim((string) ($data['note'] ?? ''));
+        $competitor = $product->competitors()->firstOrNew([
+            'competitor_site_id' => $competitorSite->id,
+        ]);
+
+        if ($note === '' && ! $competitor->exists) {
+            return back()->with('status', 'Chưa có note để lưu.');
+        }
+
+        if ($note === '' && trim((string) ($competitor->url ?? '')) === '') {
+            $competitor->delete();
+
+            return back()->with('status', 'Đã xoá note.');
+        }
+
+        $competitor->name = $competitorSite->name;
+        $competitor->url = trim((string) ($competitor->url ?? ''));
+        $competitor->note = $note !== '' ? $note : null;
+        $competitor->save();
+
+        return back()->with('status', 'Đã lưu note.');
     }
 
     public function storePrice(Request $request, Competitor $competitor): RedirectResponse

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\CompetitorSite;
 use App\Models\CompetitorSiteGroup;
+use App\Models\Competitor;
 use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\User;
@@ -156,6 +157,82 @@ class DashboardPaginationControlTest extends TestCase
         $this->assertNotEmpty($matches);
         $this->assertStringContainsString($siteInGroup->name, $matches[0]);
         $this->assertStringNotContainsString($siteOutsideGroup->name, $matches[0]);
+    }
+
+    public function test_owner_can_add_note_to_empty_competitor_link_cell(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'San pham can ghi note',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/note-product',
+        ]);
+        $site = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Doi thu can note',
+            'position' => 1,
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee(route('dashboard.products.competitors.note', [$product, $site]), false)
+            ->assertSee('class="compare-note-button js-edit-note"', false);
+
+        $this->actingAs($owner)
+            ->post(route('dashboard.products.competitors.note', [$product, $site]), [
+                'note' => 'Chua tim duoc link doi thu',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('competitors', [
+            'product_id' => $product->id,
+            'competitor_site_id' => $site->id,
+            'url' => '',
+            'note' => 'Chua tim duoc link doi thu',
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Chua tim duoc link doi thu');
+    }
+
+    public function test_clearing_url_keeps_existing_note_visible(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'San pham xoa link giu note',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/clear-link-note',
+        ]);
+        $site = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Doi thu co note',
+            'position' => 1,
+        ]);
+        Competitor::query()->create([
+            'product_id' => $product->id,
+            'competitor_site_id' => $site->id,
+            'name' => $site->name,
+            'url' => 'https://competitor.test/product',
+            'note' => 'Giu lai note nay',
+        ]);
+
+        $this->actingAs($owner)
+            ->post(route('dashboard.products.competitors.upsert', [$product, $site]), [
+                'clear' => 1,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('competitors', [
+            'product_id' => $product->id,
+            'competitor_site_id' => $site->id,
+            'url' => '',
+            'note' => 'Giu lai note nay',
+        ]);
     }
 
     public function test_dashboard_bulk_delete_removes_only_filtered_products(): void

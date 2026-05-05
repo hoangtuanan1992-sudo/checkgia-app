@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Schema;
 
-#[Fillable(['product_id', 'competitor_site_id', 'name', 'url', 'price_adjustment', 'price_missing_at'])]
+#[Fillable(['product_id', 'competitor_site_id', 'name', 'url', 'note', 'price_adjustment', 'price_missing_at'])]
 class Competitor extends Model
 {
     use HasFactory;

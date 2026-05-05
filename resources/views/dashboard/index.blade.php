@@ -44,6 +44,30 @@
                 color:#fff !important;
                 z-index:1001 !important;
             }
+            .compare-note-button{
+                border:0;
+                background:transparent;
+                color:var(--muted);
+                padding:0;
+                font:inherit;
+                cursor:pointer;
+                text-decoration:underline;
+                text-underline-offset:2px;
+            }
+            .compare-note{
+                margin-top:4px;
+                padding:7px 9px;
+                border:1px solid #bfdbfe;
+                border-radius:8px;
+                background:#eff6ff;
+                color:#1f2937;
+                font-size:12px;
+                line-height:1.35;
+                white-space:pre-wrap;
+                word-break:break-word;
+                text-align:left;
+                cursor:pointer;
+            }
             @media (max-width: 768px){
                 #comparisonTableView{
                     --compare-name-col-width:280px;
@@ -547,9 +571,11 @@
                                     </td>
                                     @foreach($comparisonCompetitorSites as $site)
                                         @php($c = $map->get($site->id))
+                                        @php($cUrl = trim((string) ($c?->url ?? '')))
+                                        @php($cNote = trim((string) ($c?->note ?? '')))
                                         @php($latest = $c?->prices->first())
                                         @php($prev = $c?->prices->skip(1)->first())
-                                        @php($cPrice = $c?->price_missing_at ? null : $latest?->price)
+                                        @php($cPrice = ($c?->price_missing_at || $cUrl === '') ? null : $latest?->price)
                                         @php($prevPrice = $prev?->price)
                                         @php($diff = is_null($cPrice) || $own <= 0 ? null : ((int) $cPrice - $own))
                                         @php($adj = (int) ($c?->price_adjustment ?? 0))
@@ -559,19 +585,27 @@
                                             @if($c)
                                                 <div style="display:flex;flex-direction:column;gap:4px;padding-top:6px">
                                                     <div style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px">
-                                                        @if(is_null($diff))
+                                                        @if($cUrl === '')
+                                                            <button
+                                                                type="button"
+                                                                class="compare-note-button js-edit-note"
+                                                                data-action="{{ route('dashboard.products.competitors.note', [$product, $site]) }}"
+                                                                data-value="{{ $cNote }}"
+                                                                title="Thêm note cho ô chưa có link"
+                                                            >---</button>
+                                                        @elseif(is_null($diff))
                                                             <span class="hint" style="margin-top:0">---</span>
                                                         @elseif($diff === 0)
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:#6b7280">không chênh</a>
+                                                            <a href="{{ $cUrl }}" target="_blank" style="color:#6b7280">không chênh</a>
                                                         @elseif($diff > 0)
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--success)">+{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ $cUrl }}" target="_blank" style="color:var(--success)">+{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @else
-                                                            <a href="{{ $c->url }}" target="_blank" style="color:var(--danger)">{{ number_format($diff, 0, ',', '.') }}đ</a>
+                                                            <a href="{{ $cUrl }}" target="_blank" style="color:var(--danger)">{{ number_format($diff, 0, ',', '.') }}đ</a>
                                                         @endif
 
                                                         @if(! is_null($adjDiff))
                                                             @php($adjColor = $adjDiff > 0 ? '#166534' : ($adjDiff < 0 ? '#991b1b' : '#111827'))
-                                                            <a href="{{ $c->url }}" target="_blank" id="adjDiff-{{ $c->id }}" style="display:{{ $adj !== 0 ? 'inline' : 'none' }};font-weight:800;color:{{ $adjColor }}">
+                                                            <a href="{{ $cUrl }}" target="_blank" id="adjDiff-{{ $c->id }}" style="display:{{ $adj !== 0 && $cUrl !== '' ? 'inline' : 'none' }};font-weight:800;color:{{ $adjColor }}">
                                                                 @if($adjDiff > 0)
                                                                     +{{ number_format($adjDiff, 0, ',', '.') }}đ
                                                                 @elseif($adjDiff < 0)
@@ -603,7 +637,7 @@
                                                                 class="icon-btn icon-btn-sm js-edit-url"
                                                                 data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
                                                                 data-field="url"
-                                                                data-value="{{ $c->url }}"
+                                                                data-value="{{ $cUrl }}"
                                                                 title="Sửa URL">
                                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                                                 <path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -629,10 +663,25 @@
                                                             <span class="hint" style="margin-top:0">---</span>
                                                         @endif
                                                     </div>
+                                                    @if($cNote !== '')
+                                                        <button
+                                                            type="button"
+                                                            class="compare-note js-edit-note"
+                                                            data-action="{{ route('dashboard.products.competitors.note', [$product, $site]) }}"
+                                                            data-value="{{ $cNote }}"
+                                                            title="Sửa note"
+                                                        >{{ $cNote }}</button>
+                                                    @endif
                                                 </div>
                                             @else
                                                 <div style="display:flex;flex-direction:column;gap:6px;padding-top:15px">
-                                                    <span class="hint" style="margin-top:0">---</span>
+                                                    <button
+                                                        type="button"
+                                                        class="compare-note-button js-edit-note"
+                                                        data-action="{{ route('dashboard.products.competitors.note', [$product, $site]) }}"
+                                                        data-value=""
+                                                        title="Thêm note cho ô chưa có link"
+                                                    >---</button>
                                                     <button
                                                         type="button"
                                                         class="icon-btn icon-btn-sm js-edit-url"
@@ -751,9 +800,11 @@
                                         @continue
                                     @endif
 
+                                    @php($cUrl = trim((string) ($c?->url ?? '')))
+                                    @php($cNote = trim((string) ($c?->note ?? '')))
                                     @php($latest = $c?->prices->first())
                                     @php($prev = $c?->prices->skip(1)->first())
-                                    @php($cPrice = $c?->price_missing_at ? null : $latest?->price)
+                                    @php($cPrice = ($c?->price_missing_at || $cUrl === '') ? null : $latest?->price)
                                     @php($prevPrice = $prev?->price)
                                     @php($adj = (int) ($c?->price_adjustment ?? 0))
                                     @php($adjDiff = is_null($cPrice) || $own <= 0 ? null : ((int) $cPrice + $adj - $own))
@@ -772,10 +823,18 @@
                                             @endif
                                         </div>
                                         <div class="compare-card-cell-diff">
-                                            @if(is_null($adjDiff))
+                                            @if($cUrl === '')
+                                                <button
+                                                    type="button"
+                                                    class="compare-note-button js-edit-note"
+                                                    data-action="{{ route('dashboard.products.competitors.note', [$product, $site]) }}"
+                                                    data-value="{{ $cNote }}"
+                                                    title="Thêm note cho ô chưa có link"
+                                                >---</button>
+                                            @elseif(is_null($adjDiff))
                                                 <span class="hint" style="margin-top:0">---</span>
                                             @else
-                                                <a href="{{ $c->url }}" target="_blank" style="text-decoration:none">
+                                                <a href="{{ $cUrl }}" target="_blank" style="text-decoration:none">
                                                     <span id="adjDiffCard-{{ $c->id }}" class="compare-diff-pill compare-diff-{{ $diffSign }}" data-pill="1">
                                                         {{ $adjDiff > 0 ? '+' : ($adjDiff < 0 ? '-' : '') }}{{ number_format(abs($adjDiff), 0, ',', '.') }}
                                                         <span class="compare-diff-arrow">{{ $diffArrow }}</span>
@@ -789,7 +848,7 @@
                                                 class="icon-btn icon-btn-sm js-edit-url"
                                                 data-action="{{ route('dashboard.products.competitors.upsert', [$product, $site]) }}"
                                                 data-field="url"
-                                                data-value="{{ $c->url }}"
+                                                data-value="{{ $cUrl }}"
                                                 title="Sửa URL"
                                             >
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -815,6 +874,16 @@
                                             </button>
                                         </div>
                                     </div>
+                                    @if($cNote !== '')
+                                        <button
+                                            type="button"
+                                            class="compare-note js-edit-note"
+                                            data-action="{{ route('dashboard.products.competitors.note', [$product, $site]) }}"
+                                            data-value="{{ $cNote }}"
+                                            title="Sửa note"
+                                            style="margin:0 16px 10px"
+                                        >{{ $cNote }}</button>
+                                    @endif
                                 @endforeach
 
                                 @if($missingSites->isNotEmpty())
@@ -921,6 +990,27 @@
                 <div class="actions" style="justify-content:flex-end">
                     <button class="btn btn-secondary" type="button" id="urlDialogCancel">Huỷ</button>
                     <button class="btn btn-secondary" type="button" id="urlDialogDelete">Xoá</button>
+                    <button class="btn" type="submit">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+
+    <dialog id="noteDialog" class="dialog">
+        <div class="dialog-header">
+            <h3 class="card-title" style="font-size:18px">Note cho ô chưa có link</h3>
+            <p class="card-sub">Ghi chú sẽ hiển thị ngay trong bảng Kết quả so sánh</p>
+        </div>
+        <div class="dialog-body">
+            <form id="noteDialogForm" method="POST" action="">
+                @csrf
+                <div class="field" style="margin-top:0">
+                    <label class="label" for="noteDialogInput">Note</label>
+                    <textarea class="input" id="noteDialogInput" name="note" rows="5" maxlength="5000" placeholder="VD: Chưa tìm được link, sản phẩm hết hàng, cần kiểm tra lại..."></textarea>
+                </div>
+                <div class="actions" style="justify-content:flex-end">
+                    <button class="btn btn-secondary" type="button" id="noteDialogCancel">Huỷ</button>
+                    <button class="btn btn-secondary" type="button" id="noteDialogClear">Xoá note</button>
                     <button class="btn" type="submit">Lưu</button>
                 </div>
             </form>
@@ -1065,6 +1155,12 @@
             const del = document.getElementById('urlDialogDelete');
             const clear = document.getElementById('urlDialogClear');
             const openButtons = document.querySelectorAll('.js-edit-url');
+            const noteDialog = document.getElementById('noteDialog');
+            const noteForm = document.getElementById('noteDialogForm');
+            const noteInput = document.getElementById('noteDialogInput');
+            const noteCancel = document.getElementById('noteDialogCancel');
+            const noteClear = document.getElementById('noteDialogClear');
+            const noteButtons = document.querySelectorAll('.js-edit-note');
 
             function showDialog(el) {
                 if (!el) return false;
@@ -1096,6 +1192,14 @@
                 input.focus();
             }
 
+            function openNote(action, value) {
+                if (!noteForm || !noteInput) return;
+                noteForm.action = action || '';
+                noteInput.value = value || '';
+                showDialog(noteDialog);
+                noteInput.focus();
+            }
+
             openButtons.forEach((btn) => {
                 btn.addEventListener('click', (e) => {
                     if (e) {
@@ -1106,10 +1210,35 @@
                 });
             });
 
+            noteButtons.forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    if (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                    openNote(btn.dataset.action, btn.dataset.value);
+                });
+            });
+
             cancel.addEventListener('click', () => closeDialog(dialog));
             dialog.addEventListener('click', (e) => {
                 if (e.target === dialog) closeDialog(dialog);
             });
+
+            if (noteCancel) {
+                noteCancel.addEventListener('click', () => closeDialog(noteDialog));
+            }
+            if (noteDialog) {
+                noteDialog.addEventListener('click', (e) => {
+                    if (e.target === noteDialog) closeDialog(noteDialog);
+                });
+            }
+            if (noteClear && noteForm && noteInput) {
+                noteClear.addEventListener('click', () => {
+                    noteInput.value = '';
+                    noteForm.requestSubmit();
+                });
+            }
 
             if (del) {
                 del.addEventListener('click', () => {
@@ -1741,6 +1870,17 @@
                             e.stopPropagation();
                         }
                         open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
+                    });
+                });
+                scope.querySelectorAll('.js-edit-note').forEach((btn) => {
+                    if (btn.dataset.dynamicBound === '1') return;
+                    btn.dataset.dynamicBound = '1';
+                    btn.addEventListener('click', (e) => {
+                        if (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }
+                        openNote(btn.dataset.action, btn.dataset.value);
                     });
                 });
                 scope.querySelectorAll('.js-edit-adjustment').forEach((btn) => {
