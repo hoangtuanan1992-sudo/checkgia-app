@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -62,6 +63,33 @@ class DashboardQuickScanFilterTest extends TestCase
             ->assertDontSee('Priced Product');
     }
 
+    public function test_quick_scan_marks_products_already_added_to_comparison_without_checking_them(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $jobId = $this->insertJob('already-added-job', now());
+        $scannerProductId = $this->insertProduct($jobId, 'Already Added Product', 'https://example.com/already-added', 1000000, now());
+
+        Product::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Already Added Product',
+            'price' => 1000000,
+            'product_url' => 'https://example.com/already-added',
+        ]);
+
+        $response = $this->actingAs($owner)
+            ->get(route('dashboard.quick-scan', [
+                'website_url' => 'https://example.com/',
+            ]));
+
+        $response->assertOk()
+            ->assertSee('data-quick-scan-in-compare-row="1"', false)
+            ->assertSee('data-quick-scan-in-compare="1"', false);
+        $this->assertMatchesRegularExpression(
+            '/data-quick-scan-in-compare="1"\s+type="checkbox"\s+value="'.$scannerProductId.'"\s+style=/',
+            $response->getContent()
+        );
+    }
+
     private function insertJob(string $externalJobId, Carbon $pushedAt): int
     {
         return (int) DB::table('scanner_import_jobs')->insertGetId([
@@ -78,10 +106,10 @@ class DashboardQuickScanFilterTest extends TestCase
         ]);
     }
 
-    private function insertProduct(int $jobId, string $name, string $url, ?int $price, Carbon $at): void
+    private function insertProduct(int $jobId, string $name, string $url, ?int $price, Carbon $at): int
     {
         $sourceUrl = 'https://example.com/';
-        DB::table('scanner_import_products')->insert([
+        return (int) DB::table('scanner_import_products')->insertGetId([
             'scanner_import_job_id' => $jobId,
             'external_id' => sha1($url),
             'external_job_id' => 'job-'.$jobId,

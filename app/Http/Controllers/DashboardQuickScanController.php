@@ -80,7 +80,25 @@ class DashboardQuickScanController extends Controller
                     ->paginate($perPage)
                     ->appends($this->queryForLinks($websiteUrl, $q, $productFilter, $perPage));
 
-                $products->getCollection()->transform(fn ($product): array => $this->productRow($product));
+                $pageProducts = $products->getCollection();
+                $scannerUrls = $pageProducts
+                    ->map(fn ($product): string => trim((string) (($product->url ?? '') ?: ($product->link ?? ''))))
+                    ->filter()
+                    ->unique()
+                    ->values();
+                $compareUrlMap = $scannerUrls->isNotEmpty()
+                    ? Product::query()
+                        ->where('user_id', $userId)
+                        ->whereIn('product_url', $scannerUrls->all())
+                        ->pluck('product_url')
+                        ->mapWithKeys(fn ($url): array => [trim((string) $url) => true])
+                    : collect();
+
+                $products->setCollection($pageProducts->map(function ($product) use ($compareUrlMap): array {
+                    $url = trim((string) (($product->url ?? '') ?: ($product->link ?? '')));
+
+                    return $this->productRow($product, $compareUrlMap->has($url));
+                }));
             }
         }
 
@@ -243,9 +261,9 @@ class DashboardQuickScanController extends Controller
     }
 
     /**
-     * @return array{id: int, code: string, name: string, priceValue: int, priceText: string, url: string, sourceUrl: string, updatedAt: string}
+     * @return array{id: int, code: string, name: string, priceValue: int, priceText: string, url: string, sourceUrl: string, updatedAt: string, inCompare: bool}
      */
-    private function productRow(object $product): array
+    private function productRow(object $product, bool $inCompare = false): array
     {
         $name = (string) ($product->name ?? '');
         $url = (string) (($product->url ?? '') ?: ($product->link ?? ''));
@@ -260,6 +278,7 @@ class DashboardQuickScanController extends Controller
             'url' => $url,
             'sourceUrl' => $sourceUrl,
             'updatedAt' => (string) ($product->updated_at ?? ''),
+            'inCompare' => $inCompare,
         ];
     }
 

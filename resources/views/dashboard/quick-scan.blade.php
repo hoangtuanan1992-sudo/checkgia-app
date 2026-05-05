@@ -144,7 +144,7 @@
                                     $rowNumber = method_exists($products, 'firstItem') ? (($products->firstItem() ?? 1) + $idx) : ($idx + 1);
                                     $url = (string) ($product['url'] ?? '');
                                 @endphp
-                                <tr data-quick-scan-row>
+                                <tr data-quick-scan-row @if($product['inCompare'] ?? false) data-quick-scan-in-compare-row="1" @endif>
                                     <td>{{ $rowNumber }}</td>
                                     <td>{{ ($product['code'] ?? '') !== '' ? $product['code'] : '---' }}</td>
                                     <td style="font-weight:700">{{ ($product['name'] ?? '') !== '' ? $product['name'] : '---' }}</td>
@@ -158,7 +158,7 @@
                                     </td>
                                     <td>{{ ($product['updatedAt'] ?? '') !== '' ? $product['updatedAt'] : '---' }}</td>
                                     <td style="text-align:center">
-                                        <input data-quick-scan-checkbox type="checkbox" value="{{ (int) ($product['id'] ?? 0) }}" style="width:24px;height:24px">
+                                        <input data-quick-scan-checkbox @if($product['inCompare'] ?? false) data-quick-scan-in-compare="1" @endif type="checkbox" value="{{ (int) ($product['id'] ?? 0) }}" style="width:24px;height:24px">
                                     </td>
                                 </tr>
                             @empty
@@ -249,7 +249,6 @@
 
             const storageSuffix = @json($websiteKey !== '' ? $websiteKey : 'default');
             const storageKey = 'checkgia.quickScan.selected.' + storageSuffix;
-            const addedStorageKey = 'checkgia.quickScan.added.' + storageSuffix;
             const allProductIds = @json(collect($allProductIds ?? [])->map(fn ($id) => (string) $id)->values());
             const selectedCount = document.getElementById('quickScanSelectedCount');
             const checkPage = document.getElementById('quickScanCheckPage');
@@ -270,12 +269,13 @@
             let selected = loadSelected();
             const save = () => localStorage.setItem(storageKey, JSON.stringify(Array.from(selected)));
             let added = new Set();
-            try {
-                added = new Set(JSON.parse(localStorage.getItem(addedStorageKey) || '[]').map(String));
-            } catch (error) {
-                added = new Set();
-            }
-            const saveAdded = () => localStorage.setItem(addedStorageKey, JSON.stringify(Array.from(added)));
+            checkboxes.forEach((checkbox) => {
+                if (checkbox.dataset.quickScanInCompare === '1') {
+                    added.add(String(checkbox.value));
+                    selected.delete(String(checkbox.value));
+                }
+            });
+            save();
             const allFilteredSelected = () => allProductIds.length > 0 && allProductIds.every((id) => selected.has(String(id)));
             const anyFilteredSelected = () => allProductIds.some((id) => selected.has(String(id)));
             const paintRow = (checkbox) => {
@@ -363,7 +363,6 @@
 
                     const submittedSet = new Set(submittedIds.map(String));
                     submittedSet.forEach((id) => added.add(id));
-                    saveAdded();
                     submittedSet.forEach((id) => selected.delete(id));
                     save();
                     checkboxes.forEach((checkbox) => {
