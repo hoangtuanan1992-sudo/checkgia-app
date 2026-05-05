@@ -18,7 +18,8 @@ class DashboardQuickScanController extends Controller
 {
     public function index(Request $request): View
     {
-        $userId = $request->user()->effectiveUserId();
+        $authUser = $request->user();
+        $userId = $authUser->effectiveUserId();
         $lastState = (array) $request->session()->get($this->quickScanSessionKey($userId), []);
         $explicitWebsiteInput = $this->websiteInput($request);
         $restoringLastState = $explicitWebsiteInput === '' && ! empty($lastState['website_url']);
@@ -122,13 +123,22 @@ class DashboardQuickScanController extends Controller
 
         $this->rememberQuickScanState($request, $userId, $websiteUrl, $q, $productFilter, $perPage, method_exists($products, 'currentPage') ? (int) $products->currentPage() : 1);
 
+        $productGroupsQuery = ProductGroup::query()
+            ->where('user_id', $userId)
+            ->orderBy('name');
+        if ($authUser->isViewer()) {
+            $allowedProductGroupIds = $authUser->visibleProductGroupIds();
+            if ($allowedProductGroupIds === []) {
+                $productGroupsQuery->whereRaw('1 = 0');
+            } else {
+                $productGroupsQuery->whereIn('id', $allowedProductGroupIds);
+            }
+        }
+
         return view('dashboard.quick-scan', [
             'websiteUrl' => $websiteUrl,
             'websiteKey' => $websiteKey,
-            'productGroups' => ProductGroup::query()
-                ->where('user_id', $userId)
-                ->orderBy('name')
-                ->get(['id', 'name']),
+            'productGroups' => $productGroupsQuery->get(['id', 'name']),
             'q' => $q,
             'productFilter' => $productFilter,
             'perPage' => $perPage,
@@ -217,9 +227,29 @@ class DashboardQuickScanController extends Controller
             return back()->with('status', 'Bạn chưa chọn sản phẩm nào.');
         }
 
-        $userId = $request->user()->effectiveUserId();
+        $authUser = $request->user();
+        $userId = $authUser->effectiveUserId();
         $productGroupId = null;
-        if (! empty($data['product_group_id'])) {
+        if ($authUser->isViewer()) {
+            if (empty($data['product_group_id'])) {
+                return back()->with('status', 'Tài khoản con phải chọn nhóm sản phẩm được cấp trước khi thêm so sánh.');
+            }
+
+            $allowedProductGroupIds = $authUser->visibleProductGroupIds();
+            if ($allowedProductGroupIds === []) {
+                return back()->with('status', 'Tài khoản con chưa được cấp nhóm sản phẩm để thêm so sánh.');
+            }
+
+            $productGroupId = ProductGroup::query()
+                ->where('user_id', $userId)
+                ->whereIn('id', $allowedProductGroupIds)
+                ->whereKey((int) $data['product_group_id'])
+                ->value('id');
+
+            if (! $productGroupId) {
+                return back()->with('status', 'Nhóm sản phẩm không hợp lệ hoặc bạn không được cấp quyền.');
+            }
+        } elseif (! empty($data['product_group_id'])) {
             $productGroupId = ProductGroup::query()
                 ->where('user_id', $userId)
                 ->whereKey((int) $data['product_group_id'])

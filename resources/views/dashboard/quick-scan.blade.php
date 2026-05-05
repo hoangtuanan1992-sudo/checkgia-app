@@ -9,6 +9,7 @@
         $perPage = (int) ($perPage ?? 200);
         $products = $products ?? null;
         $productGroups = collect($productGroups ?? []);
+        $isViewer = auth()->user()?->isViewer();
         $formatPrice = static function (int $value, string $text = ''): string {
             if ($value > 0) {
                 return number_format($value, 0, ',', '.').'đ';
@@ -238,8 +239,12 @@
                                 @endif
                                 <input type="hidden" id="quickScanIdsJson" name="scanner_product_ids_json" value="[]">
                                 <div class="field" style="margin-top:0;min-width:220px">
-                                    <select class="input" id="quickScanProductGroup" name="product_group_id">
-                                        <option value="">-- Không chọn nhóm --</option>
+                                    <select class="input" id="quickScanProductGroup" name="product_group_id" @if($isViewer) required @endif>
+                                        @if($isViewer)
+                                            <option value="" selected disabled>{{ $productGroups->isEmpty() ? 'Chưa được cấp nhóm sản phẩm' : '-- Chọn nhóm sản phẩm --' }}</option>
+                                        @else
+                                            <option value="">-- Không chọn nhóm --</option>
+                                        @endif
                                         @foreach($productGroups as $group)
                                             <option value="{{ $group->id }}">{{ $group->name }}</option>
                                         @endforeach
@@ -269,6 +274,9 @@
             const form = document.getElementById('quickScanAddForm');
             const idsJson = document.getElementById('quickScanIdsJson');
             const addButton = document.getElementById('quickScanAddButton');
+            const productGroupSelect = document.getElementById('quickScanProductGroup');
+            const requireProductGroup = @json($isViewer);
+            const hasRequiredProductGroup = () => !requireProductGroup || !!(productGroupSelect && productGroupSelect.value);
 
             const loadSelected = () => {
                 try {
@@ -306,7 +314,7 @@
 
                 if (selectedCount) selectedCount.textContent = String(selected.size);
                 if (idsJson) idsJson.value = JSON.stringify(Array.from(selected));
-                if (addButton) addButton.disabled = selected.size === 0;
+                if (addButton) addButton.disabled = selected.size === 0 || !hasRequiredProductGroup();
                 if (checkPage) {
                     checkPage.checked = allFilteredSelected();
                     checkPage.indeterminate = anyFilteredSelected() && !checkPage.checked;
@@ -314,7 +322,7 @@
             };
             const syncControlsAfterSelectionChange = () => {
                 if (selectedCount) selectedCount.textContent = String(selected.size);
-                if (addButton) addButton.disabled = selected.size === 0;
+                if (addButton) addButton.disabled = selected.size === 0 || !hasRequiredProductGroup();
                 if (checkPage) {
                     checkPage.checked = allFilteredSelected();
                     checkPage.indeterminate = anyFilteredSelected() && !checkPage.checked;
@@ -363,10 +371,19 @@
                 });
             }
 
+            if (productGroupSelect) {
+                productGroupSelect.addEventListener('change', syncControlsAfterSelectionChange);
+            }
+
             if (form) {
                 form.addEventListener('submit', (event) => {
                     if (selected.size === 0) {
                         event.preventDefault();
+                        return;
+                    }
+                    if (!hasRequiredProductGroup()) {
+                        event.preventDefault();
+                        alert('Tài khoản con phải chọn nhóm sản phẩm trước khi thêm so sánh.');
                         return;
                     }
 

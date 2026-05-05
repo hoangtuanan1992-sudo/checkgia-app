@@ -1,6 +1,7 @@
 @extends('layouts.app')
 
 @section('content')
+    @php($isViewer = auth()->user()?->isViewer())
     <div style="width:100%;max-width:1500px">
         <style>
             #comparisonCardView{
@@ -343,27 +344,47 @@
                         <label class="label" for="filterGroup">Nhóm</label>
                         <div class="group-filter-picker" id="filterGroupPicker">
                         <select class="input group-filter-select" id="filterGroup" tabindex="-1" aria-hidden="true">
-                            <option value="">Tất cả</option>
-                            <option value="__none__" @selected(request('group') === '__none__')>Chưa có nhóm</option>
+                            @unless($isViewer)
+                                <option value="">Tất cả</option>
+                                <option value="__none__" @selected(request('group') === '__none__')>Chưa có nhóm</option>
+                            @else
+                                @if($productGroups->isEmpty())
+                                    <option value="" selected disabled>Chưa được cấp nhóm</option>
+                                @endif
+                            @endunless
                             @foreach($productGroups as $g)
                                 <option value="{{ $g->id }}" @selected((string) request('group') === (string) $g->id)>{{ $g->name }}</option>
                             @endforeach
                         </select>
                         <button class="input group-filter-trigger" id="filterGroupTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-                            <span id="filterGroupLabel">Tất cả</span>
+                            <span id="filterGroupLabel">
+                                @if($isViewer)
+                                    {{ $productGroups->firstWhere('id', (int) request('group'))?->name ?? ($productGroups->first()->name ?? 'Chưa được cấp nhóm') }}
+                                @else
+                                    Tất cả
+                                @endif
+                            </span>
                             <span aria-hidden="true">▾</span>
                         </button>
                         <div class="group-filter-menu" id="filterGroupMenu" hidden>
-                            <div class="group-filter-row">
-                                <button class="group-filter-option" type="button" data-group-filter-value="">Tất cả</button>
-                            </div>
-                            <div class="group-filter-row">
-                                <button class="group-filter-option" type="button" data-group-filter-value="__none__">Chưa có nhóm</button>
-                            </div>
+                            @unless($isViewer)
+                                <div class="group-filter-row">
+                                    <button class="group-filter-option" type="button" data-group-filter-value="">Tất cả</button>
+                                </div>
+                                <div class="group-filter-row">
+                                    <button class="group-filter-option" type="button" data-group-filter-value="__none__">Chưa có nhóm</button>
+                                </div>
+                            @else
+                                @if($productGroups->isEmpty())
+                                    <div class="group-filter-row">
+                                        <button class="group-filter-option" type="button" disabled>Chưa được cấp nhóm</button>
+                                    </div>
+                                @endif
+                            @endunless
                             @foreach($productGroups as $g)
                                 <div class="group-filter-row">
                                     <button class="group-filter-option" type="button" data-group-filter-value="{{ $g->id }}">{{ $g->name }}</button>
-                                    @unless(auth()->user()?->isViewer())
+                                    @unless($isViewer)
                                         <button class="group-filter-add" type="button" data-group-id="{{ $g->id }}" data-group-name="{{ e($g->name) }}" data-action="{{ route('dashboard.products.assign-group', $g) }}" title="Thêm sản phẩm đang xem vào nhóm {{ $g->name }}" aria-label="Thêm vào nhóm {{ $g->name }}">+</button>
                                     @endunless
                                 </div>
@@ -374,7 +395,13 @@
                     <div class="field" style="margin-top:0;min-width:220px">
                         <label class="label" for="filterCompetitorGroup">Nhóm đối thủ</label>
                         <select class="input" id="filterCompetitorGroup">
-                            <option value="">Tất cả</option>
+                            @unless($isViewer)
+                                <option value="">Tất cả</option>
+                            @else
+                                @if(($competitorGroups ?? collect())->isEmpty())
+                                    <option value="" selected disabled>Chưa được cấp nhóm</option>
+                                @endif
+                            @endunless
                             @foreach(($competitorGroups ?? collect()) as $group)
                                 <option value="{{ $group->id }}" @selected((int) ($selectedCompetitorGroupId ?? 0) === (int) $group->id)>{{ $group->name }}</option>
                             @endforeach
@@ -1798,8 +1825,15 @@
             let floatingPagerObserver = null;
             let pendingAssignGroup = null;
 
+            function normalizeSelectSelection(select) {
+                if (select && select.selectedIndex < 0 && select.options.length) {
+                    select.selectedIndex = 0;
+                }
+            }
+
             function syncGroupFilterPicker() {
                 if (!filterGroup || !filterGroupLabel) return;
+                normalizeSelectSelection(filterGroup);
                 const selected = filterGroup.options[filterGroup.selectedIndex];
                 filterGroupLabel.textContent = selected ? selected.textContent : 'Tất cả';
                 document.querySelectorAll('.group-filter-option').forEach((button) => {
@@ -2285,8 +2319,14 @@
             if (filterReset) {
                 filterReset.addEventListener('click', () => {
                     if (filterSearch) filterSearch.value = '';
-                    if (filterGroup) filterGroup.value = '';
-                    if (filterCompetitorGroup) filterCompetitorGroup.value = '';
+                    if (filterGroup) {
+                        filterGroup.value = '';
+                        normalizeSelectSelection(filterGroup);
+                    }
+                    if (filterCompetitorGroup) {
+                        filterCompetitorGroup.value = '';
+                        normalizeSelectSelection(filterCompetitorGroup);
+                    }
                     syncGroupFilterPicker();
                     syncExportLinks();
                     if (sortSelect) sortSelect.value = 'row_asc';

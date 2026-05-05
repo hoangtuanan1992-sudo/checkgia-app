@@ -20,17 +20,21 @@ class DashboardController extends Controller
         $authUser = $request->user();
         $userId = $authUser->effectiveUserId();
         $productGroupRestrictionIds = $authUser->isViewer() ? $authUser->visibleProductGroupIds() : [];
-        $hasProductGroupRestriction = $authUser->isViewer() && $productGroupRestrictionIds !== [];
+        $hasProductGroupRestriction = $authUser->isViewer();
         $viewerCompetitorGroupIds = $authUser->isViewer() ? $authUser->visibleCompetitorSiteGroupIds() : [];
         $viewerCompetitorSiteIds = $authUser->isViewer()
-            ? $this->competitorSiteIdsForGroups($userId, $viewerCompetitorGroupIds)
+            ? ($viewerCompetitorGroupIds === [] ? [] : $this->competitorSiteIdsForGroups($userId, $viewerCompetitorGroupIds))
             : null;
 
         $competitorGroupsQuery = CompetitorSiteGroup::query()
             ->where('user_id', $userId)
             ->orderBy('name');
-        if ($authUser->isViewer() && $viewerCompetitorGroupIds !== []) {
-            $competitorGroupsQuery->whereIn('id', $viewerCompetitorGroupIds);
+        if ($authUser->isViewer()) {
+            if ($viewerCompetitorGroupIds === []) {
+                $competitorGroupsQuery->whereRaw('1 = 0');
+            } else {
+                $competitorGroupsQuery->whereIn('id', $viewerCompetitorGroupIds);
+            }
         }
         $competitorGroups = Schema::hasTable('competitor_site_groups')
             ? $competitorGroupsQuery->get(['id', 'name'])
@@ -38,7 +42,10 @@ class DashboardController extends Controller
 
         $selectedCompetitorGroupId = null;
         $competitorGroup = (string) $request->query('competitor_group', '');
-        if (ctype_digit($competitorGroup) && $competitorGroups->contains('id', (int) $competitorGroup)) {
+        if ($authUser->isViewer() && $competitorGroups->isNotEmpty() && (! ctype_digit($competitorGroup) || ! $competitorGroups->contains('id', (int) $competitorGroup))) {
+            $selectedCompetitorGroupId = (int) $competitorGroups->first()->id;
+            $request->query->set('competitor_group', (string) $selectedCompetitorGroupId);
+        } elseif (ctype_digit($competitorGroup) && $competitorGroups->contains('id', (int) $competitorGroup)) {
             $selectedCompetitorGroupId = (int) $competitorGroup;
         }
 
@@ -66,11 +73,20 @@ class DashboardController extends Controller
         $productGroupsQuery = ProductGroup::query()
             ->where('user_id', $userId)
             ->orderBy('name');
-        if ($hasProductGroupRestriction) {
-            $productGroupsQuery->whereIn('id', $productGroupRestrictionIds);
+        if ($authUser->isViewer()) {
+            if ($productGroupRestrictionIds === []) {
+                $productGroupsQuery->whereRaw('1 = 0');
+            } else {
+                $productGroupsQuery->whereIn('id', $productGroupRestrictionIds);
+            }
         }
         $productGroups = $productGroupsQuery
             ->get(['id', 'name']);
+
+        $requestedProductGroup = (string) $request->query('group', '');
+        if ($authUser->isViewer() && $productGroups->isNotEmpty() && (! ctype_digit($requestedProductGroup) || ! $productGroups->contains('id', (int) $requestedProductGroup))) {
+            $request->query->set('group', (string) (int) $productGroups->first()->id);
+        }
 
         $productsQuery = Product::query()
             ->with(['group:id,name', 'competitors' => function ($q) use ($restrictedCompetitorSiteIds) {

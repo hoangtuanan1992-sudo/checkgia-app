@@ -148,4 +148,52 @@ class SubUserGroupVisibilityTest extends TestCase
             ->assertDontSee('Đối thủ bị ẩn')
             ->assertDontSee('https://blocked.test/tu-lanh');
     }
+
+    public function test_subuser_without_allowed_groups_sees_no_comparison_products_or_competitor_sites(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $productGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Later',
+        ]);
+        $competitorSite = CompetitorSite::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Hidden Competitor',
+            'position' => 1,
+        ]);
+        $competitorGroup = CompetitorSiteGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Hidden Competitor Group',
+        ]);
+        $competitorGroup->competitorSites()->sync([$competitorSite->id]);
+
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $productGroup->id,
+            'name' => 'Hidden Product',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/hidden-product',
+        ]);
+        Competitor::query()->create([
+            'product_id' => $product->id,
+            'competitor_site_id' => $competitorSite->id,
+            'name' => $competitorSite->name,
+            'url' => 'https://competitor.test/hidden-product',
+        ]);
+
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [],
+            'visible_competitor_site_group_ids' => [],
+        ]);
+
+        $this->actingAs($subUser)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Hidden Product')
+            ->assertDontSee('Hidden Competitor')
+            ->assertDontSee('https://competitor.test/hidden-product')
+            ->assertSee('Chưa được cấp nhóm');
+    }
 }

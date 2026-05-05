@@ -18,10 +18,10 @@ class DashboardExportController extends Controller
         $authUser = $request->user();
         $userId = $authUser->effectiveUserId();
         $productGroupRestrictionIds = $authUser->isViewer() ? $authUser->visibleProductGroupIds() : [];
-        $hasProductGroupRestriction = $authUser->isViewer() && $productGroupRestrictionIds !== [];
+        $hasProductGroupRestriction = $authUser->isViewer();
         $viewerCompetitorGroupIds = $authUser->isViewer() ? $authUser->visibleCompetitorSiteGroupIds() : [];
         $viewerCompetitorSiteIds = $authUser->isViewer()
-            ? $this->competitorSiteIdsForGroups($userId, $viewerCompetitorGroupIds)
+            ? ($viewerCompetitorGroupIds === [] ? [] : $this->competitorSiteIdsForGroups($userId, $viewerCompetitorGroupIds))
             : null;
 
         $groupId = $request->query('group_id');
@@ -38,8 +38,12 @@ class DashboardExportController extends Controller
             $competitorGroupQuery = CompetitorSiteGroup::query()
                 ->where('user_id', $userId)
                 ->where('id', (int) $competitorGroupId);
-            if ($authUser->isViewer() && $viewerCompetitorGroupIds !== []) {
-                $competitorGroupQuery->whereIn('id', $viewerCompetitorGroupIds);
+            if ($authUser->isViewer()) {
+                if ($viewerCompetitorGroupIds === []) {
+                    $competitorGroupQuery->whereRaw('1 = 0');
+                } else {
+                    $competitorGroupQuery->whereIn('id', $viewerCompetitorGroupIds);
+                }
             }
             if ($competitorGroupQuery->exists()) {
                 $selectedCompetitorGroupId = (int) $competitorGroupId;

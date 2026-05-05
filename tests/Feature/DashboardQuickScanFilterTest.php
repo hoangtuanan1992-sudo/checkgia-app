@@ -124,6 +124,104 @@ class DashboardQuickScanFilterTest extends TestCase
             ->assertDontSee('Remembered Product');
     }
 
+    public function test_subuser_quick_scan_only_lists_allowed_product_groups(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $now = now();
+        $allowedGroupId = DB::table('product_groups')->insertGetId([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Group',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('product_groups')->insert([
+            'user_id' => $owner->id,
+            'name' => 'Blocked Group',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $jobId = $this->insertJob('viewer-group-list-job', $now);
+        $this->insertProduct($jobId, 'Viewer Product', 'https://example.com/viewer-product', 1000000, $now);
+
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$allowedGroupId],
+        ]);
+
+        $this->actingAs($subUser)
+            ->get(route('dashboard.quick-scan', ['website_url' => 'https://example.com/']))
+            ->assertOk()
+            ->assertSee('Allowed Group')
+            ->assertDontSee('Blocked Group')
+            ->assertDontSee('-- Không chọn nhóm --');
+    }
+
+    public function test_subuser_must_add_scanned_products_to_an_allowed_product_group(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $now = now();
+        $allowedGroupId = DB::table('product_groups')->insertGetId([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Group',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $blockedGroupId = DB::table('product_groups')->insertGetId([
+            'user_id' => $owner->id,
+            'name' => 'Blocked Group',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $jobId = $this->insertJob('viewer-add-job', $now);
+        $url = 'https://example.com/viewer-add-product';
+        $scannerProductId = $this->insertProduct($jobId, 'Viewer Add Product', $url, 1000000, $now);
+
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$allowedGroupId],
+        ]);
+
+        $this->actingAs($subUser)
+            ->post(route('dashboard.quick-scan.add-to-compare'), [
+                'website_url' => 'https://example.com/',
+                'scanner_product_ids_json' => json_encode([$scannerProductId]),
+            ])
+            ->assertRedirect();
+        $this->assertDatabaseMissing('products', [
+            'user_id' => $owner->id,
+            'product_url' => $url,
+        ]);
+
+        $this->actingAs($subUser)
+            ->post(route('dashboard.quick-scan.add-to-compare'), [
+                'website_url' => 'https://example.com/',
+                'product_group_id' => $blockedGroupId,
+                'scanner_product_ids_json' => json_encode([$scannerProductId]),
+            ])
+            ->assertRedirect();
+        $this->assertDatabaseMissing('products', [
+            'user_id' => $owner->id,
+            'product_url' => $url,
+        ]);
+
+        $this->actingAs($subUser)
+            ->post(route('dashboard.quick-scan.add-to-compare'), [
+                'website_url' => 'https://example.com/',
+                'product_group_id' => $allowedGroupId,
+                'scanner_product_ids_json' => json_encode([$scannerProductId]),
+            ])
+            ->assertRedirect();
+        $this->assertDatabaseHas('products', [
+            'user_id' => $owner->id,
+            'product_group_id' => $allowedGroupId,
+            'name' => 'Viewer Add Product',
+            'price' => 1000000,
+            'product_url' => $url,
+        ]);
+    }
+
     private function insertJob(string $externalJobId, Carbon $pushedAt, string $startUrl = 'https://example.com/'): int
     {
         return (int) DB::table('scanner_import_jobs')->insertGetId([
