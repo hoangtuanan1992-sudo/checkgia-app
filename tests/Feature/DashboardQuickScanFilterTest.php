@@ -90,12 +90,46 @@ class DashboardQuickScanFilterTest extends TestCase
         );
     }
 
-    private function insertJob(string $externalJobId, Carbon $pushedAt): int
+    public function test_quick_scan_remembers_last_website_when_opened_without_query(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $rememberedJobId = $this->insertJob('remembered-job', now());
+        $this->insertProduct($rememberedJobId, 'Remembered Product', 'https://example.com/remembered', 1000000, now());
+
+        $this->actingAs($owner)
+            ->get(route('dashboard.quick-scan', ['website_url' => 'https://example.com/']))
+            ->assertOk()
+            ->assertSee('Remembered Product');
+
+        $this->actingAs($owner)
+            ->get(route('dashboard.quick-scan'))
+            ->assertOk()
+            ->assertSee('value="https://example.com"', false)
+            ->assertSee('Remembered Product');
+
+        $otherJobId = $this->insertJob('other-job', now(), 'https://other.test/');
+        $this->insertProduct($otherJobId, 'Other Product', 'https://other.test/product', 2000000, now(), 'https://other.test/');
+
+        $this->actingAs($owner)
+            ->get(route('dashboard.quick-scan', ['website_url' => 'https://other.test/']))
+            ->assertOk()
+            ->assertSee('Other Product')
+            ->assertDontSee('Remembered Product');
+
+        $this->actingAs($owner)
+            ->get(route('dashboard.quick-scan'))
+            ->assertOk()
+            ->assertSee('value="https://other.test"', false)
+            ->assertSee('Other Product')
+            ->assertDontSee('Remembered Product');
+    }
+
+    private function insertJob(string $externalJobId, Carbon $pushedAt, string $startUrl = 'https://example.com/'): int
     {
         return (int) DB::table('scanner_import_jobs')->insertGetId([
             'external_job_id' => $externalJobId,
             'app' => 'windows-product-scanner',
-            'start_url' => 'https://example.com/',
+            'start_url' => $startUrl,
             'mode' => 'all',
             'product_count' => 1,
             'imported_product_count' => 1,
@@ -106,9 +140,8 @@ class DashboardQuickScanFilterTest extends TestCase
         ]);
     }
 
-    private function insertProduct(int $jobId, string $name, string $url, ?int $price, Carbon $at): int
+    private function insertProduct(int $jobId, string $name, string $url, ?int $price, Carbon $at, string $sourceUrl = 'https://example.com/'): int
     {
-        $sourceUrl = 'https://example.com/';
         return (int) DB::table('scanner_import_products')->insertGetId([
             'scanner_import_job_id' => $jobId,
             'external_id' => sha1($url),

@@ -18,12 +18,23 @@ class DashboardQuickScanController extends Controller
 {
     public function index(Request $request): View
     {
-        $websiteUrl = $this->normalizeWebsiteUrl($this->websiteInput($request));
-        $websiteKey = $this->websiteKey($websiteUrl);
         $userId = $request->user()->effectiveUserId();
-        $q = trim((string) $request->query('q', ''));
-        $productFilter = $this->productFilter($request);
-        $perPage = $this->perPage($request);
+        $lastState = (array) $request->session()->get($this->quickScanSessionKey($userId), []);
+        $explicitWebsiteInput = $this->websiteInput($request);
+        $restoringLastState = $explicitWebsiteInput === '' && ! empty($lastState['website_url']);
+        $websiteUrl = $this->normalizeWebsiteUrl($explicitWebsiteInput !== '' ? $explicitWebsiteInput : (string) ($lastState['website_url'] ?? ''));
+        if ($restoringLastState && ! $request->query->has('page') && ! empty($lastState['page']) && (int) $lastState['page'] > 1) {
+            $request->query->set('page', (string) (int) $lastState['page']);
+        }
+
+        $websiteKey = $this->websiteKey($websiteUrl);
+        $q = trim((string) ($request->query->has('q') ? $request->query('q', '') : ($restoringLastState ? ($lastState['q'] ?? '') : '')));
+        $productFilter = $request->query->has('product_filter')
+            ? $this->productFilter($request)
+            : ($restoringLastState ? $this->productFilterValue($lastState['product_filter'] ?? 'all') : 'all');
+        $perPage = $request->query->has('per_page')
+            ? $this->perPage($request)
+            : ($restoringLastState ? $this->perPageValue($lastState['per_page'] ?? '200') : 200);
         $selectedJob = null;
         $latestRequest = null;
         $error = null;
@@ -108,6 +119,8 @@ class DashboardQuickScanController extends Controller
                 ->orderByDesc('updated_at')
                 ->first();
         }
+
+        $this->rememberQuickScanState($request, $userId, $websiteUrl, $q, $productFilter, $perPage, method_exists($products, 'currentPage') ? (int) $products->currentPage() : 1);
 
         return view('dashboard.quick-scan', [
             'websiteUrl' => $websiteUrl,
@@ -358,7 +371,12 @@ class DashboardQuickScanController extends Controller
 
     private function perPage(Request $request): int
     {
-        $raw = trim((string) $request->query('per_page', '200'));
+        return $this->perPageValue($request->query('per_page', '200'));
+    }
+
+    private function perPageValue($raw): int
+    {
+        $raw = trim((string) $raw);
         $value = ctype_digit($raw) ? (int) $raw : 200;
 
         return in_array($value, [50, 100, 200, 500], true) ? $value : 200;
@@ -366,7 +384,12 @@ class DashboardQuickScanController extends Controller
 
     private function productFilter(Request $request): string
     {
-        $filter = (string) $request->query('product_filter', 'all');
+        return $this->productFilterValue($request->query('product_filter', 'all'));
+    }
+
+    private function productFilterValue($filter): string
+    {
+        $filter = (string) $filter;
 
         return in_array($filter, ['all', 'newest', 'priced', 'unpriced'], true) ? $filter : 'all';
     }
@@ -437,5 +460,24 @@ class DashboardQuickScanController extends Controller
         }
 
         return $query;
+    }
+
+    private function quickScanSessionKey(int $userId): string
+    {
+        return 'dashboard.quick_scan.last_query.'.$userId;
+    }
+
+    private function rememberQuickScanState(Request $request, int $userId, string $websiteUrl, string $q, string $productFilter, int $perPage, int $page): void
+    {
+        if ($websiteUrl === '') {
+            return;
+        }
+
+        $state = $this->queryForLinks($websiteUrl, $q, $productFilter, $perPage);
+        if ($page > 1) {
+            $state['page'] = $page;
+        }
+
+        $request->session()->put($this->quickScanSessionKey($userId), $state);
     }
 }
