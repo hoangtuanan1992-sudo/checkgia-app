@@ -247,7 +247,9 @@
             const checkboxes = Array.from(document.querySelectorAll('[data-quick-scan-checkbox]'));
             if (!checkboxes.length) return;
 
-            const storageKey = 'checkgia.quickScan.selected.' + @json($websiteKey !== '' ? $websiteKey : 'default');
+            const storageSuffix = @json($websiteKey !== '' ? $websiteKey : 'default');
+            const storageKey = 'checkgia.quickScan.selected.' + storageSuffix;
+            const addedStorageKey = 'checkgia.quickScan.added.' + storageSuffix;
             const allProductIds = @json(collect($allProductIds ?? [])->map(fn ($id) => (string) $id)->values());
             const selectedCount = document.getElementById('quickScanSelectedCount');
             const checkPage = document.getElementById('quickScanCheckPage');
@@ -267,12 +269,19 @@
 
             let selected = loadSelected();
             const save = () => localStorage.setItem(storageKey, JSON.stringify(Array.from(selected)));
+            let added = new Set();
+            try {
+                added = new Set(JSON.parse(localStorage.getItem(addedStorageKey) || '[]').map(String));
+            } catch (error) {
+                added = new Set();
+            }
+            const saveAdded = () => localStorage.setItem(addedStorageKey, JSON.stringify(Array.from(added)));
             const allFilteredSelected = () => allProductIds.length > 0 && allProductIds.every((id) => selected.has(String(id)));
             const anyFilteredSelected = () => allProductIds.some((id) => selected.has(String(id)));
             const paintRow = (checkbox) => {
                 const row = checkbox.closest('tr');
                 if (!row) return;
-                const color = checkbox.checked ? '#eef6ff' : '';
+                const color = checkbox.checked || added.has(String(checkbox.value)) ? '#eef6ff' : '';
                 row.querySelectorAll('td').forEach((cell) => {
                     cell.style.backgroundColor = color;
                 });
@@ -353,11 +362,14 @@
                     if (idsJson) idsJson.value = JSON.stringify(submittedIds);
 
                     const submittedSet = new Set(submittedIds.map(String));
+                    submittedSet.forEach((id) => added.add(id));
+                    saveAdded();
                     submittedSet.forEach((id) => selected.delete(id));
                     save();
                     checkboxes.forEach((checkbox) => {
                         if (submittedSet.has(String(checkbox.value))) {
                             checkbox.checked = false;
+                            paintRow(checkbox);
                         }
                     });
                     syncControlsAfterSelectionChange();
