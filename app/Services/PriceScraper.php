@@ -190,6 +190,54 @@ class PriceScraper
             return $this->scrapeSamsungComPriceAndName($url);
         }
 
+        if ($this->isTwoTMobileUrl($url)) {
+            return $this->scrapeTwoTMobilePriceAndName($url);
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<array{key: string, name: string, price: int, attributes: array}>
+     */
+    public function scrapeKnownSiteVariants(string $url, ?string $html = null): array
+    {
+        if ($this->isTwoTMobileUrl($url)) {
+            $html = $html ?? $this->fetchHtml($url);
+
+            return $this->wooCommerceProductVariantsFromHtml($html);
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array{name: string, price: int, variant_name: string, variant_key: string}|null
+     */
+    public function scrapeKnownSiteVariantPriceAndName(string $url, string $variantKey, ?string $html = null): ?array
+    {
+        if ($this->isTwoTMobileUrl($url)) {
+            $html = $html ?? $this->fetchHtml($url);
+        }
+
+        $variants = $this->scrapeKnownSiteVariants($url, $html);
+        foreach ($variants as $variant) {
+            if ((string) $variant['key'] !== (string) $variantKey) {
+                continue;
+            }
+
+            $name = $this->cleanText($this->extractFirstByXPath($html, '//h1'))
+                ?: $this->cleanText($this->metaContent($html, 'og:title') ?? $this->extractTitle($html))
+                ?: $variant['name'];
+
+            return [
+                'name' => $name,
+                'price' => (int) $variant['price'],
+                'variant_name' => (string) $variant['name'],
+                'variant_key' => (string) $variant['key'],
+            ];
+        }
+
         return null;
     }
 
@@ -255,6 +303,35 @@ class PriceScraper
         $host = preg_replace('/^www\./', '', $host) ?? $host;
 
         return $host === 'samsung.com';
+    }
+
+    public function isTwoTMobileUrl(string $url): bool
+    {
+        $host = strtolower((string) (parse_url($url, PHP_URL_HOST) ?? ''));
+        $host = preg_replace('/^www\./', '', $host) ?? $host;
+
+        return $host === '2tmobile.com';
+    }
+
+    /**
+     * @return array{name: string, price: int}|null
+     */
+    public function scrapeTwoTMobilePriceAndName(string $url, ?string $html = null): ?array
+    {
+        $html = $html ?? $this->fetchHtml($url);
+        $name = $this->cleanText($this->extractFirstByXPath($html, '//h1'))
+            ?: $this->cleanText($this->metaContent($html, 'og:title') ?? $this->extractTitle($html));
+        $variants = $this->wooCommerceProductVariantsFromHtml($html);
+        $price = $variants[0]['price'] ?? null;
+
+        if (! $name || is_null($price)) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'price' => (int) $price,
+        ];
     }
 
     /**
@@ -1019,6 +1096,113 @@ class PriceScraper
         }
 
         return null;
+    }
+
+    /**
+     * @return list<array{key: string, name: string, price: int, attributes: array}>
+     */
+    private function wooCommerceProductVariantsFromHtml(string $html): array
+    {
+        if (preg_match('/data-product_variations\s*=\s*(["\'])(?<json>.*?)\1/isu', $html, $match) !== 1) {
+            return [];
+        }
+
+        $rawJson = html_entity_decode((string) ($match['json'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $data = json_decode($rawJson, true);
+        if (! is_array($data)) {
+            return [];
+        }
+
+        $labels = $this->wooCommerceAttributeLabels($html);
+        $variants = [];
+        foreach ($data as $variation) {
+            if (! is_array($variation)) {
+                continue;
+            }
+
+            if (array_key_exists('variation_is_visible', $variation) && ! (bool) $variation['variation_is_visible']) {
+                continue;
+            }
+            if (array_key_exists('variation_is_active', $variation) && ! (bool) $variation['variation_is_active']) {
+                continue;
+            }
+
+            $price = null;
+            foreach (['display_price', 'display_regular_price'] as $key) {
+                if (! array_key_exists($key, $variation)) {
+                    continue;
+                }
+                $price = $this->normalizeNumericPrice((string) $variation[$key]);
+                if (! is_null($price) && $price > 0) {
+                    break;
+                }
+            }
+            if (is_null($price) && array_key_exists('price_html', $variation)) {
+                $price = $this->parsePriceToInt($this->cleanText((string) $variation['price_html']));
+            }
+            if (is_null($price) || $price <= 0) {
+                continue;
+            }
+
+            $attributes = is_array($variation['attributes'] ?? null) ? $variation['attributes'] : [];
+            $names = [];
+            foreach ($attributes as $slug) {
+                $slug = trim((string) $slug);
+                if ($slug === '') {
+                    continue;
+                }
+                $names[] = $labels[$slug] ?? $this->nameFromSlug($slug);
+            }
+
+            $key = trim((string) ($variation['variation_id'] ?? ''));
+            if ($key === '') {
+                $key = md5(json_encode($attributes, JSON_UNESCAPED_UNICODE) ?: implode('|', $names));
+            }
+
+            $variants[] = [
+                'key' => $key,
+                'name' => $this->cleanText(implode(' / ', $names)) ?: ('Cấu hình '.$key),
+                'price' => (int) $price,
+                'attributes' => $attributes,
+            ];
+        }
+
+        return $variants;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function wooCommerceAttributeLabels(string $html): array
+    {
+        $labels = [];
+
+        if (preg_match_all('/<option\b[^>]*value=["\'](?<value>[^"\']+)["\'][^>]*>(?<label>.*?)<\/option>/isu', $html, $matches) > 0) {
+            foreach ($matches['value'] as $index => $value) {
+                $value = trim((string) $value);
+                $label = $this->cleanText((string) ($matches['label'][$index] ?? ''));
+                if ($value !== '' && $label && ! preg_match('/^chọn\s+/iu', $label)) {
+                    $labels[$value] = $label;
+                }
+            }
+        }
+
+        if (preg_match_all('/<input\b[^>]*>/isu', $html, $inputMatches) > 0) {
+            foreach ($inputMatches[0] as $tag) {
+                $name = $this->attributeText((string) $tag, 'name');
+                if (! is_string($name) || ! str_starts_with($name, 'attribute_')) {
+                    continue;
+                }
+
+                $value = $this->attributeText((string) $tag, 'value');
+                $label = $this->attributeText((string) $tag, 'data-name');
+                if ($value && $label) {
+                    $labels[$value] = $label;
+                }
+            }
+        }
+
+        return $labels;
     }
 
     private function attributeNumber(string $tag, string $attribute): ?int

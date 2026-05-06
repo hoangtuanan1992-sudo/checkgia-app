@@ -151,6 +151,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard/competitor-sites/{competitorSite}', fn () => redirect()->route('dashboard.competitors'))->name('dashboard.competitors.sites.show');
     Route::get('/dashboard/products/{product}/competitor-sites/{competitorSite}', fn () => redirect()->route('dashboard'))->name('dashboard.products.competitors.show');
     Route::match(['put', 'post'], '/competitors/{competitor}/price-adjustment', [CompetitorController::class, 'updatePriceAdjustment'])->name('competitors.adjustment.update');
+    Route::get('/competitors/{competitor}/variants', [CompetitorController::class, 'variants'])->name('competitors.variants');
     Route::get('/competitors/{competitor}/price-adjustment', fn () => redirect()->route('dashboard'));
 
     Route::get('/products', [ProductController::class, 'index'])->name('products.index');

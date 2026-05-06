@@ -86,7 +86,7 @@ class ScrapeProductPrices implements ShouldQueue
             }
 
             try {
-                $priceResult = $scraper->scrapeCompetitorPrice($competitor->url, $competitor->competitorSite);
+                $priceResult = $scraper->scrapeCompetitorPrice($competitor->url, $competitor->competitorSite, $competitor->variant_key ?? null);
                 $price = $priceResult['price'] ?? null;
 
                 if (! is_null($price)) {

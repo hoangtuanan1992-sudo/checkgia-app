@@ -8,6 +8,7 @@ use App\Models\CompetitorSite;
 use App\Models\Product;
 use App\Services\ConfiguredProductScraper;
 use App\Services\PriceScraper;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -51,11 +52,21 @@ class CompetitorController extends Controller
             ['name' => $data['name']]
         );
 
-        $competitor->update([
+        $updates = [
             'competitor_site_id' => $site->id,
             'name' => $data['name'],
             'url' => $data['url'],
-        ]);
+        ];
+        if (trim((string) $competitor->url) !== trim((string) $data['url'])) {
+            if (Schema::hasColumn('competitors', 'variant_key')) {
+                $updates['variant_key'] = null;
+            }
+            if (Schema::hasColumn('competitors', 'variant_name')) {
+                $updates['variant_name'] = null;
+            }
+        }
+
+        $competitor->update($updates);
 
         return back()->with('status', 'Đã cập nhật đối thủ');
     }
@@ -87,9 +98,16 @@ class CompetitorController extends Controller
             return back()->with('status', 'Đã xoá URL');
         }
 
-        $competitor->update([
-            'url' => $url,
-        ]);
+        $updates = ['url' => $url];
+        if (trim((string) $competitor->url) !== $url) {
+            if (Schema::hasColumn('competitors', 'variant_key')) {
+                $updates['variant_key'] = null;
+            }
+            if (Schema::hasColumn('competitors', 'variant_name')) {
+                $updates['variant_name'] = null;
+            }
+        }
+        $competitor->update($updates);
 
         $this->scrapeAndStoreCompetitorPrice($competitor, $competitor->competitorSite);
 
@@ -121,6 +139,12 @@ class CompetitorController extends Controller
             if ($existing) {
                 if (trim((string) ($existing->note ?? '')) !== '') {
                     $existing->url = '';
+                    if (Schema::hasColumn('competitors', 'variant_key')) {
+                        $existing->variant_key = null;
+                    }
+                    if (Schema::hasColumn('competitors', 'variant_name')) {
+                        $existing->variant_name = null;
+                    }
                     $existing->markPriceMissing();
                     $existing->save();
                 } else {
@@ -135,6 +159,14 @@ class CompetitorController extends Controller
             'competitor_site_id' => $competitorSite->id,
         ]);
         $competitor->name = $competitorSite->name;
+        if (! $competitor->exists || trim((string) $competitor->url) !== $url) {
+            if (Schema::hasColumn('competitors', 'variant_key')) {
+                $competitor->variant_key = null;
+            }
+            if (Schema::hasColumn('competitors', 'variant_name')) {
+                $competitor->variant_name = null;
+            }
+        }
         $competitor->url = $url;
         $competitor->save();
 
@@ -221,14 +253,25 @@ class CompetitorController extends Controller
 
         $data = $request->validate([
             'price_adjustment' => ['nullable', 'string', 'max:64'],
+            'variant_key' => ['nullable', 'string', 'max:255'],
         ]);
 
         $input = trim((string) ($data['price_adjustment'] ?? ''));
         if ($input === '') {
-            $competitor->update(['price_adjustment' => 0]);
+            $variantData = $this->resolveVariantUpdate($request, $competitor);
+            if ($variantData instanceof JsonResponse || $variantData instanceof RedirectResponse) {
+                return $variantData;
+            }
+
+            $competitor->forceFill(array_merge(['price_adjustment' => 0], $variantData['attributes']))->save();
+            $this->storeVariantPriceIfNeeded($competitor, $variantData);
 
             if ($request->expectsJson()) {
-                return response()->json(['ok' => true, 'price_adjustment' => 0]);
+                return response()->json(array_merge([
+                    'ok' => true,
+                    'price_adjustment' => 0,
+                    'reload' => $variantData['touched'],
+                ], $variantData['response']));
             }
 
             return back()->with('status', 'Đã lưu điều chỉnh giá');
@@ -252,10 +295,20 @@ class CompetitorController extends Controller
         }
 
         $adjustment = $sign * (int) $digits;
-        $competitor->update(['price_adjustment' => $adjustment]);
+        $variantData = $this->resolveVariantUpdate($request, $competitor);
+        if ($variantData instanceof JsonResponse || $variantData instanceof RedirectResponse) {
+            return $variantData;
+        }
+
+        $competitor->forceFill(array_merge(['price_adjustment' => $adjustment], $variantData['attributes']))->save();
+        $this->storeVariantPriceIfNeeded($competitor, $variantData);
 
         if ($request->expectsJson()) {
-            return response()->json(['ok' => true, 'price_adjustment' => $adjustment]);
+            return response()->json(array_merge([
+                'ok' => true,
+                'price_adjustment' => $adjustment,
+                'reload' => $variantData['touched'],
+            ], $variantData['response']));
         }
 
         return back()->with('status', 'Đã lưu điều chỉnh giá');
@@ -274,6 +327,136 @@ class CompetitorController extends Controller
         return back()->withErrors(['price' => 'Không lấy được giá. Hãy kiểm tra Thư viện XPath theo domain hoặc XPath riêng của shop.']);
     }
 
+    public function variants(Request $request, Competitor $competitor): JsonResponse
+    {
+        $product = $competitor->product;
+        $user = $request->user();
+
+        if (! $product || ! $user || ($user->role !== 'admin' && (int) $product->user_id !== (int) $user->effectiveUserId())) {
+            return response()->json(['message' => 'Không có quyền thao tác.'], 403);
+        }
+
+        if (! $competitor->url) {
+            return response()->json([
+                'ok' => true,
+                'variants' => [],
+                'selected_key' => null,
+            ]);
+        }
+
+        try {
+            $variants = (new ConfiguredProductScraper(new PriceScraper))->variantsForUrl($competitor->url);
+        } catch (\Throwable) {
+            $variants = [];
+        }
+
+        return response()->json([
+            'ok' => true,
+            'variants' => array_map(fn ($variant) => [
+                'key' => (string) $variant['key'],
+                'name' => (string) $variant['name'],
+                'price' => (int) $variant['price'],
+                'price_text' => number_format((int) $variant['price'], 0, ',', '.').'đ',
+            ], $variants),
+            'selected_key' => $competitor->variant_key ?? null,
+        ]);
+    }
+
+    private function resolveVariantUpdate(Request $request, Competitor $competitor): array|JsonResponse|RedirectResponse
+    {
+        if (! $request->has('variant_key')) {
+            return [
+                'touched' => false,
+                'attributes' => [],
+                'response' => [],
+                'price' => null,
+            ];
+        }
+
+        if (! Schema::hasColumn('competitors', 'variant_key') || ! Schema::hasColumn('competitors', 'variant_name')) {
+            $message = 'Database chưa có cột cấu hình biến thể. Hãy chạy migration trên hosting: php artisan migrate --force';
+
+            return $request->expectsJson()
+                ? response()->json(['message' => $message], 422)
+                : back()->withErrors(['variant_key' => $message]);
+        }
+
+        $variantKey = trim((string) $request->input('variant_key', ''));
+        if ($variantKey === '') {
+            return [
+                'touched' => true,
+                'attributes' => [
+                    'variant_key' => null,
+                    'variant_name' => null,
+                ],
+                'response' => [
+                    'variant_key' => null,
+                    'variant_name' => null,
+                    'variant_price' => null,
+                ],
+                'price' => null,
+            ];
+        }
+
+        if (! $competitor->url) {
+            return $request->expectsJson()
+                ? response()->json(['message' => 'Ô đối thủ chưa có URL để chọn cấu hình.'], 422)
+                : back()->withErrors(['variant_key' => 'Ô đối thủ chưa có URL để chọn cấu hình.']);
+        }
+
+        try {
+            $variants = (new ConfiguredProductScraper(new PriceScraper))->variantsForUrl($competitor->url);
+        } catch (\Throwable) {
+            $variants = [];
+        }
+
+        $variant = collect($variants)->first(fn ($item) => (string) $item['key'] === $variantKey);
+        if (! $variant) {
+            return $request->expectsJson()
+                ? response()->json(['message' => 'Không tìm thấy cấu hình này trên website đối thủ.'], 422)
+                : back()->withErrors(['variant_key' => 'Không tìm thấy cấu hình này trên website đối thủ.']);
+        }
+
+        return [
+            'touched' => true,
+            'attributes' => [
+                'variant_key' => (string) $variant['key'],
+                'variant_name' => (string) $variant['name'],
+            ],
+            'response' => [
+                'variant_key' => (string) $variant['key'],
+                'variant_name' => (string) $variant['name'],
+                'variant_price' => (int) $variant['price'],
+            ],
+            'price' => (int) $variant['price'],
+        ];
+    }
+
+    private function storeVariantPriceIfNeeded(Competitor $competitor, array $variantData): void
+    {
+        $price = $variantData['price'] ?? null;
+        if (is_null($price)) {
+            return;
+        }
+
+        $price = (int) $price;
+        if ($price <= 0) {
+            $competitor->markPriceMissing();
+
+            return;
+        }
+
+        $competitor->markPriceAvailable();
+        $latest = $competitor->prices()->latest('fetched_at')->first();
+        if (! $latest || (int) $latest->price !== $price) {
+            CompetitorPrice::create([
+                'competitor_id' => $competitor->id,
+                'price' => $price,
+                'fetched_at' => now(),
+            ]);
+        }
+    }
+
     private function scrapeAndStoreCompetitorPrice(Competitor $competitor, ?CompetitorSite $site): ?int
     {
         if (! $competitor->url) {
@@ -284,7 +467,7 @@ class CompetitorController extends Controller
 
         try {
             $priceResult = (new ConfiguredProductScraper(new PriceScraper))
-                ->scrapeCompetitorPrice($competitor->url, $site);
+                ->scrapeCompetitorPrice($competitor->url, $site, $competitor->variant_key ?? null);
         } catch (\Throwable $e) {
             $competitor->markPriceMissing();
 

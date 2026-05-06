@@ -574,6 +574,7 @@
                                         @php($c = $map->get($site->id))
                                         @php($cUrl = trim((string) ($c?->url ?? '')))
                                         @php($cNote = trim((string) ($c?->note ?? '')))
+                                        @php($cVariantName = trim((string) ($c?->variant_name ?? '')))
                                         @php($latest = $c?->prices->first())
                                         @php($prev = $c?->prices->skip(1)->first())
                                         @php($cPrice = ($c?->price_missing_at || $cUrl === '') ? null : $latest?->price)
@@ -624,6 +625,9 @@
                                                                 data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
                                                                 data-own="{{ $own }}"
                                                                 data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                                data-variants-url="{{ route('competitors.variants', $c) }}"
+                                                                data-variant-key="{{ $c?->variant_key }}"
+                                                                data-variant-name="{{ $cVariantName }}"
                                                                 title="Điều chỉnh giá (+/-)"
                                                             >
                                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -664,6 +668,9 @@
                                                             <span class="hint" style="margin-top:0">---</span>
                                                         @endif
                                                     </div>
+                                                    @if($cVariantName !== '')
+                                                        <div class="hint" style="margin-top:0">Cấu hình: {{ $cVariantName }}</div>
+                                                    @endif
                                                     @if($cNote !== '')
                                                         <button
                                                             type="button"
@@ -803,6 +810,7 @@
 
                                     @php($cUrl = trim((string) ($c?->url ?? '')))
                                     @php($cNote = trim((string) ($c?->note ?? '')))
+                                    @php($cVariantName = trim((string) ($c?->variant_name ?? '')))
                                     @php($latest = $c?->prices->first())
                                     @php($prev = $c?->prices->skip(1)->first())
                                     @php($cPrice = ($c?->price_missing_at || $cUrl === '') ? null : $latest?->price)
@@ -866,6 +874,9 @@
                                                 data-span-ids="adjDiff-{{ $c->id }},adjDiffCard-{{ $c->id }}"
                                                 data-own="{{ $own }}"
                                                 data-cprice="{{ is_null($cPrice) ? '' : (int) $cPrice }}"
+                                                data-variants-url="{{ route('competitors.variants', $c) }}"
+                                                data-variant-key="{{ $c?->variant_key }}"
+                                                data-variant-name="{{ $cVariantName }}"
                                                 title="Điều chỉnh giá (+/-)"
                                             >
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -875,6 +886,9 @@
                                             </button>
                                         </div>
                                     </div>
+                                    @if($cVariantName !== '')
+                                        <div class="hint" style="margin:0 16px 8px">Cấu hình: {{ $cVariantName }}</div>
+                                    @endif
                                     @if($cNote !== '')
                                         <button
                                             type="button"
@@ -1056,6 +1070,13 @@
                     <label class="label" for="adjustDialogInput">Giá điều chỉnh (+/-)</label>
                     <input class="input" id="adjustDialogInput" name="price_adjustment" type="text" inputmode="numeric" placeholder="+200000 hoặc -200000">
                     @error('price_adjustment')<div class="error">{{ $message }}</div>@enderror
+                </div>
+                <div class="field" id="adjustVariantField" style="display:none">
+                    <label class="label" for="adjustVariantSelect">Cấu hình so sánh</label>
+                    <select class="input" id="adjustVariantSelect" name="variant_key" disabled>
+                        <option value="">Giá mặc định</option>
+                    </select>
+                    <div class="hint" id="adjustVariantHint" style="margin-top:0"></div>
                 </div>
                 <div class="actions" style="justify-content:flex-end">
                     <button class="btn btn-secondary" type="button" id="adjustDialogCancel">Huỷ</button>
@@ -1278,6 +1299,9 @@
             const adjustDialog = document.getElementById('adjustDialog');
             const adjustForm = document.getElementById('adjustDialogForm');
             const adjustInput = document.getElementById('adjustDialogInput');
+            const adjustVariantField = document.getElementById('adjustVariantField');
+            const adjustVariantSelect = document.getElementById('adjustVariantSelect');
+            const adjustVariantHint = document.getElementById('adjustVariantHint');
             const adjustCancel = document.getElementById('adjustDialogCancel');
             const adjustButtons = document.querySelectorAll('.js-edit-adjustment');
             const csrfToken = '{{ csrf_token() }}';
@@ -1407,12 +1431,65 @@
                 });
             }
 
-            function openAdjust(action, value) {
-                adjustForm.action = action;
-                adjustInput.value = value || '0';
+            function resetAdjustVariants(message = '') {
+                if (!adjustVariantField || !adjustVariantSelect || !adjustVariantHint) return;
+                adjustVariantSelect.innerHTML = '<option value="">Giá mặc định</option>';
+                adjustVariantSelect.disabled = true;
+                adjustVariantField.style.display = 'none';
+                adjustVariantHint.textContent = message;
+            }
+
+            async function loadAdjustVariants(btn) {
+                if (!adjustVariantField || !adjustVariantSelect || !adjustVariantHint) return;
+                const url = btn.dataset.variantsUrl || '';
+                if (!url) {
+                    resetAdjustVariants();
+                    return;
+                }
+
+                adjustVariantField.style.display = '';
+                adjustVariantSelect.disabled = true;
+                adjustVariantHint.textContent = 'Đang kiểm tra cấu hình...';
+                adjustVariantSelect.innerHTML = '<option value="">Giá mặc định</option>';
+
+                try {
+                    const res = await fetch(url, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'include',
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    const variants = Array.isArray(data.variants) ? data.variants : [];
+                    if (!res.ok || variants.length === 0) {
+                        resetAdjustVariants();
+                        return;
+                    }
+
+                    variants.forEach((variant) => {
+                        const option = document.createElement('option');
+                        option.value = String(variant.key || '');
+                        option.textContent = `${variant.name || 'Cấu hình'} - ${variant.price_text || ''}`.trim();
+                        adjustVariantSelect.appendChild(option);
+                    });
+                    adjustVariantSelect.value = String(btn.dataset.variantKey || data.selected_key || '');
+                    adjustVariantSelect.disabled = false;
+                    adjustVariantField.style.display = '';
+                    adjustVariantHint.textContent = 'Chọn cấu hình cụ thể để lấy đúng giá biến thể cho ô đối thủ này.';
+                } catch (error) {
+                    resetAdjustVariants();
+                }
+            }
+
+            function openAdjust(btn) {
+                adjustForm.action = btn.dataset.action || '';
+                adjustInput.value = btn.dataset.value || '0';
+                resetAdjustVariants();
                 if (typeof adjustDialog.showModal === 'function') {
                     adjustDialog.showModal();
                 }
+                loadAdjustVariants(btn);
                 adjustInput.focus();
                 adjustInput.select();
             }
@@ -1468,7 +1545,7 @@
                     e.stopPropagation();
                     e.stopImmediatePropagation();
                     lastAdjustButton = btn;
-                    openAdjust(btn.dataset.action, btn.dataset.value);
+                    openAdjust(btn);
                 });
             });
 
@@ -1537,9 +1614,18 @@
                             adjustDialog.close();
                         }
 
+                        if (data && data.reload) {
+                            window.location.reload();
+                            return;
+                        }
+
                         const adj = Number(data && data.price_adjustment !== undefined ? data.price_adjustment : Number(adjustInput.value || 0));
                         if (lastAdjustButton) {
                             lastAdjustButton.dataset.value = String(adj);
+                            if (data && Object.prototype.hasOwnProperty.call(data, 'variant_key')) {
+                                lastAdjustButton.dataset.variantKey = data.variant_key || '';
+                                lastAdjustButton.dataset.variantName = data.variant_name || '';
+                            }
 
                             const spanIdsRaw = lastAdjustButton.dataset.spanIds || lastAdjustButton.dataset.spanId || '';
                             const spanIds = spanIdsRaw.split(',').map((s) => s.trim()).filter(Boolean);
@@ -1917,7 +2003,7 @@
                         e.stopPropagation();
                         e.stopImmediatePropagation();
                         lastAdjustButton = btn;
-                        openAdjust(btn.dataset.action, btn.dataset.value);
+                        openAdjust(btn);
                     });
                 });
                 scope.querySelectorAll('.js-delete-product').forEach((btn) => {

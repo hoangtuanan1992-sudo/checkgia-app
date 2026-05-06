@@ -67,8 +67,16 @@ class ConfiguredProductScraper
     /**
      * @return array{price: ?int, source: ?string, price_raw: ?string, is_contact_price: bool, template_id: ?int, price_debug: array}
      */
-    public function scrapeCompetitorPrice(string $url, ?CompetitorSite $site = null): array
+    public function scrapeCompetitorPrice(string $url, ?CompetitorSite $site = null, ?string $variantKey = null): array
     {
+        $variantKey = trim((string) ($variantKey ?? ''));
+        if ($variantKey !== '') {
+            $knownVariant = $this->priceScraper->scrapeKnownSiteVariantPriceAndName($url, $variantKey);
+            if ($knownVariant) {
+                return $this->priceResult((int) $knownVariant['price'], 'known-site-variant');
+            }
+        }
+
         $knownProduct = $this->priceScraper->scrapeKnownSitePriceAndName($url);
         if ($knownProduct) {
             return $this->priceResult((int) $knownProduct['price'], 'known-site');
@@ -91,6 +99,14 @@ class ConfiguredProductScraper
         }
 
         return $siteResult ?? $this->priceResult(null, 'none');
+    }
+
+    /**
+     * @return list<array{key: string, name: string, price: int, attributes: array}>
+     */
+    public function variantsForUrl(string $url): array
+    {
+        return $this->priceScraper->scrapeKnownSiteVariants($url);
     }
 
     public function applyApprovedTemplateToSite(CompetitorSite $site, ?string $source = null): void
