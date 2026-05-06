@@ -288,8 +288,8 @@ class DashboardPaginationControlTest extends TestCase
                 'deleted' => 2,
             ]);
 
-        $this->assertDatabaseMissing('products', ['id' => $deleteA->id]);
-        $this->assertDatabaseMissing('products', ['id' => $deleteB->id]);
+        $this->assertSoftDeleted('products', ['id' => $deleteA->id]);
+        $this->assertSoftDeleted('products', ['id' => $deleteB->id]);
         $this->assertDatabaseHas('products', ['id' => $keepSameGroup->id]);
         $this->assertDatabaseHas('products', ['id' => $keepSameSearch->id]);
     }

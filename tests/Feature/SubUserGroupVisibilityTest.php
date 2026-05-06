@@ -214,7 +214,11 @@ class SubUserGroupVisibilityTest extends TestCase
             ->assertOk()
             ->assertJson(['ok' => true]);
 
-        $this->assertDatabaseMissing('products', ['id' => $allowedProduct->id]);
+        $this->assertSoftDeleted('products', ['id' => $allowedProduct->id]);
+        $this->assertDatabaseHas('products', [
+            'id' => $allowedProduct->id,
+            'deleted_by_user_id' => $subUser->id,
+        ]);
 
         $this->actingAs($subUser)
             ->deleteJson(route('dashboard.products.destroy', $blockedProduct))
@@ -271,9 +275,56 @@ class SubUserGroupVisibilityTest extends TestCase
                 'deleted' => 1,
             ]);
 
-        $this->assertDatabaseMissing('products', ['id' => $allowedMatched->id]);
+        $this->assertSoftDeleted('products', ['id' => $allowedMatched->id]);
+        $this->assertDatabaseHas('products', [
+            'id' => $allowedMatched->id,
+            'deleted_by_user_id' => $subUser->id,
+        ]);
         $this->assertDatabaseHas('products', ['id' => $allowedNotMatched->id]);
         $this->assertDatabaseHas('products', ['id' => $blockedMatched->id]);
+    }
+
+    public function test_owner_can_view_deleted_product_history_and_restore_product(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $group = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Restore Group',
+        ]);
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$group->id],
+        ]);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $group->id,
+            'name' => 'Restore Product',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/restore-product',
+        ]);
+
+        $this->actingAs($subUser)
+            ->deleteJson(route('dashboard.products.destroy', $product))
+            ->assertOk();
+
+        $this->actingAs($owner)
+            ->get(route('account'))
+            ->assertOk()
+            ->assertSee('Lịch sử xoá sản phẩm')
+            ->assertSee('Restore Product')
+            ->assertSee($subUser->email)
+            ->assertSee('Khôi phục');
+
+        $this->actingAs($owner)
+            ->post(route('account.deleted-products.restore', $product->id))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('products', [
+            'id' => $product->id,
+            'deleted_at' => null,
+            'deleted_by_user_id' => null,
+        ]);
     }
 
     public function test_subuser_manual_product_group_dropdown_only_shows_allowed_groups(): void

@@ -48,6 +48,7 @@ class AccountController extends Controller
         $competitorSites = collect();
         $competitorGroups = collect();
         $deletedProducts = collect();
+        $deletedProductHistoryReady = Product::hasSoftDeleteColumn();
 
         if (! $user->isViewer()) {
             $subUsers = User::query()
@@ -74,7 +75,7 @@ class AccountController extends Controller
                     ->get(['id', 'user_id', 'name', 'created_at']);
             }
 
-            if (Product::hasSoftDeleteColumn()) {
+            if ($deletedProductHistoryReady) {
                 $deletedProducts = Product::onlyTrashed()
                     ->where('user_id', $ownerId)
                     ->with(['group:id,name', 'deletedBy:id,name,email'])
@@ -95,6 +96,7 @@ class AccountController extends Controller
             'competitorSites' => $competitorSites,
             'competitorGroups' => $competitorGroups,
             'deletedProducts' => $deletedProducts,
+            'deletedProductHistoryReady' => $deletedProductHistoryReady,
         ]);
     }
 
@@ -708,6 +710,20 @@ class AccountController extends Controller
             ->map(fn ($id): int => (int) $id)
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function deletedProductSelectColumns(): array
+    {
+        $columns = ['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'deleted_at'];
+
+        if (Product::hasDeletedByColumn()) {
+            $columns[] = 'deleted_by_user_id';
+        }
+
+        return $columns;
     }
 
     /**

@@ -419,7 +419,9 @@
                             <p class="card-sub">Sản phẩm bị xoá khỏi bảng Kết quả so sánh có thể khôi phục tại đây.</p>
                         </div>
                         <div class="card-body" style="padding:8px 16px 16px">
-                            @if(($deletedProducts ?? collect())->isNotEmpty())
+                            @if(! ($deletedProductHistoryReady ?? false))
+                                <div class="hint">Chưa bật lịch sử xoá trên database. Hãy chạy migration trên hosting để bắt đầu lưu lịch sử xoá và khôi phục sản phẩm.</div>
+                            @elseif(($deletedProducts ?? collect())->isNotEmpty())
                                 <div class="table-wrap" style="max-height:420px">
                                     <table class="table account-compact-table">
                                         <thead>

@@ -154,7 +154,7 @@ class AdminUserScrapeIntervalTest extends TestCase
 
         (new ScrapeProductPrices($product->id))->handle();
 
-        $this->assertDatabaseMissing('products', [
+        $this->assertSoftDeleted('products', [
             'id' => $product->id,
         ]);
         Carbon::setTestNow();
