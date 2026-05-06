@@ -74,12 +74,14 @@ class AccountController extends Controller
                     ->get(['id', 'user_id', 'name', 'created_at']);
             }
 
-            $deletedProducts = Product::onlyTrashed()
-                ->where('user_id', $ownerId)
-                ->with(['group:id,name', 'deletedBy:id,name,email'])
-                ->orderByDesc('deleted_at')
-                ->limit(100)
-                ->get(['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'deleted_by_user_id', 'deleted_at']);
+            if (Product::hasSoftDeleteColumn()) {
+                $deletedProducts = Product::onlyTrashed()
+                    ->where('user_id', $ownerId)
+                    ->with(['group:id,name', 'deletedBy:id,name,email'])
+                    ->orderByDesc('deleted_at')
+                    ->limit(100)
+                    ->get($this->deletedProductSelectColumns());
+            }
         }
 
         return view('account.index', [
@@ -271,6 +273,10 @@ class AccountController extends Controller
         $owner = $request->user();
         abort_if($owner->isViewer(), 403);
 
+        if (! Product::hasSoftDeleteColumn()) {
+            return back()->with('status', 'Chưa có bảng lịch sử xoá. Hãy chạy migration trên hosting.');
+        }
+
         $restorable = Product::onlyTrashed()
             ->where('user_id', $owner->effectiveUserId())
             ->whereKey((int) $product)
@@ -281,7 +287,9 @@ class AccountController extends Controller
         }
 
         $restorable->restore();
-        $restorable->forceFill(['deleted_by_user_id' => null])->save();
+        if (Product::hasDeletedByColumn()) {
+            $restorable->forceFill(['deleted_by_user_id' => null])->save();
+        }
 
         return back()->with('status', 'Đã khôi phục sản phẩm.');
     }

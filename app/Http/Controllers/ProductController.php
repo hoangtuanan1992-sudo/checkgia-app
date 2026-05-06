@@ -199,7 +199,9 @@ class ProductController extends Controller
         $count = (clone $query)->count();
         $deleted = 0;
         if ($count > 0) {
-            (clone $query)->update(['deleted_by_user_id' => $user->id]);
+            if (Product::hasDeletedByColumn()) {
+                (clone $query)->update(['deleted_by_user_id' => $user->id]);
+            }
             $deleted = $query->delete();
         }
 
@@ -310,6 +312,10 @@ class ProductController extends Controller
     private function markProductDeletedBy(Product $product, $user): void
     {
         if (! $user) {
+            return;
+        }
+
+        if (! Product::hasDeletedByColumn()) {
             return;
         }
 
