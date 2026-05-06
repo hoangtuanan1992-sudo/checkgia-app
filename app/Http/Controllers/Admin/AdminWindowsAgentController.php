@@ -4,17 +4,20 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Models\CompetitorSite;
 use App\Models\ScrapeAgent;
 use App\Models\ScrapeAgentJob;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class AdminWindowsAgentController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
         $migrated = Schema::hasTable('scrape_agents') && Schema::hasTable('scrape_agent_jobs');
         $keyState = $this->agentKeyState();
@@ -27,6 +30,8 @@ class AdminWindowsAgentController extends Controller
                 'activeJobs' => collect(),
                 'pendingJobs' => collect(),
                 'recentJobs' => collect(),
+                'recentTestJobs' => collect(),
+                'testJob' => null,
                 'domainStats' => collect(),
                 'onlineCutoff' => now()->subMinutes(2),
             ]);
@@ -123,6 +128,22 @@ class AdminWindowsAgentController extends Controller
             ->limit(100)
             ->get();
 
+        $recentTestJobs = ScrapeAgentJob::query()
+            ->where('type', 'test')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get();
+
+        $testJob = null;
+        $testJobUuid = trim((string) $request->query('test_job', ''));
+        if ($testJobUuid !== '') {
+            $testJob = ScrapeAgentJob::query()
+                ->where('type', 'test')
+                ->where('job_uuid', $testJobUuid)
+                ->first();
+        }
+
         $domainStats = ScrapeAgentJob::query()
             ->select('domain', 'status', DB::raw('count(*) as total'))
             ->whereNotNull('domain')
@@ -163,6 +184,8 @@ class AdminWindowsAgentController extends Controller
             'activeJobs' => $activeJobs,
             'pendingJobs' => $pendingJobs,
             'recentJobs' => $recentJobs,
+            'recentTestJobs' => $recentTestJobs,
+            'testJob' => $testJob,
             'domainStats' => $domainStats,
             'onlineCutoff' => $onlineCutoff,
         ]);
@@ -187,6 +210,46 @@ class AdminWindowsAgentController extends Controller
         return back()->with('status', 'Đã lưu key Windows Agent. Hãy chạy lại agent trên máy Windows.');
     }
 
+    public function storeTestJob(Request $request): RedirectResponse
+    {
+        if (! Schema::hasTable('scrape_agent_jobs')) {
+            return back()->withErrors(['test_url' => 'Chua co bang Windows Agent. Hay chay migration.']);
+        }
+
+        $data = $request->validate([
+            'test_url' => ['required', 'url', 'max:2048'],
+        ]);
+
+        $url = trim((string) $data['test_url']);
+        $uuid = (string) Str::uuid();
+        $job = ScrapeAgentJob::query()->create([
+            'job_uuid' => $uuid,
+            'target_key' => 'test:'.$uuid,
+            'type' => 'test',
+            'url' => $url,
+            'domain' => CompetitorSite::normalizedDomainFromUrl($url),
+            'status' => 'pending',
+            'priority' => 1,
+            'attempts' => 0,
+            'max_attempts' => 1,
+            'next_run_at' => now(),
+        ]);
+
+        return redirect()
+            ->route('admin.windows-agent.index', ['test_job' => $job->job_uuid])
+            ->with('status', 'Da tao job test Windows Agent. Cho Agent nhan va tra ket qua.');
+    }
+
+    public function testJobStatus(ScrapeAgentJob $scrapeAgentJob): JsonResponse
+    {
+        abort_unless($scrapeAgentJob->type === 'test', 404);
+
+        return response()->json([
+            'ok' => true,
+            'job' => $this->testJobPayload($scrapeAgentJob->fresh()),
+        ]);
+    }
+
     /**
      * @return array<string, int|float>
      */
@@ -201,6 +264,45 @@ class AdminWindowsAgentController extends Controller
             'jobs_done' => 0,
             'jobs_failed' => 0,
             'completion_percent' => 0.0,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function testJobPayload(?ScrapeAgentJob $job): array
+    {
+        if (! $job) {
+            return [];
+        }
+
+        $payload = is_array($job->result_payload) ? $job->result_payload : [];
+        $result = is_array($payload['result'] ?? null) ? $payload['result'] : [];
+        $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
+
+        return [
+            'id' => (int) $job->id,
+            'jobUuid' => (string) $job->job_uuid,
+            'status' => (string) $job->status,
+            'url' => (string) $job->url,
+            'domain' => (string) ($job->domain ?? ''),
+            'leasedByAgentId' => $job->leased_by_agent_id,
+            'completedByAgentId' => $job->completed_by_agent_id ?? null,
+            'attempts' => (int) $job->attempts,
+            'createdAt' => $job->created_at?->timezone('Asia/Ho_Chi_Minh')->format('d/m/Y H:i:s'),
+            'leasedAt' => $job->leased_at?->timezone('Asia/Ho_Chi_Minh')->format('d/m/Y H:i:s'),
+            'finishedAt' => $job->finished_at?->timezone('Asia/Ho_Chi_Minh')->format('d/m/Y H:i:s'),
+            'name' => $result['name'] ?? null,
+            'price' => $result['price'] ?? null,
+            'priceText' => $result['priceText'] ?? null,
+            'method' => $result['method'] ?? null,
+            'extractor' => $result['extractor'] ?? null,
+            'ruleSource' => $result['ruleSource'] ?? null,
+            'ruleTemplateId' => $result['ruleTemplateId'] ?? null,
+            'priceRaw' => $result['priceRaw'] ?? null,
+            'reason' => $result['reason'] ?? null,
+            'errorCode' => $error['code'] ?? $job->last_error_code,
+            'errorMessage' => $error['message'] ?? $job->last_error,
         ];
     }
 

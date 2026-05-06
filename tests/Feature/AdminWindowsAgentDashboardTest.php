@@ -94,4 +94,26 @@ class AdminWindowsAgentDashboardTest extends TestCase
 
         $this->assertSame('db-agent-secret-123456', AppSetting::current()?->windows_agent_api_key);
     }
+
+    public function test_admin_can_create_and_view_windows_agent_test_job(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.windows-agent.test-jobs.store'), [
+                'test_url' => 'https://www.mi.com/vn/product/poco-pad-x1/',
+            ])
+            ->assertRedirect();
+
+        $job = ScrapeAgentJob::query()->where('type', 'test')->firstOrFail();
+        $this->assertSame('mi.com', $job->domain);
+        $this->assertStringContainsString('test_job='.$job->job_uuid, $response->headers->get('Location'));
+
+        $this->actingAs($admin)
+            ->getJson(route('admin.windows-agent.test-jobs.status', $job))
+            ->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('job.status', 'pending')
+            ->assertJsonPath('job.domain', 'mi.com');
+    }
 }

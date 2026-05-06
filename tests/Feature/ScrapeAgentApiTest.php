@@ -8,6 +8,7 @@ use App\Models\CompetitorSite;
 use App\Models\CompetitorSiteScrapeXpath;
 use App\Models\CompetitorSiteTemplate;
 use App\Models\Product;
+use App\Models\ScrapeAgentJob;
 use App\Models\User;
 use App\Models\UserScrapeSetting;
 use App\Models\UserScrapeXpath;
@@ -321,6 +322,52 @@ class ScrapeAgentApiTest extends TestCase
             'product_id' => $product->id,
             'price' => 9900000,
         ]);
+    }
+
+    public function test_agent_result_for_test_job_only_records_payload(): void
+    {
+        config(['services.checkgia_agent.api_key' => 'agent-secret']);
+        $job = ScrapeAgentJob::query()->create([
+            'job_uuid' => 'test-job-1',
+            'target_key' => 'test:test-job-1',
+            'type' => 'test',
+            'url' => 'https://www.mi.com/vn/product/poco-pad-x1/',
+            'domain' => 'mi.com',
+            'status' => 'leased',
+            'leased_by_agent_id' => 'windows-pc-01',
+            'lease_token' => 'lease-token',
+            'leased_at' => now(),
+            'lease_expires_at' => now()->addMinutes(10),
+            'priority' => 1,
+            'attempts' => 1,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer agent-secret')
+            ->postJson('/api/scrape-agent/jobs/result', [
+                'agentId' => 'windows-pc-01',
+                'jobId' => $job->job_uuid,
+                'leaseToken' => 'lease-token',
+                'url' => $job->url,
+                'ok' => true,
+                'status' => 'success',
+                'result' => [
+                    'name' => 'POCO Pad X1',
+                    'price' => 8990000,
+                    'priceText' => '8.990.000d',
+                    'method' => 'http',
+                    'extractor' => 'api-json-rule',
+                    'ruleSource' => 'xpath-template',
+                    'ruleTemplateId' => 123,
+                    'priceRaw' => '8990000',
+                ],
+            ])
+            ->assertOk();
+
+        $fresh = $job->fresh();
+        $this->assertSame('done', $fresh->status);
+        $this->assertSame('POCO Pad X1', $fresh->result_payload['result']['name']);
+        $this->assertDatabaseCount('products', 0);
+        $this->assertDatabaseCount('competitor_prices', 0);
     }
 
     /**

@@ -86,7 +86,10 @@ class ScrapeAgentJobService
             $result = is_array($payload['result'] ?? null) ? $payload['result'] : [];
             $fetchedAt = $this->fetchedAt($result);
 
-            if ($job->competitor_id || ! empty($payload['competitorId'])) {
+            if ($job->type === 'test') {
+                // Test jobs are for admin verification only. Keep the evidence in result_payload
+                // and never update product or competitor data.
+            } elseif ($job->competitor_id || ! empty($payload['competitorId'])) {
                 $this->applyCompetitorResult($job, $payload, $result, $status, $fetchedAt);
             } else {
                 $this->applyProductResult($job, $payload, $result, $status, $fetchedAt);
@@ -341,6 +344,10 @@ class ScrapeAgentJobService
             return $competitor ? $this->competitorScrapeRules($competitor, (string) $job->url) : [];
         }
 
+        if ($job->type === 'test') {
+            return $this->templateOnlyScrapeRules((string) $job->url);
+        }
+
         return [];
     }
 
@@ -417,6 +424,28 @@ class ScrapeAgentJobService
         }
 
         return $rules;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function templateOnlyScrapeRules(string $url): array
+    {
+        $template = $this->approvedTemplateForUrl($url);
+        if (! $template) {
+            return [];
+        }
+
+        $rule = $this->rulePayload(
+            'xpath-template',
+            $this->templateXpaths($template, 'name', $template->name_xpath),
+            $this->templateXpaths($template, 'price', $template->price_xpath),
+            $template->price_regex,
+            (int) $template->id,
+            $this->templateAdvancedRule($template)
+        );
+
+        return $rule ? [$rule] : [];
     }
 
     private function approvedTemplateForUrl(string $url): ?CompetitorSiteTemplate

@@ -22,7 +22,34 @@
             'product' => 'Sản phẩm của bạn',
             'competitor' => 'Link đối thủ',
         ];
+        $typeLabel['test'] = 'Test Windows Agent';
         $completion = max(0, min(100, (float) ($stats['completion_percent'] ?? 0)));
+        $money = fn ($value) => is_numeric($value) ? number_format((int) $value, 0, ',', '.').'đ' : '-';
+        $testResult = function ($job): array {
+            if (! $job) {
+                return [];
+            }
+
+            $payload = is_array($job->result_payload) ? $job->result_payload : [];
+            $result = is_array($payload['result'] ?? null) ? $payload['result'] : [];
+            $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
+
+            return [
+                'status' => (string) $job->status,
+                'agent' => $job->completed_by_agent_id ?: $job->leased_by_agent_id ?: '-',
+                'name' => $result['name'] ?? '-',
+                'price' => $result['price'] ?? null,
+                'priceText' => $result['priceText'] ?? null,
+                'method' => $result['method'] ?? '-',
+                'extractor' => $result['extractor'] ?? '-',
+                'ruleSource' => $result['ruleSource'] ?? '-',
+                'ruleTemplateId' => $result['ruleTemplateId'] ?? '-',
+                'priceRaw' => $result['priceRaw'] ?? '-',
+                'reason' => $result['reason'] ?? '',
+                'error' => $error['message'] ?? $job->last_error ?? '',
+            ];
+        };
+        $activeTestResult = $testResult($testJob ?? null);
     @endphp
 
     <div style="width:100%;max-width:1500px">
@@ -90,6 +117,89 @@
                         <div class="hint" style="margin-top:6px">Hãy chạy migration trên hosting: <code>php artisan migrate --force</code></div>
                     </div>
                 @else
+                    <div id="agent-test" class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0;margin-bottom:14px">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Test Windows Agent</h2>
+                            <p class="card-sub">Nhập một link sản phẩm để Agent quét thử. Job test chỉ lưu kết quả kiểm tra, không cập nhật bảng sản phẩm hoặc đối thủ.</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            <form method="POST" action="{{ route('admin.windows-agent.test-jobs.store') }}" style="display:grid;grid-template-columns:minmax(260px,1fr) auto;gap:10px;align-items:flex-end">
+                                @csrf
+                                <div class="field" style="margin-top:0">
+                                    <label class="label" for="agent_test_url">Link sản phẩm cần test</label>
+                                    <input class="input" id="agent_test_url" name="test_url" type="url" value="{{ old('test_url', $testJob?->url) }}" placeholder="https://www.mi.com/vn/product/poco-pad-x1/" required>
+                                    @error('test_url')<div class="error">{{ $message }}</div>@enderror
+                                </div>
+                                <button class="btn" type="submit" style="height:44px">Test bằng Windows Agent</button>
+                            </form>
+
+                            @if($testJob)
+                                <div
+                                    id="agentTestResult"
+                                    data-status-url="{{ route('admin.windows-agent.test-jobs.status', $testJob) }}"
+                                    style="margin-top:14px;border:1px solid var(--border);border-radius:14px;padding:14px;background:#fff"
+                                >
+                                    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+                                        <div>
+                                            <div style="font-weight:900">Kết quả test #{{ $testJob->id }}</div>
+                                            <div class="hint" style="margin-top:4px">{{ $testJob->url }}</div>
+                                        </div>
+                                        <span id="agentTestStatus" class="agent-badge {{ $testJob->status === 'done' ? 'agent-badge-ok' : ($testJob->status === 'failed' ? 'agent-badge-danger' : 'agent-badge-muted') }}">
+                                            {{ $statusLabel[$testJob->status] ?? $testJob->status }}
+                                        </span>
+                                    </div>
+
+                                    <div class="agent-test-grid" style="margin-top:12px">
+                                        <div><span class="label">Máy xử lý</span><b id="agentTestAgent">{{ $activeTestResult['agent'] ?? '-' }}</b></div>
+                                        <div><span class="label">Tên lấy được</span><b id="agentTestName">{{ $activeTestResult['name'] ?? '-' }}</b></div>
+                                        <div><span class="label">Giá lấy được</span><b id="agentTestPrice">{{ $money($activeTestResult['price'] ?? null) }}</b></div>
+                                        <div><span class="label">Price text</span><b id="agentTestPriceText">{{ $activeTestResult['priceText'] ?? '-' }}</b></div>
+                                        <div><span class="label">Phương thức</span><b id="agentTestMethod">{{ $activeTestResult['method'] ?? '-' }}</b></div>
+                                        <div><span class="label">Extractor</span><b id="agentTestExtractor">{{ $activeTestResult['extractor'] ?? '-' }}</b></div>
+                                        <div><span class="label">Rule source</span><b id="agentTestRule">{{ $activeTestResult['ruleSource'] ?? '-' }}</b></div>
+                                        <div><span class="label">Template ID</span><b id="agentTestTemplate">{{ $activeTestResult['ruleTemplateId'] ?? '-' }}</b></div>
+                                    </div>
+
+                                    <div class="hint" style="margin-top:12px">
+                                        Raw giá: <b id="agentTestRaw">{{ $activeTestResult['priceRaw'] ?? '-' }}</b>
+                                    </div>
+                                    <div id="agentTestMessage" class="hint" style="margin-top:8px;color:#991b1b">
+                                        {{ $activeTestResult['error'] ?: ($activeTestResult['reason'] ?? '') }}
+                                    </div>
+                                </div>
+                            @endif
+
+                            @if($recentTestJobs->count())
+                                <div class="table-wrap" style="margin-top:14px;max-height:260px">
+                                    <table class="table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:80px">ID</th>
+                                                <th style="width:120px">Trạng thái</th>
+                                                <th style="min-width:260px">URL</th>
+                                                <th style="min-width:150px">Domain</th>
+                                                <th style="min-width:150px">Xong lúc</th>
+                                                <th style="width:90px">Xem</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($recentTestJobs as $tj)
+                                                <tr>
+                                                    <td>#{{ $tj->id }}</td>
+                                                    <td>{{ $statusLabel[$tj->status] ?? $tj->status }}</td>
+                                                    <td><a href="{{ $tj->url }}" target="_blank" rel="noopener">{{ $shortUrl($tj->url) }}</a></td>
+                                                    <td>{{ $tj->domain ?: '-' }}</td>
+                                                    <td>{{ $time($tj->finished_at) }}</td>
+                                                    <td><a class="btn btn-secondary" href="{{ route('admin.windows-agent.index', ['test_job' => $tj->job_uuid]) }}#agent-test">Xem</a></td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+
                     <div class="agent-metric-grid">
                         <div class="agent-metric">
                             <div class="label">Máy đang kết nối</div>
@@ -354,17 +464,71 @@
         .agent-badge-muted{background:#f3f4f6;color:#4b5563;border:1px solid var(--border)}
         .agent-badge-danger{background:rgba(220,53,69,.12);color:#991b1b;border:1px solid rgba(220,53,69,.22)}
         .agent-two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+        .agent-test-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+        .agent-test-grid>div{border:1px solid var(--border);border-radius:12px;padding:10px;background:#f9fafb;min-width:0}
+        .agent-test-grid b{display:block;margin-top:5px;overflow-wrap:anywhere}
         code{background:#f3f4f6;border:1px solid var(--border);border-radius:8px;padding:2px 6px}
         @media (max-width: 980px){
             .agent-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
             .agent-two-col{grid-template-columns:1fr}
+            .agent-test-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
         }
         @media (max-width: 640px){
             .agent-metric-grid{grid-template-columns:1fr}
+            .agent-test-grid{grid-template-columns:1fr}
         }
     </style>
 
     <script>
+        const testBox = document.getElementById('agentTestResult');
+        const formatVnd = (value) => {
+            const number = Number(value);
+            return Number.isFinite(number) ? `${new Intl.NumberFormat('vi-VN').format(number)}đ` : '-';
+        };
+        const setText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value || '-';
+        };
+        const renderTestJob = (job) => {
+            if (!job) return;
+            const statusEl = document.getElementById('agentTestStatus');
+            if (statusEl) {
+                statusEl.textContent = job.status === 'pending' ? 'Đang chờ'
+                    : job.status === 'leased' ? 'Đang quét'
+                    : job.status === 'done' ? 'Hoàn tất'
+                    : job.status === 'failed' ? 'Lỗi'
+                    : job.status;
+                statusEl.className = `agent-badge ${job.status === 'done' ? 'agent-badge-ok' : (job.status === 'failed' ? 'agent-badge-danger' : 'agent-badge-muted')}`;
+            }
+            setText('agentTestAgent', job.completedByAgentId || job.leasedByAgentId || '-');
+            setText('agentTestName', job.name || '-');
+            setText('agentTestPrice', formatVnd(job.price));
+            setText('agentTestPriceText', job.priceText || '-');
+            setText('agentTestMethod', job.method || '-');
+            setText('agentTestExtractor', job.extractor || '-');
+            setText('agentTestRule', job.ruleSource || '-');
+            setText('agentTestTemplate', job.ruleTemplateId ? String(job.ruleTemplateId) : '-');
+            setText('agentTestRaw', job.priceRaw || '-');
+            setText('agentTestMessage', job.errorMessage || job.reason || '');
+        };
+        if (testBox?.dataset.statusUrl) {
+            const poll = async () => {
+                try {
+                    const response = await fetch(testBox.dataset.statusUrl, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    const payload = await response.json();
+                    renderTestJob(payload.job);
+                    if (payload.job && !['done', 'failed'].includes(payload.job.status)) {
+                        setTimeout(poll, 3000);
+                    }
+                } catch (error) {
+                    setTimeout(poll, 5000);
+                }
+            };
+            poll();
+        }
+
         setTimeout(() => {
             if (!document.hidden) {
                 window.location.reload();
