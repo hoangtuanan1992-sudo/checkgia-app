@@ -987,11 +987,12 @@
                     <input class="input" id="excel_file" name="excel_file" type="file" accept=".xlsx,.xls,.csv" required>
                     @error('excel_file')<div class="error">{{ $message }}</div>@enderror
                 </div>
+                <div class="hint" id="excelImportStatus" style="display:none;margin-top:10px;font-weight:600;color:var(--accent)">Đang nhập, chờ trong chốc lát...</div>
                 <div class="actions" style="justify-content:space-between;align-items:center">
                     <a class="btn btn-secondary" href="{{ route('dashboard.import.template') }}">Tải file mẫu</a>
                     <span style="display:flex;gap:10px">
                         <button class="btn btn-secondary" type="button" id="excelImportCancel">Huỷ</button>
-                        <button class="btn" type="submit">Nhập Excel</button>
+                        <button class="btn" type="submit" id="excelImportSubmit">Nhập Excel</button>
                     </span>
                 </div>
             </form>
@@ -1969,6 +1970,9 @@
             const excelImportOpen = document.getElementById('excelImportOpen');
             const excelImportDialog = document.getElementById('excelImportDialog');
             const excelImportCancel = document.getElementById('excelImportCancel');
+            const excelImportForm = document.getElementById('excelImportForm');
+            const excelImportSubmit = document.getElementById('excelImportSubmit');
+            const excelImportStatus = document.getElementById('excelImportStatus');
             const filterReset = document.getElementById('filterReset');
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
@@ -2133,6 +2137,20 @@
             }
             if (excelImportCancel && excelImportDialog) {
                 excelImportCancel.addEventListener('click', () => excelImportDialog.close());
+            }
+            if (excelImportForm) {
+                excelImportForm.addEventListener('submit', () => {
+                    if (excelImportSubmit) {
+                        excelImportSubmit.disabled = true;
+                        excelImportSubmit.textContent = 'Đang nhập...';
+                    }
+                    if (excelImportCancel) {
+                        excelImportCancel.disabled = true;
+                    }
+                    if (excelImportStatus) {
+                        excelImportStatus.style.display = '';
+                    }
+                });
             }
             @if($errors->has('excel_file'))
                 if (excelImportDialog && typeof excelImportDialog.showModal === 'function') {
