@@ -449,7 +449,6 @@
                     <div class="actions" style="margin-top:0">
                         <a class="btn btn-secondary" id="exportAll" href="{{ route('dashboard.export.products') }}">Xuất Excel</a>
                         <a class="btn btn-secondary" id="exportGroup" href="{{ route('dashboard.export.products') }}">Xuất theo nhóm</a>
-                        <a class="btn btn-secondary" href="{{ route('dashboard.import.template') }}">File mẫu</a>
                         <button class="btn btn-secondary" type="button" id="excelImportOpen">Nhập Excel</button>
                         <form method="POST" action="{{ route('dashboard.scrape.now') }}" style="display:inline">
                             @csrf
