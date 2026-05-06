@@ -10,6 +10,7 @@ use App\Services\ConfiguredProductScraper;
 use App\Services\PriceScraper;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class CompetitorController extends Controller
 {
@@ -152,6 +153,12 @@ class CompetitorController extends Controller
         abort_unless($user, 403);
         if (! $user->isAdmin() && ((int) $product->user_id !== (int) $user->effectiveUserId() || (int) $competitorSite->user_id !== (int) $user->effectiveUserId())) {
             abort(404);
+        }
+
+        if (! Schema::hasColumn('competitors', 'note')) {
+            return back()
+                ->withInput()
+                ->withErrors(['note' => 'Database chưa có cột note. Hãy chạy migration trên hosting: php artisan migrate --force']);
         }
 
         $data = $request->validate([

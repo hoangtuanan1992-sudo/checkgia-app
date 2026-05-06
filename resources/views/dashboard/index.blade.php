@@ -283,23 +283,25 @@
                     @endif
 
                     <div class="field">
-                        <label class="label">Nhóm sản phẩm (tuỳ chọn)</label>
-                        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:end">
+                        <label class="label">Nhóm sản phẩm{{ auth()->user()->isViewer() ? '' : ' (tuỳ chọn)' }}</label>
+                        <div style="display:grid;grid-template-columns:{{ auth()->user()->isViewer() ? '1fr' : 'repeat(2,minmax(0,1fr))' }};gap:12px;align-items:end">
                             <div class="field" style="margin-top:0">
                                 <label class="label" for="product_group_id">Chọn nhóm</label>
-                                <select class="input" id="product_group_id" name="product_group_id">
-                                    <option value="">-- Chưa chọn --</option>
+                                <select class="input" id="product_group_id" name="product_group_id" @if(auth()->user()->isViewer()) required @endif>
+                                    <option value="">{{ auth()->user()->isViewer() ? '-- Chọn nhóm được cấp quyền --' : '-- Chưa chọn --' }}</option>
                                     @foreach($productGroups as $g)
                                         <option value="{{ $g->id }}" @selected((string) old('product_group_id') === (string) $g->id)>{{ $g->name }}</option>
                                     @endforeach
                                 </select>
                                 @error('product_group_id')<div class="error">{{ $message }}</div>@enderror
                             </div>
+                            @unless(auth()->user()->isViewer())
                             <div class="field" style="margin-top:0">
                                 <label class="label" for="product_group_name">Tạo nhóm mới</label>
                                 <input class="input" id="product_group_name" name="product_group_name" type="text" value="{{ old('product_group_name') }}" placeholder="VD: Laptop Gaming" autocomplete="off">
                                 @error('product_group_name')<div class="error">{{ $message }}</div>@enderror
                             </div>
+                            @endunless
                         </div>
                     </div>
 

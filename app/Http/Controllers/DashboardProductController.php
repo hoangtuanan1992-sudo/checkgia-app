@@ -25,11 +25,22 @@ class DashboardProductController extends Controller
             'competitor_urls.*' => ['nullable', 'url', 'max:2048'],
         ]);
 
-        $userId = $request->user()->effectiveUserId();
+        $authUser = $request->user();
+        $userId = $authUser->effectiveUserId();
         if (ProductLimit::wouldExceed($userId)) {
             return back()
                 ->withInput()
                 ->withErrors(['product_url' => ProductLimit::message($userId)]);
+        }
+
+        $groupId = $this->resolveProductGroupId(
+            $authUser,
+            $userId,
+            $validated['product_group_id'] ?? null,
+            $validated['product_group_name'] ?? null
+        );
+        if ($groupId instanceof RedirectResponse) {
+            return $groupId;
         }
 
         $configuredScraper = new ConfiguredProductScraper(new PriceScraper);
@@ -41,23 +52,6 @@ class DashboardProductController extends Controller
             return back()
                 ->withInput()
                 ->withErrors(['product_url' => 'Không lấy được tên/giá. Hãy kiểm tra Thư viện XPath theo domain hoặc XPath riêng của shop.']);
-        }
-
-        $groupId = $validated['product_group_id'] ?? null;
-        if ($groupId) {
-            $exists = ProductGroup::query()->where('user_id', $userId)->where('id', $groupId)->exists();
-            if (! $exists) {
-                $groupId = null;
-            }
-        }
-
-        $groupName = trim((string) ($validated['product_group_name'] ?? ''));
-        if (! $groupId && $groupName !== '') {
-            $group = ProductGroup::firstOrCreate([
-                'user_id' => $userId,
-                'name' => $groupName,
-            ]);
-            $groupId = $group->id;
         }
 
         $product = Product::create([
@@ -76,11 +70,23 @@ class DashboardProductController extends Controller
             ]);
         }
 
-        $sites = CompetitorSite::query()
+        $sitesQuery = CompetitorSite::query()
             ->where('user_id', $userId)
             ->with(['scrapeXpaths' => function ($q) {
                 $q->orderBy('type')->orderBy('position');
             }])
+            ->orderBy('position')
+            ->orderBy('name');
+        if ($authUser->isViewer()) {
+            $allowedCompetitorSiteIds = $this->visibleCompetitorSiteIds($authUser, $userId);
+            if ($allowedCompetitorSiteIds === []) {
+                $sitesQuery->whereRaw('1 = 0');
+            } else {
+                $sitesQuery->whereIn('id', $allowedCompetitorSiteIds);
+            }
+        }
+
+        $sites = $sitesQuery
             ->get(['id', 'name', 'domain', 'price_xpath', 'price_regex'])
             ->keyBy('id');
 
@@ -126,5 +132,75 @@ class DashboardProductController extends Controller
         }
 
         return redirect()->route('dashboard')->with('status', 'Đã thêm sản phẩm');
+    }
+
+    private function resolveProductGroupId($authUser, int $userId, mixed $groupId, mixed $groupName): int|RedirectResponse|null
+    {
+        if ($authUser->isViewer()) {
+            if (empty($groupId)) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['product_group_id' => 'Tài khoản con phải chọn nhóm sản phẩm được cấp quyền trước khi thêm sản phẩm.']);
+            }
+
+            $allowedProductGroupIds = $authUser->visibleProductGroupIds();
+            if ($allowedProductGroupIds === []) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['product_group_id' => 'Tài khoản con chưa được cấp nhóm sản phẩm để thêm sản phẩm.']);
+            }
+
+            $resolved = ProductGroup::query()
+                ->where('user_id', $userId)
+                ->whereIn('id', $allowedProductGroupIds)
+                ->whereKey((int) $groupId)
+                ->value('id');
+
+            if (! $resolved) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['product_group_id' => 'Nhóm sản phẩm không hợp lệ hoặc bạn không được cấp quyền.']);
+            }
+
+            return (int) $resolved;
+        }
+
+        $resolvedGroupId = $groupId ? (int) $groupId : null;
+        if ($resolvedGroupId) {
+            $exists = ProductGroup::query()->where('user_id', $userId)->where('id', $resolvedGroupId)->exists();
+            if (! $exists) {
+                $resolvedGroupId = null;
+            }
+        }
+
+        $name = trim((string) ($groupName ?? ''));
+        if (! $resolvedGroupId && $name !== '') {
+            $group = ProductGroup::firstOrCreate([
+                'user_id' => $userId,
+                'name' => $name,
+            ]);
+            $resolvedGroupId = (int) $group->id;
+        }
+
+        return $resolvedGroupId;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function visibleCompetitorSiteIds($authUser, int $userId): array
+    {
+        $groupIds = $authUser->visibleCompetitorSiteGroupIds();
+        if ($groupIds === []) {
+            return [];
+        }
+
+        return CompetitorSite::query()
+            ->where('user_id', $userId)
+            ->whereHas('groups', fn ($q) => $q->whereIn('competitor_site_groups.id', $groupIds))
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values()
+            ->all();
     }
 }

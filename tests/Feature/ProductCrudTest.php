@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Models\CompetitorSiteTemplate;
+use App\Models\ProductGroup;
 use App\Models\UserScrapeSetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -66,6 +67,75 @@ class ProductCrudTest extends TestCase
             'name' => 'Template Product',
             'price' => 12340000,
             'product_url' => $url,
+        ]);
+    }
+
+    public function test_subuser_can_add_manual_product_link_to_allowed_product_group(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $group = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Manual Group',
+        ]);
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$group->id],
+        ]);
+
+        UserScrapeSetting::query()->create([
+            'user_id' => $owner->id,
+            'own_name_xpath' => '//h1',
+            'own_price_xpath' => '//*[@id="price"]',
+        ]);
+
+        Http::fake([
+            'https://example.com/subuser-product' => Http::response('<html><body><h1>Subuser Product</h1><div id="price">1.230.000d</div></body></html>', 200),
+        ]);
+
+        $this->actingAs($subUser)
+            ->post(route('dashboard.products.store'), [
+                'product_url' => 'https://example.com/subuser-product',
+                'product_group_id' => $group->id,
+            ])
+            ->assertRedirect(route('dashboard'));
+
+        $this->assertDatabaseHas('products', [
+            'user_id' => $owner->id,
+            'product_group_id' => $group->id,
+            'name' => 'Subuser Product',
+            'price' => 1230000,
+            'product_url' => 'https://example.com/subuser-product',
+        ]);
+    }
+
+    public function test_subuser_must_choose_allowed_product_group_when_adding_manual_product(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $group = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Manual Group',
+        ]);
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$group->id],
+        ]);
+
+        Http::fake();
+
+        $this->actingAs($subUser)
+            ->from(route('dashboard'))
+            ->post(route('dashboard.products.store'), [
+                'product_url' => 'https://example.com/subuser-product-without-group',
+            ])
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHasErrors('product_group_id');
+
+        Http::assertNothingSent();
+        $this->assertDatabaseMissing('products', [
+            'user_id' => $owner->id,
+            'product_url' => 'https://example.com/subuser-product-without-group',
         ]);
     }
 

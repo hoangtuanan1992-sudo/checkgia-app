@@ -103,8 +103,9 @@ Route::middleware('auth')->group(function () {
         Route::post('/xpath-users/{user}/promote-site/{competitorSite}', [AdminSettingController::class, 'promoteUserSiteToTemplate'])->name('xpath-users.promote-site');
     });
 
+    Route::post('/dashboard/products', [DashboardProductController::class, 'store'])->name('dashboard.products.store');
+
     Route::middleware('owner')->group(function () {
-        Route::post('/dashboard/products', [DashboardProductController::class, 'store'])->name('dashboard.products.store');
         Route::delete('/dashboard/products/bulk-delete', [ProductController::class, 'destroyFilteredFromDashboard'])->name('dashboard.products.bulk-destroy');
         Route::post('/dashboard/products/assign-group/{productGroup}', [ProductController::class, 'assignFilteredGroupFromDashboard'])->name('dashboard.products.assign-group');
         Route::put('/dashboard/products/{product}/url', [ProductController::class, 'updateUrl'])->name('dashboard.products.url.update');
