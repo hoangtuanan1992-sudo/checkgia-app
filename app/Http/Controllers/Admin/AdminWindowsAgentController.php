@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\CompetitorSite;
 use App\Models\ScrapeAgent;
 use App\Models\ScrapeAgentJob;
+use App\Services\ScrapeAgentJobService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -106,6 +107,7 @@ class AdminWindowsAgentController extends Controller
         $pendingJobs = ScrapeAgentJob::query()
             ->with([
                 'product:id,name,user_id',
+                'product.user:id,name,email',
                 'competitor:id,name,product_id,competitor_site_id',
                 'competitorSite:id,name,domain',
             ])
@@ -238,6 +240,24 @@ class AdminWindowsAgentController extends Controller
         return redirect()
             ->route('admin.windows-agent.index', ['test_job' => $job->job_uuid])
             ->with('status', 'Da tao job test Windows Agent. Cho Agent nhan va tra ket qua.');
+    }
+
+    public function rebuildQueue(Request $request, ScrapeAgentJobService $jobs): RedirectResponse
+    {
+        if (! Schema::hasTable('scrape_agent_jobs')) {
+            return back()->withErrors(['queue' => 'Chưa có bảng Windows Agent. Hãy chạy migration trên hosting.']);
+        }
+
+        $data = $request->validate([
+            'target_queue_size' => ['nullable', 'integer', 'min:20', 'max:5000'],
+        ]);
+
+        $result = $jobs->rebuildPendingQueue((int) ($data['target_queue_size'] ?? 1000));
+
+        return back()->with(
+            'status',
+            'Đã xóa '.$result['deleted'].' lệnh chờ Windows Agent, '.$result['deleted_hosting'].' lệnh chờ hosting và tạo lại '.$result['created'].' lệnh Windows Agent theo mức ưu tiên shop. Job đang quét không bị ảnh hưởng; hosting sẽ tự tính lại ở lượt lịch kế tiếp.'
+        );
     }
 
     public function testJobStatus(ScrapeAgentJob $scrapeAgentJob): JsonResponse

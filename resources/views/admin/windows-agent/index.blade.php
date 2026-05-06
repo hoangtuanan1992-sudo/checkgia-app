@@ -232,6 +232,31 @@
                         </div>
                     </div>
 
+                    <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:14px">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Xếp lại lệnh quét chờ</h2>
+                            <p class="card-sub">Xóa các lệnh đang chờ của sản phẩm/link đối thủ rồi tạo lại hàng chờ Windows Agent theo mức ưu tiên cập nhật của từng shop.</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            <form
+                                method="POST"
+                                action="{{ route('admin.windows-agent.rebuild-queue') }}"
+                                onsubmit="return confirm('Bạn chắc chắn muốn xóa toàn bộ lệnh quét đang chờ và tính lại hàng chờ theo ưu tiên shop? Job đang quét sẽ không bị xóa.');"
+                                style="display:grid;grid-template-columns:minmax(220px,280px) auto;gap:10px;align-items:flex-end"
+                            >
+                                @csrf
+                                <div class="field" style="margin-top:0">
+                                    <label class="label" for="target_queue_size">Số lệnh tạo lại tối đa</label>
+                                    <input class="input" id="target_queue_size" name="target_queue_size" type="number" min="20" max="5000" step="1" value="{{ old('target_queue_size', 1000) }}">
+                                    @error('target_queue_size')<div class="error">{{ $message }}</div>@enderror
+                                    <div class="hint">Mặc định 1.000. Hệ thống sẽ ưu tiên shop mức Rất cao, Cao, Bình thường rồi Thấp.</div>
+                                </div>
+                                <button class="btn" type="submit" style="height:44px;background:#dc2626">Xóa và tính lại hàng chờ</button>
+                            </form>
+                            <div class="hint" style="margin-top:10px">Không xóa job test, không hủy job đang được Windows Agent quét. Lệnh chờ hosting loại ScrapeProductPrices cũng được xóa và sẽ tự tính lại ở lượt lịch kế tiếp.</div>
+                        </div>
+                    </div>
+
                     <section style="margin-top:16px">
                         <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-end">
                             <div>
@@ -338,6 +363,7 @@
                                         <tr>
                                             <th style="width:80px">ID</th>
                                             <th style="width:120px">Loại</th>
+                                            <th style="min-width:180px">Shop</th>
                                             <th style="min-width:240px">Sản phẩm</th>
                                             <th style="min-width:160px">Domain</th>
                                             <th style="width:90px">Ưu tiên</th>
@@ -349,6 +375,12 @@
                                             <tr>
                                                 <td>#{{ $job->id }}</td>
                                                 <td>{{ $typeLabel[$job->type] ?? $job->type }}</td>
+                                                <td>
+                                                    {{ $job->product?->user?->name ?: '-' }}
+                                                    @if($job->product?->user?->email)
+                                                        <div class="hint" style="margin-top:4px">{{ $job->product->user->email }}</div>
+                                                    @endif
+                                                </td>
                                                 <td>{{ $job->product?->name ?: '-' }}</td>
                                                 <td>{{ $job->domain ?: '-' }}</td>
                                                 <td>{{ $fmt($job->priority) }}</td>
@@ -356,7 +388,7 @@
                                             </tr>
                                         @empty
                                             <tr>
-                                                <td colspan="6" style="text-align:center;color:var(--muted)">Không còn job đang chờ.</td>
+                                                <td colspan="7" style="text-align:center;color:var(--muted)">Không còn job đang chờ.</td>
                                             </tr>
                                         @endforelse
                                     </tbody>

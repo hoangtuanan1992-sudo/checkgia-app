@@ -135,17 +135,53 @@ class ScrapeAgentJobService
             ]);
     }
 
-    private function refreshDueJobs(int $targetQueueSize): void
+    /**
+     * @return array{deleted:int, deleted_hosting:int, created:int, target:int}
+     */
+    public function rebuildPendingQueue(int $targetQueueSize = 1000): array
+    {
+        $targetQueueSize = max(20, min(5000, $targetQueueSize));
+        $this->expireLeases();
+
+        $deletedHosting = $this->deletePendingHostingScrapeJobs();
+
+        $deleted = ScrapeAgentJob::query()
+            ->where('status', 'pending')
+            ->whereIn('type', ['product', 'competitor'])
+            ->delete();
+
+        return [
+            'deleted' => (int) $deleted,
+            'deleted_hosting' => $deletedHosting,
+            'created' => $this->refreshDueJobs($targetQueueSize, false),
+            'target' => $targetQueueSize,
+        ];
+    }
+
+    private function deletePendingHostingScrapeJobs(): int
+    {
+        if (! Schema::hasTable('jobs')) {
+            return 0;
+        }
+
+        return (int) DB::table('jobs')
+            ->whereNull('reserved_at')
+            ->where('payload', 'like', '%ScrapeProductPrices%')
+            ->delete();
+    }
+
+    private function refreshDueJobs(int $targetQueueSize, bool $respectReadyCount = true): int
     {
         $ready = ScrapeAgentJob::query()
             ->where('status', 'pending')
+            ->whereIn('type', ['product', 'competitor'])
             ->where(function ($q) {
                 $q->whereNull('next_run_at')->orWhere('next_run_at', '<=', now());
             })
             ->count();
 
-        if ($ready >= $targetQueueSize) {
-            return;
+        if ($respectReadyCount && $ready >= $targetQueueSize) {
+            return 0;
         }
 
         $created = 0;
@@ -225,6 +261,8 @@ class ScrapeAgentJobService
                 }
             }
         }
+
+        return $created;
     }
 
     private function ensureProductJob(Product $product, int $scrapePriority): bool
