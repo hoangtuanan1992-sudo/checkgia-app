@@ -233,6 +233,14 @@ class AdminSettingController extends Controller
             'name_xpath' => ['nullable', 'string', 'max:10000'],
             'price_xpath' => ['nullable', 'string', 'max:10000'],
             'price_regex' => ['nullable', 'string', 'max:10000'],
+            'use_browser' => ['nullable', 'boolean'],
+            'name_css' => ['nullable', 'string', 'max:10000'],
+            'price_css' => ['nullable', 'string', 'max:10000'],
+            'price_attribute' => ['nullable', 'string', 'max:255'],
+            'api_url_template' => ['nullable', 'string', 'max:10000'],
+            'api_name_path' => ['nullable', 'string', 'max:255'],
+            'api_price_path' => ['nullable', 'string', 'max:255'],
+            'api_headers' => ['nullable', 'string', 'max:20000'],
             'name_fallbacks' => ['nullable', 'string', 'max:50000'],
             'price_fallbacks' => ['nullable', 'string', 'max:50000'],
             'is_approved' => ['nullable', 'boolean'],
@@ -245,13 +253,35 @@ class AdminSettingController extends Controller
 
         $nameFallbacks = $this->splitXPathLines($data['name_fallbacks'] ?? '');
         $priceFallbacks = $this->splitXPathLines($data['price_fallbacks'] ?? '');
+        try {
+            $apiHeaders = $this->parseApiHeaders($data['api_headers'] ?? '');
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['api_headers' => $e->getMessage()])->withInput();
+        }
 
-        DB::transaction(function () use ($data, $normalized, $nameFallbacks, $priceFallbacks) {
+        DB::transaction(function () use ($data, $normalized, $nameFallbacks, $priceFallbacks, $apiHeaders) {
             $template = CompetitorSiteTemplate::query()->firstOrNew(['domain' => $normalized]);
             $template->name = trim((string) ($data['name'] ?? '')) ?: null;
             $template->name_xpath = trim((string) ($data['name_xpath'] ?? '')) ?: null;
             $template->price_xpath = trim((string) ($data['price_xpath'] ?? '')) ?: null;
             $template->price_regex = trim((string) ($data['price_regex'] ?? '')) ?: null;
+
+            $table = $template->getTable();
+            $advanced = [
+                'use_browser' => (bool) ($data['use_browser'] ?? false),
+                'name_css' => trim((string) ($data['name_css'] ?? '')) ?: null,
+                'price_css' => trim((string) ($data['price_css'] ?? '')) ?: null,
+                'price_attribute' => trim((string) ($data['price_attribute'] ?? '')) ?: null,
+                'api_url_template' => trim((string) ($data['api_url_template'] ?? '')) ?: null,
+                'api_name_path' => trim((string) ($data['api_name_path'] ?? '')) ?: null,
+                'api_price_path' => trim((string) ($data['api_price_path'] ?? '')) ?: null,
+                'api_headers' => $apiHeaders,
+            ];
+            foreach ($advanced as $column => $value) {
+                if (Schema::hasColumn($table, $column)) {
+                    $template->{$column} = $value;
+                }
+            }
 
             $approved = (bool) ($data['is_approved'] ?? false);
             if ($approved && ! $template->is_approved) {
@@ -593,6 +623,55 @@ class AdminSettingController extends Controller
             fn ($line) => trim((string) $line),
             preg_split('/\R+/', (string) $value, -1, PREG_SPLIT_NO_EMPTY) ?: []
         )));
+    }
+
+    /**
+     * @return array<string, string>|null
+     */
+    private function parseApiHeaders(mixed $value): ?array
+    {
+        $raw = trim((string) $value);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (str_starts_with($raw, '{')) {
+            $decoded = json_decode($raw, true);
+            if (! is_array($decoded)) {
+                throw new \InvalidArgumentException('API headers phai la JSON object hoac moi dong dang Header: value.');
+            }
+
+            $headers = [];
+            foreach ($decoded as $key => $headerValue) {
+                $key = trim((string) $key);
+                $headerValue = trim((string) $headerValue);
+                if ($key !== '' && $headerValue !== '') {
+                    $headers[mb_substr($key, 0, 120)] = mb_substr($headerValue, 0, 1000);
+                }
+            }
+
+            return $headers ?: null;
+        }
+
+        $headers = [];
+        foreach (preg_split('/\R+/', $raw, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $line) {
+            $line = trim((string) $line);
+            if ($line === '') {
+                continue;
+            }
+
+            $separator = str_contains($line, ':') ? ':' : (str_contains($line, '=') ? '=' : null);
+            if (! $separator) {
+                throw new \InvalidArgumentException('Moi header API can co dang Header: value hoac Header=value.');
+            }
+
+            [$key, $headerValue] = array_map('trim', explode($separator, $line, 2));
+            if ($key !== '' && $headerValue !== '') {
+                $headers[mb_substr($key, 0, 120)] = mb_substr($headerValue, 0, 1000);
+            }
+        }
+
+        return $headers ?: null;
     }
 
     private function fetchAiProviderModels(string $provider, string $apiKey): array

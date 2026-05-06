@@ -316,6 +316,56 @@
                                             </div>
                                         </div>
 
+                                        <div class="card" style="max-width:none;border-radius:12px;box-shadow:none;margin-top:12px;border:1px solid var(--border)">
+                                            <div class="card-header" style="padding:12px 12px 4px">
+                                                <h4 class="card-title" style="font-size:15px;margin:0">Rule nâng cao cho Windows Agent</h4>
+                                                <p class="card-sub" style="margin-top:4px">Dùng khi site cần render JS, CSS selector, giá trong attribute, hoặc API JSON.</p>
+                                            </div>
+                                            <div class="card-body" style="padding:8px 12px 12px">
+                                                <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                                                    <input type="checkbox" name="use_browser" value="1">
+                                                    <span class="label" style="margin:0">Bật browser render</span>
+                                                </label>
+
+                                                <div style="display:grid;grid-template-columns:1fr 1fr 180px;gap:12px">
+                                                    <div class="field" style="margin-top:0">
+                                                        <label class="label" for="tpl_name_css">CSS tên</label>
+                                                        <textarea class="input" id="tpl_name_css" name="name_css" rows="2" placeholder="h1.product-title"></textarea>
+                                                    </div>
+                                                    <div class="field" style="margin-top:0">
+                                                        <label class="label" for="tpl_price_css">CSS giá</label>
+                                                        <textarea class="input" id="tpl_price_css" name="price_css" rows="2" placeholder=".price-current"></textarea>
+                                                    </div>
+                                                    <div class="field" style="margin-top:0">
+                                                        <label class="label" for="tpl_price_attribute">Attribute giá</label>
+                                                        <input class="input" id="tpl_price_attribute" name="price_attribute" type="text" placeholder="data-price">
+                                                    </div>
+                                                </div>
+
+                                                <div class="field" style="margin-top:12px">
+                                                    <label class="label" for="tpl_api_url_template">API URL template</label>
+                                                    <input class="input" id="tpl_api_url_template" name="api_url_template" type="text" placeholder="https://go.buy.mi.com/vn/v2/item/productinfo?tag={slug}&is_bundle=undefined">
+                                                    <div class="hint">Biến hỗ trợ: {slug}, {path}, {domain}, {rawUrl}, {url}</div>
+                                                </div>
+
+                                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                                    <div class="field" style="margin-top:0">
+                                                        <label class="label" for="tpl_api_name_path">JSON path tên</label>
+                                                        <input class="input" id="tpl_api_name_path" name="api_name_path" type="text" placeholder="data.name">
+                                                    </div>
+                                                    <div class="field" style="margin-top:0">
+                                                        <label class="label" for="tpl_api_price_path">JSON path giá</label>
+                                                        <input class="input" id="tpl_api_price_path" name="api_price_path" type="text" placeholder="data.item_min_price">
+                                                    </div>
+                                                </div>
+
+                                                <div class="field" style="margin-top:12px">
+                                                    <label class="label" for="tpl_api_headers">API headers</label>
+                                                    <textarea class="input" id="tpl_api_headers" name="api_headers" rows="3" placeholder="Accept: application/json&#10;User-Agent: Mozilla/5.0"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
                                             <div class="field" style="margin-top:0">
                                                 <label class="label" for="tpl_name_xpath">XPath tên (primary)</label>
@@ -370,6 +420,7 @@
                                 @forelse($templates as $t)
                                     @php($nameFallbacksText = $t->scrapeXpaths->where('type', 'name')->sortBy('position')->pluck('xpath')->implode("\n"))
                                     @php($priceFallbacksText = $t->scrapeXpaths->where('type', 'price')->sortBy('position')->pluck('xpath')->implode("\n"))
+                                    @php($apiHeadersText = is_array($t->api_headers ?? null) ? collect($t->api_headers)->map(fn($v, $k) => $k.': '.$v)->implode("\n") : (string) ($t->api_headers ?? ''))
                                     <details class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0">
                                         <summary class="tpl-summary" style="padding:14px;cursor:pointer">
                                             <h3 class="card-title" style="font-size:16px;margin:0">{{ $t->domain }}</h3>
@@ -414,6 +465,56 @@
                                                         <textarea class="input" name="price_regex" rows="2" style="min-height:44px">{{ $t->price_regex }}</textarea>
                                                     </div>
                                                     <div></div>
+                                                </div>
+
+                                                <div class="card" style="max-width:none;border-radius:12px;box-shadow:none;margin-top:12px;border:1px solid var(--border)">
+                                                    <div class="card-header" style="padding:12px 12px 4px">
+                                                        <h4 class="card-title" style="font-size:15px;margin:0">Rule nâng cao cho Windows Agent</h4>
+                                                        <p class="card-sub" style="margin-top:4px">Dùng khi site cần render JS, CSS selector, giá trong attribute, hoặc API JSON.</p>
+                                                    </div>
+                                                    <div class="card-body" style="padding:8px 12px 12px">
+                                                        <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                                                            <input type="checkbox" name="use_browser" value="1" @checked($t->use_browser ?? false)>
+                                                            <span class="label" style="margin:0">Bật browser render</span>
+                                                        </label>
+
+                                                        <div style="display:grid;grid-template-columns:1fr 1fr 180px;gap:12px">
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label">CSS tên</label>
+                                                                <textarea class="input" name="name_css" rows="2">{{ $t->name_css ?? '' }}</textarea>
+                                                            </div>
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label">CSS giá</label>
+                                                                <textarea class="input" name="price_css" rows="2">{{ $t->price_css ?? '' }}</textarea>
+                                                            </div>
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label">Attribute giá</label>
+                                                                <input class="input" name="price_attribute" type="text" value="{{ $t->price_attribute ?? '' }}" placeholder="data-price">
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="field" style="margin-top:12px">
+                                                            <label class="label">API URL template</label>
+                                                            <input class="input" name="api_url_template" type="text" value="{{ $t->api_url_template ?? '' }}" placeholder="https://go.buy.mi.com/vn/v2/item/productinfo?tag={slug}&is_bundle=undefined">
+                                                            <div class="hint">Biến hỗ trợ: {slug}, {path}, {domain}, {rawUrl}, {url}</div>
+                                                        </div>
+
+                                                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label">JSON path tên</label>
+                                                                <input class="input" name="api_name_path" type="text" value="{{ $t->api_name_path ?? '' }}" placeholder="data.name">
+                                                            </div>
+                                                            <div class="field" style="margin-top:0">
+                                                                <label class="label">JSON path giá</label>
+                                                                <input class="input" name="api_price_path" type="text" value="{{ $t->api_price_path ?? '' }}" placeholder="data.item_min_price">
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="field" style="margin-top:12px">
+                                                            <label class="label">API headers</label>
+                                                            <textarea class="input" name="api_headers" rows="3" placeholder="Accept: application/json&#10;User-Agent: Mozilla/5.0">{{ $apiHeadersText }}</textarea>
+                                                        </div>
+                                                    </div>
                                                 </div>
 
                                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">

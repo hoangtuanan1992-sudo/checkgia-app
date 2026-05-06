@@ -5,8 +5,12 @@ namespace Tests\Feature;
 use App\Models\AppSetting;
 use App\Models\Competitor;
 use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteScrapeXpath;
+use App\Models\CompetitorSiteTemplate;
 use App\Models\Product;
 use App\Models\User;
+use App\Models\UserScrapeSetting;
+use App\Models\UserScrapeXpath;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -105,6 +109,110 @@ class ScrapeAgentApiTest extends TestCase
         $this->assertNotEmpty($jobs[0]['leaseToken']);
 
         $this->assertDatabaseCount('scrape_agent_jobs', 2);
+    }
+
+    public function test_lease_job_includes_scrape_rules_from_hosting_xpath_settings(): void
+    {
+        config(['services.checkgia_agent.api_key' => 'agent-secret']);
+        [$product, $competitor] = $this->makeProductWithCompetitor();
+        $site = $competitor->competitorSite()->firstOrFail();
+
+        UserScrapeSetting::query()->create([
+            'user_id' => $product->user_id,
+            'own_name_xpath' => '//h1',
+            'own_price_xpath' => '//*[@id="own-price"]',
+            'price_regex' => '/([0-9\\.]+)d/i',
+        ]);
+        UserScrapeXpath::query()->create([
+            'user_id' => $product->user_id,
+            'type' => 'price',
+            'position' => 1,
+            'xpath' => '//*[@data-own-price]',
+        ]);
+
+        $site->update([
+            'name_xpath' => '//h1',
+            'price_xpath' => '//*[@class="competitor-price"]',
+            'price_regex' => '/([0-9\\.]+)d/i',
+        ]);
+        CompetitorSiteScrapeXpath::query()->create([
+            'competitor_site_id' => $site->id,
+            'type' => 'price',
+            'position' => 1,
+            'xpath' => '//*[@data-price]',
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer agent-secret')
+            ->postJson('/api/scrape-agent/jobs/lease', [
+                'agentId' => 'windows-pc-01',
+                'limit' => 5,
+                'capabilities' => [
+                    'http' => true,
+                    'browser' => true,
+                    'javascript' => true,
+                    'variants' => true,
+                ],
+            ])
+            ->assertOk();
+
+        $jobs = collect($response->json('jobs'));
+        $productJob = $jobs->firstWhere('type', 'product');
+        $competitorJob = $jobs->firstWhere('type', 'competitor');
+
+        $this->assertSame('user-xpath', $productJob['scrapeRules'][0]['source']);
+        $this->assertSame(['//h1'], $productJob['scrapeRules'][0]['nameXpaths']);
+        $this->assertSame(['//*[@id="own-price"]', '//*[@data-own-price]'], $productJob['scrapeRules'][0]['priceXpaths']);
+        $this->assertSame('site-xpath', $competitorJob['scrapeRules'][0]['source']);
+        $this->assertSame(['//*[@class="competitor-price"]', '//*[@data-price]'], $competitorJob['scrapeRules'][0]['priceXpaths']);
+    }
+
+    public function test_lease_job_includes_advanced_domain_rules_for_windows_agent(): void
+    {
+        config(['services.checkgia_agent.api_key' => 'agent-secret']);
+        [, $competitor] = $this->makeProductWithCompetitor();
+
+        CompetitorSiteTemplate::query()->create([
+            'domain' => 'example.com',
+            'name' => 'Competitor Example',
+            'is_approved' => true,
+            'approved_at' => now(),
+            'use_browser' => true,
+            'name_css' => "h1.product-title\n.meta-title",
+            'price_css' => '.current-price',
+            'price_attribute' => 'data-price',
+            'api_url_template' => 'https://api.com/product?slug={slug}',
+            'api_name_path' => 'data.name',
+            'api_price_path' => 'data.item_min_price',
+            'api_headers' => [
+                'Accept' => 'application/json',
+            ],
+        ]);
+
+        $response = $this->withHeader('Authorization', 'Bearer agent-secret')
+            ->postJson('/api/scrape-agent/jobs/lease', [
+                'agentId' => 'windows-pc-01',
+                'limit' => 5,
+                'capabilities' => [
+                    'http' => true,
+                    'browser' => true,
+                    'javascript' => true,
+                    'variants' => true,
+                ],
+            ])
+            ->assertOk();
+
+        $competitorJob = collect($response->json('jobs'))->firstWhere('competitorId', $competitor->id);
+        $this->assertIsArray($competitorJob);
+        $this->assertTrue($competitorJob['useBrowser']);
+
+        $templateRule = collect($competitorJob['scrapeRules'])->firstWhere('source', 'xpath-template');
+        $this->assertIsArray($templateRule);
+        $this->assertSame(['h1.product-title', '.meta-title'], $templateRule['nameCss']);
+        $this->assertSame(['.current-price'], $templateRule['priceCss']);
+        $this->assertSame('data-price', $templateRule['priceAttribute']);
+        $this->assertSame('https://api.com/product?slug={slug}', $templateRule['apiUrlTemplate']);
+        $this->assertSame('data.item_min_price', $templateRule['apiPricePath']);
+        $this->assertSame(['Accept' => 'application/json'], $templateRule['apiHeaders']);
     }
 
     public function test_agent_result_updates_competitor_price(): void

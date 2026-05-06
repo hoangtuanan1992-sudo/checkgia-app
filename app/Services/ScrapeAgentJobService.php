@@ -5,9 +5,11 @@ namespace App\Services;
 use App\Models\Competitor;
 use App\Models\CompetitorPrice;
 use App\Models\CompetitorSite;
+use App\Models\CompetitorSiteTemplate;
 use App\Models\Product;
 use App\Models\ProductPriceHistory;
 use App\Models\ScrapeAgentJob;
+use App\Models\UserScrapeXpath;
 use App\Models\UserScrapeSetting;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -295,6 +297,8 @@ class ScrapeAgentJobService
      */
     private function toAgentPayload(ScrapeAgentJob $job): array
     {
+        $scrapeRules = $this->scrapeRulesForJob($job);
+
         return [
             'jobId' => (string) $job->job_uuid,
             'leaseToken' => (string) $job->lease_token,
@@ -311,10 +315,270 @@ class ScrapeAgentJobService
             'needName' => true,
             'needPrice' => true,
             'needVariants' => false,
-            'useBrowser' => false,
+            'useBrowser' => collect($scrapeRules)->contains(fn (array $rule): bool => (bool) ($rule['useBrowser'] ?? false)),
+            'scrapeRules' => $scrapeRules,
             'timeoutSeconds' => (int) config('services.checkgia_agent.job_timeout_seconds', 60),
             'attempt' => (int) $job->attempts,
         ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function scrapeRulesForJob(ScrapeAgentJob $job): array
+    {
+        if ($job->type === 'product' && $job->product_id) {
+            $product = Product::query()->find((int) $job->product_id);
+
+            return $product ? $this->productScrapeRules($product, (string) $job->url) : [];
+        }
+
+        if ($job->type === 'competitor' && $job->competitor_id) {
+            $competitor = Competitor::query()
+                ->with(['competitorSite.scrapeXpaths'])
+                ->find((int) $job->competitor_id);
+
+            return $competitor ? $this->competitorScrapeRules($competitor, (string) $job->url) : [];
+        }
+
+        return [];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function productScrapeRules(Product $product, string $url): array
+    {
+        $rules = [];
+        $template = $this->approvedTemplateForUrl($url);
+        if ($template) {
+            $rule = $this->rulePayload(
+                'xpath-template',
+                $this->templateXpaths($template, 'name', $template->name_xpath),
+                $this->templateXpaths($template, 'price', $template->price_xpath),
+                $template->price_regex,
+                (int) $template->id,
+                $this->templateAdvancedRule($template)
+            );
+            if ($rule) {
+                $rules[] = $rule;
+            }
+        }
+
+        $settings = UserScrapeSetting::query()->where('user_id', (int) $product->user_id)->first();
+        if ($settings) {
+            $rule = $this->rulePayload(
+                'user-xpath',
+                $this->userXpaths((int) $product->user_id, 'name', $settings->own_name_xpath),
+                $this->userXpaths((int) $product->user_id, 'price', $settings->own_price_xpath),
+                $settings->price_regex
+            );
+            if ($rule) {
+                $rules[] = $rule;
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function competitorScrapeRules(Competitor $competitor, string $url): array
+    {
+        $rules = [];
+        $site = $competitor->competitorSite;
+        if ($site) {
+            $site->loadMissing('scrapeXpaths');
+            $rule = $this->rulePayload(
+                'site-xpath',
+                $this->siteXpaths($site, 'name', $site->name_xpath),
+                $this->siteXpaths($site, 'price', $site->price_xpath),
+                $site->price_regex
+            );
+            if ($rule) {
+                $rules[] = $rule;
+            }
+        }
+
+        $template = $this->approvedTemplateForUrl($url);
+        if ($template) {
+            $rule = $this->rulePayload(
+                'xpath-template',
+                $this->templateXpaths($template, 'name', $template->name_xpath),
+                $this->templateXpaths($template, 'price', $template->price_xpath),
+                $template->price_regex,
+                (int) $template->id,
+                $this->templateAdvancedRule($template)
+            );
+            if ($rule) {
+                $rules[] = $rule;
+            }
+        }
+
+        return $rules;
+    }
+
+    private function approvedTemplateForUrl(string $url): ?CompetitorSiteTemplate
+    {
+        $domain = CompetitorSite::normalizedDomainFromUrl($url);
+        if (! $domain || ! Schema::hasTable('competitor_site_templates')) {
+            return null;
+        }
+
+        $query = CompetitorSiteTemplate::query()
+            ->where('domain', $domain)
+            ->with(['scrapeXpaths' => function ($q) {
+                $q->orderBy('type')->orderBy('position');
+            }]);
+
+        if (Schema::hasColumn('competitor_site_templates', 'is_approved')) {
+            $query->where('is_approved', true);
+        }
+
+        return $query->first();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function userXpaths(int $userId, string $type, ?string $primary): array
+    {
+        $fallbacks = Schema::hasTable('user_scrape_xpaths')
+            ? UserScrapeXpath::query()
+                ->where('user_id', $userId)
+                ->where('type', $type)
+                ->orderBy('position')
+                ->pluck('xpath')
+                ->all()
+            : [];
+
+        return $this->cleanXpaths(array_merge([(string) $primary], $fallbacks));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function siteXpaths(CompetitorSite $site, string $type, ?string $primary): array
+    {
+        $fallbacks = $site->scrapeXpaths
+            ->where('type', $type)
+            ->sortBy('position')
+            ->pluck('xpath')
+            ->all();
+
+        return $this->cleanXpaths(array_merge([(string) $primary], $fallbacks));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function templateXpaths(CompetitorSiteTemplate $template, string $type, ?string $primary): array
+    {
+        $fallbacks = $template->scrapeXpaths
+            ->where('type', $type)
+            ->sortBy('position')
+            ->pluck('xpath')
+            ->all();
+
+        return $this->cleanXpaths(array_merge([(string) $primary], $fallbacks));
+    }
+
+    /**
+     * @param list<string> $nameXpaths
+     * @param list<string> $priceXpaths
+     * @return array<string, mixed>|null
+     */
+    private function rulePayload(
+        string $source,
+        array $nameXpaths,
+        array $priceXpaths,
+        ?string $priceRegex,
+        ?int $templateId = null,
+        array $advanced = []
+    ): ?array
+    {
+        $advanced = array_filter($advanced, function ($value): bool {
+            if (is_array($value)) {
+                return $value !== [];
+            }
+
+            if (is_bool($value)) {
+                return $value;
+            }
+
+            return trim((string) ($value ?? '')) !== '';
+        });
+
+        if ($nameXpaths === [] && $priceXpaths === [] && $advanced === []) {
+            return null;
+        }
+
+        return array_merge([
+            'source' => $source,
+            'nameXpaths' => $nameXpaths,
+            'priceXpaths' => $priceXpaths,
+            'priceRegex' => trim((string) ($priceRegex ?? '')) ?: null,
+            'templateId' => $templateId,
+        ], $advanced);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function templateAdvancedRule(CompetitorSiteTemplate $template): array
+    {
+        $table = $template->getTable();
+        $has = fn (string $column): bool => Schema::hasColumn($table, $column);
+
+        $headers = null;
+        if ($has('api_headers')) {
+            $rawHeaders = $template->api_headers;
+            $headers = is_array($rawHeaders)
+                ? collect($rawHeaders)
+                    ->mapWithKeys(fn ($value, $key): array => [trim((string) $key) => trim((string) $value)])
+                    ->filter(fn (string $value, string $key): bool => $key !== '' && $value !== '')
+                    ->all()
+                : null;
+        }
+
+        return [
+            'useBrowser' => $has('use_browser') && (bool) $template->use_browser,
+            'nameCss' => $has('name_css') ? $this->cleanCssLines((string) $template->name_css) : [],
+            'priceCss' => $has('price_css') ? $this->cleanCssLines((string) $template->price_css) : [],
+            'priceAttribute' => $has('price_attribute') ? (trim((string) $template->price_attribute) ?: null) : null,
+            'apiUrlTemplate' => $has('api_url_template') ? (trim((string) $template->api_url_template) ?: null) : null,
+            'apiNamePath' => $has('api_name_path') ? (trim((string) $template->api_name_path) ?: null) : null,
+            'apiPricePath' => $has('api_price_path') ? (trim((string) $template->api_price_path) ?: null) : null,
+            'apiHeaders' => $headers,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function cleanCssLines(string $value): array
+    {
+        return collect(preg_split('/\R+/', $value, -1, PREG_SPLIT_NO_EMPTY) ?: [])
+            ->map(fn ($selector): string => trim((string) $selector))
+            ->filter(fn (string $selector): bool => $selector !== '')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param array<int, mixed> $xpaths
+     * @return list<string>
+     */
+    private function cleanXpaths(array $xpaths): array
+    {
+        return collect($xpaths)
+            ->map(fn ($xpath): string => trim((string) $xpath))
+            ->filter(fn (string $xpath): bool => $xpath !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function applyProductResult(

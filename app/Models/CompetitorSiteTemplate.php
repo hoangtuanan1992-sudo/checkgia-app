@@ -7,13 +7,31 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['domain', 'name', 'name_xpath', 'price_xpath', 'price_regex', 'is_approved', 'approved_at'])]
+#[Fillable([
+    'domain',
+    'name',
+    'name_xpath',
+    'price_xpath',
+    'price_regex',
+    'use_browser',
+    'name_css',
+    'price_css',
+    'price_attribute',
+    'api_url_template',
+    'api_name_path',
+    'api_price_path',
+    'api_headers',
+    'is_approved',
+    'approved_at',
+])]
 class CompetitorSiteTemplate extends Model
 {
     use HasFactory;
 
     protected $casts = [
         'is_approved' => 'boolean',
+        'use_browser' => 'boolean',
+        'api_headers' => 'array',
         'approved_at' => 'datetime',
     ];
 
