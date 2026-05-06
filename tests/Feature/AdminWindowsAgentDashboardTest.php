@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Competitor;
 use App\Models\CompetitorSite;
+use App\Models\AppSetting;
 use App\Models\Product;
 use App\Models\ScrapeAgent;
 use App\Models\ScrapeAgentJob;
@@ -79,5 +80,18 @@ class AdminWindowsAgentDashboardTest extends TestCase
         $this->actingAs($owner)
             ->get(route('admin.windows-agent.index'))
             ->assertForbidden();
+    }
+
+    public function test_admin_can_save_windows_agent_api_key(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->post(route('admin.windows-agent.api-key.update'), [
+                'windows_agent_api_key' => 'db-agent-secret-123456',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('db-agent-secret-123456', AppSetting::current()?->windows_agent_api_key);
     }
 }

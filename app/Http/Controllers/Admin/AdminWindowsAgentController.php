@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use App\Models\ScrapeAgent;
 use App\Models\ScrapeAgentJob;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
@@ -14,9 +17,11 @@ class AdminWindowsAgentController extends Controller
     public function index(): View
     {
         $migrated = Schema::hasTable('scrape_agents') && Schema::hasTable('scrape_agent_jobs');
+        $keyState = $this->agentKeyState();
         if (! $migrated) {
             return view('admin.windows-agent.index', [
                 'migrated' => false,
+                ...$keyState,
                 'agents' => collect(),
                 'stats' => $this->emptyStats(),
                 'activeJobs' => collect(),
@@ -143,6 +148,7 @@ class AdminWindowsAgentController extends Controller
 
         return view('admin.windows-agent.index', [
             'migrated' => true,
+            ...$keyState,
             'agents' => $agents,
             'stats' => [
                 'agents_total' => $agents->count(),
@@ -162,6 +168,25 @@ class AdminWindowsAgentController extends Controller
         ]);
     }
 
+    public function updateApiKey(Request $request): RedirectResponse
+    {
+        if (! Schema::hasTable('app_settings') || ! Schema::hasColumn('app_settings', 'windows_agent_api_key')) {
+            return back()->withErrors([
+                'windows_agent_api_key' => 'Chưa có cột lưu key Windows Agent. Hãy chạy migration trên hosting.',
+            ]);
+        }
+
+        $data = $request->validate([
+            'windows_agent_api_key' => ['required', 'string', 'min:16', 'max:4096'],
+        ]);
+
+        $setting = AppSetting::current() ?? new AppSetting;
+        $setting->windows_agent_api_key = trim((string) $data['windows_agent_api_key']);
+        $setting->save();
+
+        return back()->with('status', 'Đã lưu key Windows Agent. Hãy chạy lại agent trên máy Windows.');
+    }
+
     /**
      * @return array<string, int|float>
      */
@@ -176,6 +201,29 @@ class AdminWindowsAgentController extends Controller
             'jobs_done' => 0,
             'jobs_failed' => 0,
             'completion_percent' => 0.0,
+        ];
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function agentKeyState(): array
+    {
+        $canStoreApiKey = Schema::hasTable('app_settings')
+            && Schema::hasColumn('app_settings', 'windows_agent_api_key');
+        $hasDatabaseApiKey = false;
+        if ($canStoreApiKey) {
+            try {
+                $hasDatabaseApiKey = trim((string) (AppSetting::current()?->windows_agent_api_key ?? '')) !== '';
+            } catch (\Throwable) {
+                $hasDatabaseApiKey = false;
+            }
+        }
+
+        return [
+            'canStoreApiKey' => $canStoreApiKey,
+            'hasDatabaseApiKey' => $hasDatabaseApiKey,
+            'envAgentApiKeyConfigured' => trim((string) config('services.checkgia_agent.api_key', '')) !== '',
         ];
     }
 }

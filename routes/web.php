@@ -100,6 +100,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/settings', [AdminSettingController::class, 'edit'])->name('settings.edit');
         Route::put('/settings', [AdminSettingController::class, 'update'])->name('settings.update');
         Route::get('/windows-agent', [AdminWindowsAgentController::class, 'index'])->name('windows-agent.index');
+        Route::post('/windows-agent/api-key', [AdminWindowsAgentController::class, 'updateApiKey'])->name('windows-agent.api-key.update');
         Route::post('/settings/ai/{provider}/test', [AdminSettingController::class, 'testAiProvider'])->name('settings.ai.test');
         Route::post('/settings/ai/{provider}/models', [AdminSettingController::class, 'scanAiProviderModels'])->name('settings.ai.models');
         Route::post('/xpath-templates', [AdminSettingController::class, 'upsertXpathTemplate'])->name('xpath-templates.upsert');

@@ -35,6 +35,7 @@ use Illuminate\Database\Eloquent\Model;
     'chatgpt_api_key',
     'chatgpt_model',
     'chatgpt_models',
+    'windows_agent_api_key',
 ])]
 class AppSetting extends Model
 {
@@ -61,6 +62,7 @@ class AppSetting extends Model
             'gemini_models' => 'array',
             'chatgpt_api_key' => 'encrypted',
             'chatgpt_models' => 'array',
+            'windows_agent_api_key' => 'encrypted',
         ];
     }
 

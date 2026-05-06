@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use App\Models\ScrapeAgent;
 use App\Models\ScrapeAgentJob;
 use App\Services\ScrapeAgentJobService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 
 class ScrapeAgentController extends Controller
@@ -178,8 +180,8 @@ class ScrapeAgentController extends Controller
 
     private function authorizeAgent(Request $request): ?JsonResponse
     {
-        $expectedKey = trim((string) config('services.checkgia_agent.api_key', ''));
-        if ($expectedKey === '') {
+        $expectedKeys = $this->validApiKeys();
+        if ($expectedKeys === []) {
             return response()->json([
                 'ok' => false,
                 'error' => 'Scrape agent API key is not configured.',
@@ -187,7 +189,15 @@ class ScrapeAgentController extends Controller
         }
 
         $providedKey = $this->readApiKey($request);
-        if ($providedKey === '' || ! hash_equals($expectedKey, $providedKey)) {
+        $valid = false;
+        foreach ($expectedKeys as $expectedKey) {
+            if ($providedKey !== '' && hash_equals($expectedKey, $providedKey)) {
+                $valid = true;
+                break;
+            }
+        }
+
+        if (! $valid) {
             return response()->json([
                 'ok' => false,
                 'error' => 'Invalid API key.',
@@ -195,6 +205,31 @@ class ScrapeAgentController extends Controller
         }
 
         return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function validApiKeys(): array
+    {
+        $keys = [];
+        $envKey = trim((string) config('services.checkgia_agent.api_key', ''));
+        if ($envKey !== '') {
+            $keys[] = $envKey;
+        }
+
+        if (Schema::hasTable('app_settings') && Schema::hasColumn('app_settings', 'windows_agent_api_key')) {
+            try {
+                $dbKey = trim((string) (AppSetting::current()?->windows_agent_api_key ?? ''));
+                if ($dbKey !== '') {
+                    $keys[] = $dbKey;
+                }
+            } catch (\Throwable) {
+                // Keep the API usable with the .env key if app settings cannot be read.
+            }
+        }
+
+        return array_values(array_unique($keys));
     }
 
     private function readApiKey(Request $request): string

@@ -40,6 +40,50 @@
             </div>
 
             <div class="card-body">
+                <div class="card" style="max-width:none;border-radius:14px;box-shadow:none;margin-top:0;margin-bottom:14px">
+                    <div class="card-header" style="padding:16px 16px 6px">
+                        <h2 class="card-title" style="font-size:18px">Key kết nối Windows Agent</h2>
+                        <p class="card-sub">Key này phải giống với trường <code>apiKey</code> trong file <code>config.json</code> của phần mềm Windows.</p>
+                    </div>
+                    <div class="card-body" style="padding:8px 16px 16px">
+                        @if($canStoreApiKey)
+                            <form method="POST" action="{{ route('admin.windows-agent.api-key.update') }}" style="display:grid;grid-template-columns:minmax(260px,1fr) auto;gap:10px;align-items:flex-end">
+                                @csrf
+                                <div class="field" style="margin-top:0">
+                                    <label class="label" for="windows_agent_api_key">Windows Agent API key</label>
+                                    <input
+                                        class="input"
+                                        id="windows_agent_api_key"
+                                        name="windows_agent_api_key"
+                                        type="password"
+                                        value=""
+                                        placeholder="{{ $hasDatabaseApiKey ? 'Đã lưu key, nhập để đổi key mới' : 'VD: ckg_agent_9f7Kp2xQm88sLw2026' }}"
+                                        autocomplete="new-password"
+                                    >
+                                    @error('windows_agent_api_key')<div class="error">{{ $message }}</div>@enderror
+                                    <div class="hint" style="margin-top:6px">
+                                        Trạng thái:
+                                        @if($hasDatabaseApiKey)
+                                            <b style="color:#166534">Đã lưu key trong Admin</b>
+                                        @else
+                                            <b style="color:#991b1b">Chưa lưu key trong Admin</b>
+                                        @endif
+                                        @if($envAgentApiKeyConfigured)
+                                            <span> - Có key dự phòng trong <code>.env</code></span>
+                                        @endif
+                                    </div>
+                                </div>
+                                <button class="btn" type="submit" style="height:44px">Lưu key</button>
+                            </form>
+                        @else
+                            <div style="border:1px solid rgba(220,53,69,.28);background:rgba(220,53,69,.08);border-radius:14px;padding:14px">
+                                <div style="font-weight:800;color:#991b1b">Chưa có cột lưu key Windows Agent.</div>
+                                <div class="hint" style="margin-top:6px">Hãy chạy migration trên hosting: <code>php artisan migrate --force</code></div>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
                 @if(! $migrated)
                     <div style="border:1px solid rgba(220,53,69,.28);background:rgba(220,53,69,.08);border-radius:14px;padding:14px">
                         <div style="font-weight:800;color:#991b1b">Chưa có bảng Windows Agent.</div>

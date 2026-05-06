@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AppSetting;
 use App\Models\Competitor;
 use App\Models\CompetitorSite;
 use App\Models\Product;
@@ -47,6 +48,34 @@ class ScrapeAgentApiTest extends TestCase
             'agent_id' => 'windows-pc-01',
             'name' => 'May quet nha',
             'status' => 'online',
+        ]);
+    }
+
+    public function test_agent_can_use_api_key_saved_in_admin_settings(): void
+    {
+        config(['services.checkgia_agent.api_key' => '']);
+        AppSetting::query()->create([
+            'windows_agent_api_key' => 'db-agent-secret-123456',
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer db-agent-secret-123456')
+            ->postJson('/api/scrape-agent/heartbeat', [
+                'agentId' => 'windows-pc-01',
+                'agentName' => 'May quet nha',
+                'version' => '1.0.0',
+                'status' => 'online',
+                'capabilities' => [
+                    'http' => true,
+                    'browser' => true,
+                    'javascript' => true,
+                    'variants' => true,
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->assertDatabaseHas('scrape_agents', [
+            'agent_id' => 'windows-pc-01',
         ]);
     }
 
