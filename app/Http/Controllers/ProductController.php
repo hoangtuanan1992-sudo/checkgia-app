@@ -161,6 +161,7 @@ class ProductController extends Controller
     {
         abort_unless($product->user_id === $request->user()->effectiveUserId(), 404);
 
+        $this->markProductDeletedBy($product, $request->user());
         $product->delete();
 
         return redirect()->route('dashboard')->with('status', 'Đã xoá sản phẩm');
@@ -176,6 +177,7 @@ class ProductController extends Controller
         }
         abort_unless($this->canManageDashboardProduct($user, $product), 403);
 
+        $this->markProductDeletedBy($product, $user);
         $product->delete();
 
         if ($request->expectsJson()) {
@@ -195,7 +197,11 @@ class ProductController extends Controller
         $this->applyDashboardDeleteFilters($query, $request);
 
         $count = (clone $query)->count();
-        $deleted = $query->delete();
+        $deleted = 0;
+        if ($count > 0) {
+            (clone $query)->update(['deleted_by_user_id' => $user->id]);
+            $deleted = $query->delete();
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -299,6 +305,15 @@ class ProductController extends Controller
         }
 
         return in_array((int) $product->product_group_id, $allowedGroupIds, true);
+    }
+
+    private function markProductDeletedBy(Product $product, $user): void
+    {
+        if (! $user) {
+            return;
+        }
+
+        $product->forceFill(['deleted_by_user_id' => $user->id])->save();
     }
 
     private function applyViewerProductScope($query, $user): void

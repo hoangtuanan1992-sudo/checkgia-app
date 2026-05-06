@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CompetitorSite;
 use App\Models\CompetitorSiteGroup;
+use App\Models\Product;
 use App\Models\ProductGroup;
 use App\Models\User;
 use App\Models\UserNotificationSetting;
@@ -46,6 +47,7 @@ class AccountController extends Controller
         $groups = collect();
         $competitorSites = collect();
         $competitorGroups = collect();
+        $deletedProducts = collect();
 
         if (! $user->isViewer()) {
             $subUsers = User::query()
@@ -71,6 +73,13 @@ class AccountController extends Controller
                     ->orderBy('name')
                     ->get(['id', 'user_id', 'name', 'created_at']);
             }
+
+            $deletedProducts = Product::onlyTrashed()
+                ->where('user_id', $ownerId)
+                ->with(['group:id,name', 'deletedBy:id,name,email'])
+                ->orderByDesc('deleted_at')
+                ->limit(100)
+                ->get(['id', 'user_id', 'product_group_id', 'name', 'price', 'product_url', 'deleted_by_user_id', 'deleted_at']);
         }
 
         return view('account.index', [
@@ -83,6 +92,7 @@ class AccountController extends Controller
             'groups' => $groups,
             'competitorSites' => $competitorSites,
             'competitorGroups' => $competitorGroups,
+            'deletedProducts' => $deletedProducts,
         ]);
     }
 
@@ -254,6 +264,26 @@ class AccountController extends Controller
     public function destroySubUserFromPost(Request $request, User $user): RedirectResponse
     {
         return $this->destroySubUser($request, $user);
+    }
+
+    public function restoreDeletedProduct(Request $request, string $product): RedirectResponse
+    {
+        $owner = $request->user();
+        abort_if($owner->isViewer(), 403);
+
+        $restorable = Product::onlyTrashed()
+            ->where('user_id', $owner->effectiveUserId())
+            ->whereKey((int) $product)
+            ->first();
+
+        if (! $restorable) {
+            return back()->with('status', 'Không tìm thấy sản phẩm đã xoá để khôi phục.');
+        }
+
+        $restorable->restore();
+        $restorable->forceFill(['deleted_by_user_id' => null])->save();
+
+        return back()->with('status', 'Đã khôi phục sản phẩm.');
     }
 
     public function legacySubUserRequest(Request $request, User $user): RedirectResponse

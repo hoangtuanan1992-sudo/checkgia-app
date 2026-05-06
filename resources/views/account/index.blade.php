@@ -411,6 +411,66 @@
                         </div>
                     </div>
                 </div>
+
+                @unless($user->isViewer())
+                    <div class="card account-inner-card" style="margin-top:14px">
+                        <div class="card-header" style="padding:16px 16px 6px">
+                            <h2 class="card-title" style="font-size:18px">Lịch sử xoá sản phẩm</h2>
+                            <p class="card-sub">Sản phẩm bị xoá khỏi bảng Kết quả so sánh có thể khôi phục tại đây.</p>
+                        </div>
+                        <div class="card-body" style="padding:8px 16px 16px">
+                            @if(($deletedProducts ?? collect())->isNotEmpty())
+                                <div class="table-wrap" style="max-height:420px">
+                                    <table class="table account-compact-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="min-width:280px">Sản phẩm</th>
+                                                <th style="min-width:140px">Nhóm</th>
+                                                <th style="min-width:110px">Giá</th>
+                                                <th style="min-width:190px">Người xoá</th>
+                                                <th style="min-width:150px">Thời gian xoá</th>
+                                                <th style="width:120px">Khôi phục</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($deletedProducts as $deletedProduct)
+                                                <tr>
+                                                    <td>
+                                                        <div style="font-weight:700">{{ $deletedProduct->name }}</div>
+                                                        <div class="hint" style="margin-top:3px">ID: {{ $deletedProduct->id }}</div>
+                                                        @if($deletedProduct->product_url)
+                                                            <a href="{{ $deletedProduct->product_url }}" target="_blank" rel="noopener" style="font-size:12px;word-break:break-all">{{ $deletedProduct->product_url }}</a>
+                                                        @endif
+                                                    </td>
+                                                    <td>{{ $deletedProduct->group?->name ?? 'Chưa có nhóm' }}</td>
+                                                    <td style="font-weight:700">{{ number_format((int) $deletedProduct->price, 0, ',', '.') }}đ</td>
+                                                    <td>
+                                                        @if($deletedProduct->deletedBy)
+                                                            <div style="font-weight:700">{{ $deletedProduct->deletedBy->name }}</div>
+                                                            <div class="hint" style="margin-top:3px">{{ $deletedProduct->deletedBy->email }}</div>
+                                                        @else
+                                                            <span class="hint" style="margin-top:0">Hệ thống</span>
+                                                        @endif
+                                                    </td>
+                                                    <td>{{ $deletedProduct->deleted_at?->setTimezone('Asia/Ho_Chi_Minh')->format('d/m/Y H:i') }}</td>
+                                                    <td style="text-align:right">
+                                                        <form method="POST" action="{{ route('account.deleted-products.restore', $deletedProduct->id) }}" onsubmit="return confirm('Khôi phục sản phẩm này vào bảng Kết quả so sánh?')">
+                                                            @csrf
+                                                            <button class="btn btn-secondary" type="submit">Khôi phục</button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="hint">Đang hiển thị tối đa 100 sản phẩm xoá gần nhất.</div>
+                            @else
+                                <div class="hint">Chưa có sản phẩm nào bị xoá.</div>
+                            @endif
+                        </div>
+                    </div>
+                @endunless
             </div>
         </div>
 

@@ -123,6 +123,7 @@ Route::middleware('auth')->group(function () {
         Route::put('/account/subusers/{user}', [AccountController::class, 'updateSubUser'])->name('account.subusers.update');
         Route::delete('/account/subusers/{user}', [AccountController::class, 'destroySubUser'])->name('account.subusers.destroy');
         Route::match(['get', 'post'], '/account/subusers/{user}', [AccountController::class, 'legacySubUserRequest'])->name('account.subusers.show');
+        Route::post('/account/deleted-products/{product}/restore', [AccountController::class, 'restoreDeletedProduct'])->name('account.deleted-products.restore');
         Route::post('/account/product-groups', [AccountController::class, 'createGroup'])->name('account.product-groups.store');
         Route::match(['get', 'post'], '/account/product-groups/{productGroup}/update', [AccountController::class, 'updateGroupFromPost'])->name('account.product-groups.update-post');
         Route::match(['get', 'post'], '/account/product-groups/{productGroup}/delete', [AccountController::class, 'destroyGroupFromPost'])->name('account.product-groups.delete-post');
