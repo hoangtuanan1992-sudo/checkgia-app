@@ -27,7 +27,12 @@
                     <h1 class="card-title">Thông tin tài khoản</h1>
                     <p class="card-sub">Đổi mật khẩu, cài đặt thông báo và quản lý tài khoản con</p>
                 </div>
-                <a class="btn btn-secondary" href="{{ route('dashboard') }}">Quay lại</a>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                    @unless($user->isViewer())
+                        <a class="btn btn-secondary" href="#deletedProductHistory">Lịch sử xoá</a>
+                    @endunless
+                    <a class="btn btn-secondary" href="{{ route('dashboard') }}">Quay lại</a>
+                </div>
             </div>
 
             <div class="card-body">
@@ -413,7 +418,7 @@
                 </div>
 
                 @unless($user->isViewer())
-                    <div class="card account-inner-card" style="margin-top:14px">
+                    <div class="card account-inner-card" id="deletedProductHistory" style="margin-top:14px">
                         <div class="card-header" style="padding:16px 16px 6px">
                             <h2 class="card-title" style="font-size:18px">Lịch sử xoá sản phẩm</h2>
                             <p class="card-sub">Sản phẩm bị xoá khỏi bảng Kết quả so sánh có thể khôi phục tại đây.</p>
@@ -466,7 +471,7 @@
                                         </tbody>
                                     </table>
                                 </div>
-                                <div class="hint">Đang hiển thị tối đa 100 sản phẩm xoá gần nhất.</div>
+                                <div class="hint">Đang hiển thị tối đa 500 sản phẩm xoá gần nhất.</div>
                             @else
                                 <div class="hint">Chưa có sản phẩm nào bị xoá.</div>
                             @endif

@@ -80,7 +80,7 @@ class AccountController extends Controller
                     ->where('user_id', $ownerId)
                     ->with(['group:id,name', 'deletedBy:id,name,email'])
                     ->orderByDesc('deleted_at')
-                    ->limit(100)
+                    ->limit(500)
                     ->get($this->deletedProductSelectColumns());
             }
         }
