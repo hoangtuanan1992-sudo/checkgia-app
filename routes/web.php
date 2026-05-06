@@ -10,6 +10,7 @@ use App\Http\Controllers\CompetitorHistoryController;
 use App\Http\Controllers\DashboardCompareMatchController;
 use App\Http\Controllers\DashboardCompetitorSetupController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DashboardExcelImportController;
 use App\Http\Controllers\DashboardExportController;
 use App\Http\Controllers\DashboardProductController;
 use App\Http\Controllers\DashboardQuickScanController;
@@ -50,6 +51,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard/reports', [ReportController::class, 'index'])->name('dashboard.reports');
     Route::get('/dashboard/competitors', [DashboardCompetitorSetupController::class, 'index'])->name('dashboard.competitors');
     Route::get('/dashboard/export/products', [DashboardExportController::class, 'products'])->name('dashboard.export.products');
+    Route::get('/dashboard/import/template', [DashboardExcelImportController::class, 'template'])->name('dashboard.import.template');
+    Route::post('/dashboard/import/excel', [DashboardExcelImportController::class, 'import'])->name('dashboard.import.excel');
     Route::post('/dashboard/scrape-now', [DashboardScrapeNowController::class, 'run'])->name('dashboard.scrape.now');
     Route::post('/dashboard/compare-match', [DashboardCompareMatchController::class, 'run'])->name('dashboard.compare-match.run');
     Route::post('/dashboard/compare-match/{compareMatchRun}/tick', [DashboardCompareMatchController::class, 'tick'])->name('dashboard.compare-match.tick');

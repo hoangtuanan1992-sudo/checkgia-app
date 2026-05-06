@@ -449,6 +449,8 @@
                     <div class="actions" style="margin-top:0">
                         <a class="btn btn-secondary" id="exportAll" href="{{ route('dashboard.export.products') }}">Xuất Excel</a>
                         <a class="btn btn-secondary" id="exportGroup" href="{{ route('dashboard.export.products') }}">Xuất theo nhóm</a>
+                        <a class="btn btn-secondary" href="{{ route('dashboard.import.template') }}">File mẫu</a>
+                        <button class="btn btn-secondary" type="button" id="excelImportOpen">Nhập Excel</button>
                         <form method="POST" action="{{ route('dashboard.scrape.now') }}" style="display:inline">
                             @csrf
                             <button class="btn btn-secondary" type="submit">Cập nhật</button>
@@ -972,6 +974,30 @@
             </div>
         </dialog>
     @endif
+
+    <dialog id="excelImportDialog" class="dialog">
+        <div class="dialog-header">
+            <h3 class="card-title" style="font-size:18px">Nhập Excel</h3>
+            <p class="card-sub">Cột 1 là sản phẩm của shop, cột 2 là nhóm sản phẩm, các cột sau là link đối thủ.</p>
+        </div>
+        <div class="dialog-body">
+            <form id="excelImportForm" method="POST" action="{{ route('dashboard.import.excel') }}" enctype="multipart/form-data">
+                @csrf
+                <div class="field" style="margin-top:0">
+                    <label class="label" for="excel_file">File Excel</label>
+                    <input class="input" id="excel_file" name="excel_file" type="file" accept=".xlsx,.xls,.csv" required>
+                    @error('excel_file')<div class="error">{{ $message }}</div>@enderror
+                </div>
+                <div class="actions" style="justify-content:space-between;align-items:center">
+                    <a class="btn btn-secondary" href="{{ route('dashboard.import.template') }}">Tải file mẫu</a>
+                    <span style="display:flex;gap:10px">
+                        <button class="btn btn-secondary" type="button" id="excelImportCancel">Huỷ</button>
+                        <button class="btn" type="submit">Nhập Excel</button>
+                    </span>
+                </div>
+            </form>
+        </div>
+    </dialog>
 
     <dialog id="urlDialog" class="dialog">
         <div class="dialog-header">
@@ -1941,6 +1967,9 @@
             const assignGroupCancel = document.getElementById('assignGroupCancel');
             const assignGroupConfirm = document.getElementById('assignGroupConfirm');
             const sortSelect = document.getElementById('sortSelect');
+            const excelImportOpen = document.getElementById('excelImportOpen');
+            const excelImportDialog = document.getElementById('excelImportDialog');
+            const excelImportCancel = document.getElementById('excelImportCancel');
             const filterReset = document.getElementById('filterReset');
             const exportAll = document.getElementById('exportAll');
             const exportGroup = document.getElementById('exportGroup');
@@ -2091,6 +2120,26 @@
                     }
                 });
             }
+            if (excelImportOpen && excelImportDialog) {
+                excelImportOpen.addEventListener('click', () => {
+                    if (typeof excelImportDialog.showModal === 'function') {
+                        excelImportDialog.showModal();
+                    }
+                });
+                excelImportDialog.addEventListener('click', (event) => {
+                    if (event.target === excelImportDialog) {
+                        excelImportDialog.close();
+                    }
+                });
+            }
+            if (excelImportCancel && excelImportDialog) {
+                excelImportCancel.addEventListener('click', () => excelImportDialog.close());
+            }
+            @if($errors->has('excel_file'))
+                if (excelImportDialog && typeof excelImportDialog.showModal === 'function') {
+                    excelImportDialog.showModal();
+                }
+            @endif
             syncGroupFilterPicker();
 
             function parseNum(v) {
