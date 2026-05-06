@@ -149,6 +149,31 @@ class SubUserGroupVisibilityTest extends TestCase
             ->assertDontSee('https://blocked.test/tu-lanh');
     }
 
+    public function test_subuser_manual_product_group_dropdown_only_shows_allowed_groups(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $allowedProductGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Manual Dropdown Group',
+        ]);
+        ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Blocked Manual Dropdown Group',
+        ]);
+
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$allowedProductGroup->id],
+        ]);
+
+        $this->actingAs($subUser)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Allowed Manual Dropdown Group')
+            ->assertDontSee('Blocked Manual Dropdown Group');
+    }
+
     public function test_subuser_without_allowed_groups_sees_no_comparison_products_or_competitor_sites(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);
