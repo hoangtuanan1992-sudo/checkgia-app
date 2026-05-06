@@ -53,7 +53,9 @@ class DashboardExcelImportTest extends TestCase
             ->post(route('dashboard.import.excel'), [
                 'excel_file' => $file,
             ])
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('status', fn (string $status) => str_contains($status, '1 hàng sản phẩm')
+                && str_contains($status, 'thêm mới 1 link đối thủ'));
 
         $group = ProductGroup::query()->where('user_id', $user->id)->where('name', 'Điện thoại')->firstOrFail();
 
@@ -129,7 +131,9 @@ class DashboardExcelImportTest extends TestCase
             ->post(route('dashboard.import.excel'), [
                 'excel_file' => $file,
             ])
-            ->assertRedirect(route('dashboard'));
+            ->assertRedirect(route('dashboard'))
+            ->assertSessionHas('status', fn (string $status) => str_contains($status, '1 hàng sản phẩm')
+                && str_contains($status, 'thêm mới 1 link đối thủ'));
 
         $this->assertDatabaseHas('products', [
             'user_id' => $owner->id,

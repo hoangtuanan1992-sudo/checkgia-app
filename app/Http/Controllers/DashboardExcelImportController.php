@@ -113,7 +113,10 @@ class DashboardExcelImportController extends Controller
             $spreadsheet->disconnectWorksheets();
         }
 
-        $message = 'Đã nhập Excel: tạo mới '.$stats['created'].' sản phẩm, cập nhật '.$stats['updated'].' sản phẩm, thêm/cập nhật '.$stats['links'].' link đối thủ.';
+        $message = 'Đã nhập Excel: '.$stats['productRows'].' hàng sản phẩm (tạo mới '.$stats['created'].', cập nhật '.$stats['updated'].'), thêm mới '.$stats['linkCreated'].' link đối thủ, cập nhật '.$stats['linkUpdated'].' link.';
+        if ($stats['linkUnchanged'] > 0) {
+            $message .= ' Giữ nguyên '.$stats['linkUnchanged'].' link đã có.';
+        }
         if ($stats['skippedRows'] > 0 || $stats['skippedLinks'] > 0) {
             $message .= ' Bỏ qua '.$stats['skippedRows'].' dòng và '.$stats['skippedLinks'].' link không hợp lệ.';
         }
@@ -122,16 +125,19 @@ class DashboardExcelImportController extends Controller
     }
 
     /**
-     * @return array{created:int,updated:int,links:int,skippedRows:int,skippedLinks:int}
+     * @return array{productRows:int,created:int,updated:int,linkCreated:int,linkUpdated:int,linkUnchanged:int,skippedRows:int,skippedLinks:int}
      */
     private function importSheet(Request $request, Worksheet $sheet): array
     {
         $authUser = $request->user();
         $userId = $authUser->effectiveUserId();
         $stats = [
+            'productRows' => 0,
             'created' => 0,
             'updated' => 0,
-            'links' => 0,
+            'linkCreated' => 0,
+            'linkUpdated' => 0,
+            'linkUnchanged' => 0,
             'skippedRows' => 0,
             'skippedLinks' => 0,
         ];
@@ -174,6 +180,7 @@ class DashboardExcelImportController extends Controller
             }
 
             $stats[$product->wasRecentlyCreated ? 'created' : 'updated']++;
+            $stats['productRows']++;
 
             for ($column = 3; $column <= $highestColumn; $column++) {
                 $url = $this->cellString($sheet, $column, $row);
@@ -193,8 +200,8 @@ class DashboardExcelImportController extends Controller
                     continue;
                 }
 
-                $this->upsertCompetitorLink($product, $site, $url);
-                $stats['links']++;
+                $linkStatus = $this->upsertCompetitorLink($product, $site, $url);
+                $stats[$linkStatus]++;
             }
         }
 
@@ -282,7 +289,7 @@ class DashboardExcelImportController extends Controller
         }
     }
 
-    private function upsertCompetitorLink(Product $product, CompetitorSite $site, string $url): void
+    private function upsertCompetitorLink(Product $product, CompetitorSite $site, string $url): string
     {
         $competitor = Competitor::query()->firstOrNew([
             'product_id' => $product->id,
@@ -298,6 +305,12 @@ class DashboardExcelImportController extends Controller
         if (! $wasExisting || $oldUrl !== $url) {
             $competitor->markPriceMissing();
         }
+
+        if (! $wasExisting) {
+            return 'linkCreated';
+        }
+
+        return $oldUrl === $url ? 'linkUnchanged' : 'linkUpdated';
     }
 
     private function resolveProductGroupId($authUser, int $userId, string $groupValue, Collection $productGroups): array
