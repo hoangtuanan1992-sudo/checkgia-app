@@ -1224,8 +1224,16 @@
                 return holder?.dataset?.productRow || holder?.dataset?.productCard || holder?.dataset?.productId || '';
             }
 
+            function comparisonTableElement() {
+                return document.getElementById('comparisonTableView');
+            }
+
             function comparisonTableScrollLeft() {
-                return Number(document.getElementById('comparisonTableView')?.scrollLeft || 0);
+                return Number(comparisonTableElement()?.scrollLeft || 0);
+            }
+
+            function comparisonTableScrollTop() {
+                return Number(comparisonTableElement()?.scrollTop || 0);
             }
 
             function visibleComparisonElement() {
@@ -1234,13 +1242,19 @@
                 const candidates = Array.from(document.querySelectorAll(selector));
                 if (!candidates.length) return null;
 
-                const topLine = 120;
+                const table = comparisonTableElement();
+                const tableRect = table?.getBoundingClientRect?.();
+                const topLine = tableRect && mode !== 'cards'
+                    ? tableRect.top + Math.min(Math.max(80, table.clientHeight * 0.35), 260)
+                    : Math.min(Math.max(120, window.innerHeight * 0.35), 360);
                 let best = candidates[0];
                 let bestDistance = Number.POSITIVE_INFINITY;
                 candidates.forEach((el) => {
                     const rect = el.getBoundingClientRect();
-                    const distance = Math.abs(rect.top - topLine);
-                    if (rect.bottom >= topLine && distance < bestDistance) {
+                    const visibleInTable = !tableRect || mode === 'cards' || (rect.bottom >= tableRect.top && rect.top <= tableRect.bottom);
+                    const midpoint = rect.top + rect.height / 2;
+                    const distance = Math.abs(midpoint - topLine);
+                    if (visibleInTable && distance < bestDistance) {
                         best = el;
                         bestDistance = distance;
                     }
@@ -1276,6 +1290,7 @@
                     anchorOffset: anchor.anchorOffset,
                     scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
                     tableScrollLeft: comparisonTableScrollLeft(),
+                    tableScrollTop: comparisonTableScrollTop(),
                     viewMode: compareViewToggle?.dataset?.mode || '',
                     reason,
                     path: window.location.pathname,
@@ -1298,6 +1313,7 @@
                     anchorOffset: anchor.anchorOffset,
                     scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
                     tableScrollLeft: comparisonTableScrollLeft(),
+                    tableScrollTop: comparisonTableScrollTop(),
                     viewMode: compareViewToggle?.dataset?.mode || '',
                     reason,
                     path: window.location.pathname,
@@ -1338,35 +1354,44 @@
 
                 const restore = () => {
                     restoringComparisonPosition = true;
-                    const table = document.getElementById('comparisonTableView');
-                    if (table && Number.isFinite(Number(payload.tableScrollLeft))) {
-                        table.scrollLeft = Number(payload.tableScrollLeft || 0);
-                    }
-
-                    const target = comparisonTargetElement(String(payload.productId || ''));
-                    if (target) {
-                        const offset = Number.isFinite(Number(payload.anchorOffset))
-                            ? Number(payload.anchorOffset)
-                            : -118;
-                        const top = Math.max(0, target.getBoundingClientRect().top + window.scrollY + offset);
-                        window.scrollTo({top, behavior: 'auto'});
-                        target.classList.add('compare-restore-highlight');
-                        window.setTimeout(() => target.classList.remove('compare-restore-highlight'), 1800);
-                        window.setTimeout(() => {
-                            if (table && Number.isFinite(Number(payload.tableScrollLeft))) {
-                                table.scrollLeft = Number(payload.tableScrollLeft || 0);
-                            }
-                            restoringComparisonPosition = false;
-                        }, 80);
-                        return;
-                    }
+                    const table = comparisonTableElement();
+                    const applyTableScroll = () => {
+                        if (!table) return;
+                        if (Number.isFinite(Number(payload.tableScrollLeft))) {
+                            table.scrollLeft = Number(payload.tableScrollLeft || 0);
+                        }
+                        if (Number.isFinite(Number(payload.tableScrollTop))) {
+                            table.scrollTop = Number(payload.tableScrollTop || 0);
+                        }
+                    };
 
                     if (Number.isFinite(Number(payload.scrollY))) {
                         window.scrollTo({top: Math.max(0, Number(payload.scrollY || 0)), behavior: 'auto'});
                     }
+                    applyTableScroll();
+
+                    const target = comparisonTargetElement(String(payload.productId || ''));
+                    if (target) {
+                        if (!Number.isFinite(Number(payload.tableScrollTop))) {
+                            const offset = Number.isFinite(Number(payload.anchorOffset))
+                                ? Number(payload.anchorOffset)
+                                : -118;
+                            const top = Math.max(0, target.getBoundingClientRect().top + window.scrollY + offset);
+                            window.scrollTo({top, behavior: 'auto'});
+                        }
+                        target.classList.add('compare-restore-highlight');
+                        window.setTimeout(() => target.classList.remove('compare-restore-highlight'), 1800);
+                        window.setTimeout(() => {
+                            applyTableScroll();
+                            restoringComparisonPosition = false;
+                        }, 120);
+                        return;
+                    }
+
                     window.setTimeout(() => {
+                        applyTableScroll();
                         restoringComparisonPosition = false;
-                    }, 80);
+                    }, 120);
                 };
 
                 window.requestAnimationFrame(() => window.requestAnimationFrame(restore));
