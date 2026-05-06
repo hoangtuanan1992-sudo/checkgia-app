@@ -27,6 +27,14 @@ return [
         'max_products_per_request' => env('CHECKGIA_IMPORT_MAX_PRODUCTS', 5000),
     ],
 
+    'checkgia_agent' => [
+        'api_key' => env('CHECKGIA_AGENT_API_KEY', env('CHECKGIA_IMPORT_API_KEY')),
+        'poll_interval_seconds' => env('CHECKGIA_AGENT_POLL_SECONDS', 10),
+        'max_concurrent_jobs' => env('CHECKGIA_AGENT_MAX_CONCURRENT_JOBS', 3),
+        'lease_seconds' => env('CHECKGIA_AGENT_LEASE_SECONDS', 900),
+        'job_timeout_seconds' => env('CHECKGIA_AGENT_JOB_TIMEOUT_SECONDS', 60),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
