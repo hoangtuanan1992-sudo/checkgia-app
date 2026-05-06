@@ -232,6 +232,11 @@
             .comparison-floating-pager .btn{
                 min-width:76px;
             }
+            .compare-restore-highlight{
+                outline:2px solid #2563eb;
+                outline-offset:-2px;
+                background:#eff6ff !important;
+            }
             .comparison-page-ellipsis{
                 min-width:34px;
                 text-align:center;
@@ -450,7 +455,7 @@
                         <a class="btn btn-secondary" id="exportAll" href="{{ route('dashboard.export.products') }}">Xuất Excel</a>
                         <a class="btn btn-secondary" id="exportGroup" href="{{ route('dashboard.export.products') }}">Xuất theo nhóm</a>
                         <button class="btn btn-secondary" type="button" id="excelImportOpen">Nhập Excel</button>
-                        <form method="POST" action="{{ route('dashboard.scrape.now') }}" style="display:inline">
+                        <form method="POST" action="{{ route('dashboard.scrape.now') }}" id="comparisonScrapeNowForm" style="display:inline">
                             @csrf
                             <button class="btn btn-secondary" type="submit">Cập nhật</button>
                         </form>
@@ -1208,6 +1213,123 @@
             const noteCancel = document.getElementById('noteDialogCancel');
             const noteClear = document.getElementById('noteDialogClear');
             const noteButtons = document.querySelectorAll('.js-edit-note');
+            const comparisonScrapeNowForm = document.getElementById('comparisonScrapeNowForm');
+            const comparisonRestoreKey = 'checkgia_comparison_restore_target';
+            let activeUrlTrigger = null;
+            let activeNoteTrigger = null;
+
+            function productIdFromComparisonElement(el) {
+                const holder = el?.closest?.('[data-product-row], [data-product-card]');
+                return holder?.dataset?.productRow || holder?.dataset?.productCard || holder?.dataset?.productId || '';
+            }
+
+            function comparisonTableScrollLeft() {
+                return Number(document.getElementById('comparisonTableView')?.scrollLeft || 0);
+            }
+
+            function visibleComparisonProductId() {
+                const mode = compareViewToggle?.dataset?.mode || (isMobileView() ? 'cards' : getStoredCompareView());
+                const selector = mode === 'cards' ? '[data-product-card]' : '[data-product-row]';
+                const candidates = Array.from(document.querySelectorAll(selector));
+                if (!candidates.length) return '';
+
+                const topLine = 120;
+                let best = candidates[0];
+                let bestDistance = Number.POSITIVE_INFINITY;
+                candidates.forEach((el) => {
+                    const rect = el.getBoundingClientRect();
+                    const distance = Math.abs(rect.top - topLine);
+                    if (rect.bottom >= topLine && distance < bestDistance) {
+                        best = el;
+                        bestDistance = distance;
+                    }
+                });
+
+                return best?.dataset?.productRow || best?.dataset?.productCard || best?.dataset?.productId || '';
+            }
+
+            function saveComparisonReturnTarget(el, reason = 'action') {
+                const payload = {
+                    productId: productIdFromComparisonElement(el),
+                    scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
+                    tableScrollLeft: comparisonTableScrollLeft(),
+                    viewMode: compareViewToggle?.dataset?.mode || '',
+                    reason,
+                    path: window.location.pathname,
+                    savedAt: Date.now(),
+                };
+
+                try {
+                    localStorage.setItem(comparisonRestoreKey, JSON.stringify(payload));
+                } catch (e) {
+                }
+            }
+
+            function saveComparisonViewport(reason = 'viewport') {
+                const payload = {
+                    productId: visibleComparisonProductId(),
+                    scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
+                    tableScrollLeft: comparisonTableScrollLeft(),
+                    viewMode: compareViewToggle?.dataset?.mode || '',
+                    reason,
+                    path: window.location.pathname,
+                    savedAt: Date.now(),
+                };
+
+                try {
+                    localStorage.setItem(comparisonRestoreKey, JSON.stringify(payload));
+                } catch (e) {
+                }
+            }
+
+            function comparisonTargetElement(productId) {
+                if (!productId) return null;
+                const mode = compareViewToggle?.dataset?.mode || (isMobileView() ? 'cards' : getStoredCompareView());
+                const primary = mode === 'cards'
+                    ? `[data-product-card="${productId}"]`
+                    : `[data-product-row="${productId}"]`;
+                const fallback = mode === 'cards'
+                    ? `[data-product-row="${productId}"]`
+                    : `[data-product-card="${productId}"]`;
+
+                return document.querySelector(primary) || document.querySelector(fallback);
+            }
+
+            function restoreComparisonReturnTarget() {
+                let payload = null;
+                try {
+                    const raw = localStorage.getItem(comparisonRestoreKey);
+                    if (raw) payload = JSON.parse(raw);
+                    localStorage.removeItem(comparisonRestoreKey);
+                } catch (e) {
+                    payload = null;
+                }
+                if (!payload || payload.path !== window.location.pathname || Date.now() - Number(payload.savedAt || 0) > 120000) {
+                    return;
+                }
+
+                const restore = () => {
+                    const table = document.getElementById('comparisonTableView');
+                    if (table && Number.isFinite(Number(payload.tableScrollLeft))) {
+                        table.scrollLeft = Number(payload.tableScrollLeft || 0);
+                    }
+
+                    const target = comparisonTargetElement(String(payload.productId || ''));
+                    if (target) {
+                        const top = Math.max(0, target.getBoundingClientRect().top + window.scrollY - 118);
+                        window.scrollTo({top, behavior: 'auto'});
+                        target.classList.add('compare-restore-highlight');
+                        window.setTimeout(() => target.classList.remove('compare-restore-highlight'), 1800);
+                        return;
+                    }
+
+                    if (Number.isFinite(Number(payload.scrollY))) {
+                        window.scrollTo({top: Math.max(0, Number(payload.scrollY || 0)), behavior: 'auto'});
+                    }
+                };
+
+                window.requestAnimationFrame(() => window.requestAnimationFrame(restore));
+            }
 
             function showDialog(el) {
                 if (!el) return false;
@@ -1229,7 +1351,8 @@
                 return true;
             }
 
-            function open(action, value, fieldName) {
+            function open(action, value, fieldName, trigger = null) {
+                activeUrlTrigger = trigger;
                 form.action = action;
                 input.value = value || '';
                 input.name = fieldName || 'url';
@@ -1239,8 +1362,9 @@
                 input.focus();
             }
 
-            function openNote(action, value) {
+            function openNote(action, value, trigger = null) {
                 if (!noteForm || !noteInput) return;
+                activeNoteTrigger = trigger;
                 noteForm.action = action || '';
                 noteInput.value = value || '';
                 showDialog(noteDialog);
@@ -1253,7 +1377,7 @@
                         e.preventDefault();
                         e.stopPropagation();
                     }
-                    open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
+                    open(btn.dataset.action, btn.dataset.value, btn.dataset.field, btn);
                 });
             });
 
@@ -1263,9 +1387,19 @@
                         e.preventDefault();
                         e.stopPropagation();
                     }
-                    openNote(btn.dataset.action, btn.dataset.value);
+                    openNote(btn.dataset.action, btn.dataset.value, btn);
                 });
             });
+
+            if (form) {
+                form.addEventListener('submit', () => saveComparisonReturnTarget(activeUrlTrigger, 'url'));
+            }
+            if (noteForm) {
+                noteForm.addEventListener('submit', () => saveComparisonReturnTarget(activeNoteTrigger, 'note'));
+            }
+            if (comparisonScrapeNowForm) {
+                comparisonScrapeNowForm.addEventListener('submit', () => saveComparisonViewport('scrape-now'));
+            }
 
             cancel.addEventListener('click', () => closeDialog(dialog));
             dialog.addEventListener('click', (e) => {
@@ -1381,7 +1515,10 @@
                     if (['done', 'failed'].includes(String(payload.run?.status || ''))) {
                         compareMatchRunning = false;
                         if (payload.run?.status === 'done') {
-                            setTimeout(() => window.location.reload(), 900);
+                            setTimeout(() => {
+                                saveComparisonViewport('compare-match');
+                                window.location.reload();
+                            }, 900);
                         }
                         return;
                     }
@@ -1615,6 +1752,7 @@
                         }
 
                         if (data && data.reload) {
+                            saveComparisonReturnTarget(lastAdjustButton, 'adjustment-variant');
                             window.location.reload();
                             return;
                         }
@@ -1658,9 +1796,11 @@
                                     span.style.color = effectiveDiff > 0 ? '#166534' : (effectiveDiff < 0 ? '#991b1b' : '#111827');
                                 });
                             } else {
+                                saveComparisonReturnTarget(lastAdjustButton, 'adjustment-fallback');
                                 window.location.reload();
                             }
                         } else {
+                            saveComparisonViewport('adjustment-fallback');
                             window.location.reload();
                         }
                     } catch (err) {
@@ -1963,7 +2103,7 @@
                 select.addEventListener('change', () => {
                     const action = select.value || '';
                     if (!action) return;
-                    open(action, '', 'url');
+                    open(action, '', 'url', select);
                     const wrapId = select.dataset.target || '';
                     const wrap = wrapId ? document.getElementById(wrapId) : null;
                     if (wrap) wrap.style.display = 'none';
@@ -1981,7 +2121,7 @@
                             e.preventDefault();
                             e.stopPropagation();
                         }
-                        open(btn.dataset.action, btn.dataset.value, btn.dataset.field);
+                        open(btn.dataset.action, btn.dataset.value, btn.dataset.field, btn);
                     });
                 });
                 scope.querySelectorAll('.js-edit-note').forEach((btn) => {
@@ -1992,7 +2132,7 @@
                             e.preventDefault();
                             e.stopPropagation();
                         }
-                        openNote(btn.dataset.action, btn.dataset.value);
+                        openNote(btn.dataset.action, btn.dataset.value, btn);
                     });
                 });
                 scope.querySelectorAll('.js-edit-adjustment').forEach((btn) => {
@@ -2031,7 +2171,7 @@
                     select.addEventListener('change', () => {
                         const action = select.value || '';
                         if (!action) return;
-                        open(action, '', 'url');
+                        open(action, '', 'url', select);
                         const wrapId = select.dataset.target || '';
                         const wrap = wrapId ? document.getElementById(wrapId) : null;
                         if (wrap) wrap.style.display = 'none';
@@ -2648,6 +2788,7 @@
             if (filterCompetitorGroup) filterCompetitorGroup.addEventListener('change', syncExportLinks);
             syncExportLinks();
             renderComparisonFromCurrentResults();
+            restoreComparisonReturnTarget();
         })();
     </script>
 @endsection
