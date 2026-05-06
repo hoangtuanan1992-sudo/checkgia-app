@@ -1218,6 +1218,7 @@
             let activeUrlTrigger = null;
             let activeNoteTrigger = null;
             let restoringComparisonPosition = false;
+            let comparisonReturnTargetLockedUntil = 0;
 
             function productIdFromComparisonElement(el) {
                 const holder = el?.closest?.('[data-product-row], [data-product-card]');
@@ -1299,12 +1300,16 @@
 
                 try {
                     localStorage.setItem(comparisonRestoreKey, JSON.stringify(payload));
+                    comparisonReturnTargetLockedUntil = Date.now() + 8000;
                 } catch (e) {
                 }
             }
 
             function saveComparisonViewport(reason = 'viewport') {
                 if (restoringComparisonPosition) {
+                    return;
+                }
+                if (Date.now() < comparisonReturnTargetLockedUntil) {
                     return;
                 }
                 const anchor = comparisonAnchorPayload(visibleComparisonElement());
