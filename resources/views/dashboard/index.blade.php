@@ -1217,6 +1217,7 @@
             const comparisonRestoreKey = 'checkgia_comparison_restore_target';
             let activeUrlTrigger = null;
             let activeNoteTrigger = null;
+            let restoringComparisonPosition = false;
 
             function productIdFromComparisonElement(el) {
                 const holder = el?.closest?.('[data-product-row], [data-product-card]');
@@ -1227,11 +1228,11 @@
                 return Number(document.getElementById('comparisonTableView')?.scrollLeft || 0);
             }
 
-            function visibleComparisonProductId() {
+            function visibleComparisonElement() {
                 const mode = compareViewToggle?.dataset?.mode || (isMobileView() ? 'cards' : getStoredCompareView());
                 const selector = mode === 'cards' ? '[data-product-card]' : '[data-product-row]';
                 const candidates = Array.from(document.querySelectorAll(selector));
-                if (!candidates.length) return '';
+                if (!candidates.length) return null;
 
                 const topLine = 120;
                 let best = candidates[0];
@@ -1245,12 +1246,34 @@
                     }
                 });
 
-                return best?.dataset?.productRow || best?.dataset?.productCard || best?.dataset?.productId || '';
+                return best || null;
+            }
+
+            function productIdFromComparisonHolder(holder) {
+                return holder?.dataset?.productRow || holder?.dataset?.productCard || holder?.dataset?.productId || '';
+            }
+
+            function comparisonAnchorPayload(holder) {
+                if (!holder) {
+                    return {
+                        productId: '',
+                        anchorOffset: null,
+                    };
+                }
+
+                const top = holder.getBoundingClientRect().top + window.scrollY;
+
+                return {
+                    productId: productIdFromComparisonHolder(holder),
+                    anchorOffset: Math.round((window.scrollY || window.pageYOffset || 0) - top),
+                };
             }
 
             function saveComparisonReturnTarget(el, reason = 'action') {
+                const anchor = comparisonAnchorPayload(el?.closest?.('[data-product-row], [data-product-card]'));
                 const payload = {
-                    productId: productIdFromComparisonElement(el),
+                    productId: anchor.productId || productIdFromComparisonElement(el),
+                    anchorOffset: anchor.anchorOffset,
                     scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
                     tableScrollLeft: comparisonTableScrollLeft(),
                     viewMode: compareViewToggle?.dataset?.mode || '',
@@ -1266,8 +1289,13 @@
             }
 
             function saveComparisonViewport(reason = 'viewport') {
+                if (restoringComparisonPosition) {
+                    return;
+                }
+                const anchor = comparisonAnchorPayload(visibleComparisonElement());
                 const payload = {
-                    productId: visibleComparisonProductId(),
+                    productId: anchor.productId,
+                    anchorOffset: anchor.anchorOffset,
                     scrollY: Math.max(0, Math.round(window.scrollY || window.pageYOffset || 0)),
                     tableScrollLeft: comparisonTableScrollLeft(),
                     viewMode: compareViewToggle?.dataset?.mode || '',
@@ -1309,6 +1337,7 @@
                 }
 
                 const restore = () => {
+                    restoringComparisonPosition = true;
                     const table = document.getElementById('comparisonTableView');
                     if (table && Number.isFinite(Number(payload.tableScrollLeft))) {
                         table.scrollLeft = Number(payload.tableScrollLeft || 0);
@@ -1316,16 +1345,28 @@
 
                     const target = comparisonTargetElement(String(payload.productId || ''));
                     if (target) {
-                        const top = Math.max(0, target.getBoundingClientRect().top + window.scrollY - 118);
+                        const offset = Number.isFinite(Number(payload.anchorOffset))
+                            ? Number(payload.anchorOffset)
+                            : -118;
+                        const top = Math.max(0, target.getBoundingClientRect().top + window.scrollY + offset);
                         window.scrollTo({top, behavior: 'auto'});
                         target.classList.add('compare-restore-highlight');
                         window.setTimeout(() => target.classList.remove('compare-restore-highlight'), 1800);
+                        window.setTimeout(() => {
+                            if (table && Number.isFinite(Number(payload.tableScrollLeft))) {
+                                table.scrollLeft = Number(payload.tableScrollLeft || 0);
+                            }
+                            restoringComparisonPosition = false;
+                        }, 80);
                         return;
                     }
 
                     if (Number.isFinite(Number(payload.scrollY))) {
                         window.scrollTo({top: Math.max(0, Number(payload.scrollY || 0)), behavior: 'auto'});
                     }
+                    window.setTimeout(() => {
+                        restoringComparisonPosition = false;
+                    }, 80);
                 };
 
                 window.requestAnimationFrame(() => window.requestAnimationFrame(restore));
@@ -1400,6 +1441,33 @@
             if (comparisonScrapeNowForm) {
                 comparisonScrapeNowForm.addEventListener('submit', () => saveComparisonViewport('scrape-now'));
             }
+            if ('scrollRestoration' in history) {
+                history.scrollRestoration = 'manual';
+            }
+
+            let comparisonViewportSaveTimer = null;
+            function scheduleComparisonViewportSave(reason = 'scroll') {
+                window.clearTimeout(comparisonViewportSaveTimer);
+                comparisonViewportSaveTimer = window.setTimeout(() => saveComparisonViewport(reason), 180);
+            }
+
+            function bindComparisonPositionTracking(root = document) {
+                const table = root.querySelector?.('#comparisonTableView') || document.getElementById('comparisonTableView');
+                if (table && table.dataset.positionTrackingBound !== '1') {
+                    table.dataset.positionTrackingBound = '1';
+                    table.addEventListener('scroll', () => scheduleComparisonViewportSave('table-scroll'), {passive: true});
+                }
+            }
+
+            window.addEventListener('scroll', () => scheduleComparisonViewportSave('window-scroll'), {passive: true});
+            window.addEventListener('beforeunload', () => saveComparisonViewport('beforeunload'));
+            window.addEventListener('pagehide', () => saveComparisonViewport('pagehide'));
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') {
+                    saveComparisonViewport('visibility-hidden');
+                }
+            });
+            bindComparisonPositionTracking();
 
             cancel.addEventListener('click', () => closeDialog(dialog));
             dialog.addEventListener('click', (e) => {
@@ -2566,6 +2634,7 @@
                     const activeMode = compareViewToggle?.dataset.mode || (isMobileView() ? 'cards' : getStoredCompareView());
                     currentComparisonResults()?.replaceWith(nextResults);
                     setupFloatingPagerObserver();
+                    bindComparisonPositionTracking(nextResults);
                     bindDynamicComparisonControls(nextResults);
                     renderComparisonFromCurrentResults();
                     setCompareView(activeMode, false);
