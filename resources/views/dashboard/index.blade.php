@@ -457,9 +457,7 @@
                         @if($compareMatchEnabled ?? false)
                             <button class="btn btn-secondary" type="button" id="compareMatchOpen">So Khớp</button>
                         @endif
-                        @unless(auth()->user()?->isViewer())
-                            <button class="btn btn-secondary" type="button" id="bulkDeleteOpen" data-action="{{ route('dashboard.products.bulk-destroy') }}">Xóa</button>
-                        @endunless
+                        <button class="btn btn-secondary" type="button" id="bulkDeleteOpen" data-action="{{ route('dashboard.products.bulk-destroy') }}">Xóa</button>
                     </div>
                 </div>
                 <div id="comparisonPagination" class="comparison-pagination" style="margin-top:0;margin-bottom:12px;padding-top:0;border-top:0">

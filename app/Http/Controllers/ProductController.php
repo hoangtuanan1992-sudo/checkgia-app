@@ -174,6 +174,7 @@ class ProductController extends Controller
         if (! $user->isAdmin() && (int) $product->user_id !== (int) $user->effectiveUserId()) {
             abort(404);
         }
+        abort_unless($this->canManageDashboardProduct($user, $product), 403);
 
         $product->delete();
 
@@ -188,9 +189,9 @@ class ProductController extends Controller
     {
         $user = $request->user();
         abort_unless($user, 403);
-        abort_if($user->isViewer(), 403);
 
         $query = Product::query()->where('user_id', $user->effectiveUserId());
+        $this->applyViewerProductScope($query, $user);
         $this->applyDashboardDeleteFilters($query, $request);
 
         $count = (clone $query)->count();
@@ -284,6 +285,36 @@ class ProductController extends Controller
                 'fetched_at' => now(),
             ]);
         }
+    }
+
+    private function canManageDashboardProduct($user, Product $product): bool
+    {
+        if ($user->isAdmin() || ! $user->isViewer()) {
+            return true;
+        }
+
+        $allowedGroupIds = $user->visibleProductGroupIds();
+        if ($allowedGroupIds === []) {
+            return false;
+        }
+
+        return in_array((int) $product->product_group_id, $allowedGroupIds, true);
+    }
+
+    private function applyViewerProductScope($query, $user): void
+    {
+        if ($user->isAdmin() || ! $user->isViewer()) {
+            return;
+        }
+
+        $allowedGroupIds = $user->visibleProductGroupIds();
+        if ($allowedGroupIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->whereIn('product_group_id', $allowedGroupIds);
     }
 
     private function applyDashboardDeleteFilters($query, Request $request): void

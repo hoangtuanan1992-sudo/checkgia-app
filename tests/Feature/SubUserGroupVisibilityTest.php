@@ -149,6 +149,133 @@ class SubUserGroupVisibilityTest extends TestCase
             ->assertDontSee('https://blocked.test/tu-lanh');
     }
 
+    public function test_subuser_dashboard_shows_delete_controls_for_allowed_products(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $allowedProductGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Delete Controls Group',
+        ]);
+        $product = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $allowedProductGroup->id,
+            'name' => 'Allowed Delete Controls Product',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/allowed-delete-controls',
+        ]);
+
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$allowedProductGroup->id],
+        ]);
+
+        $this->actingAs($subUser)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('id="bulkDeleteOpen"', false)
+            ->assertSee(route('dashboard.products.destroy', $product), false);
+    }
+
+    public function test_subuser_can_delete_allowed_dashboard_product_but_not_blocked_product(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $allowedProductGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Delete Group',
+        ]);
+        $blockedProductGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Blocked Delete Group',
+        ]);
+        $allowedProduct = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $allowedProductGroup->id,
+            'name' => 'Allowed Delete Product',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/allowed-delete',
+        ]);
+        $blockedProduct = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $blockedProductGroup->id,
+            'name' => 'Blocked Delete Product',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/blocked-delete',
+        ]);
+
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$allowedProductGroup->id],
+        ]);
+
+        $this->actingAs($subUser)
+            ->deleteJson(route('dashboard.products.destroy', $allowedProduct))
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+
+        $this->assertDatabaseMissing('products', ['id' => $allowedProduct->id]);
+
+        $this->actingAs($subUser)
+            ->deleteJson(route('dashboard.products.destroy', $blockedProduct))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('products', ['id' => $blockedProduct->id]);
+    }
+
+    public function test_subuser_bulk_delete_only_removes_products_inside_allowed_groups(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $allowedProductGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Bulk Delete Group',
+        ]);
+        $blockedProductGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Blocked Bulk Delete Group',
+        ]);
+        $allowedMatched = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $allowedProductGroup->id,
+            'name' => 'Phone Allowed Bulk Delete',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/phone-allowed-delete',
+        ]);
+        $allowedNotMatched = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $allowedProductGroup->id,
+            'name' => 'Laptop Allowed Keep',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/laptop-allowed-keep',
+        ]);
+        $blockedMatched = Product::query()->create([
+            'user_id' => $owner->id,
+            'product_group_id' => $blockedProductGroup->id,
+            'name' => 'Phone Blocked Keep',
+            'price' => 1000000,
+            'product_url' => 'https://shop.test/phone-blocked-keep',
+        ]);
+
+        $subUser = User::factory()->create([
+            'role' => 'viewer',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$allowedProductGroup->id],
+        ]);
+
+        $this->actingAs($subUser)
+            ->deleteJson(route('dashboard.products.bulk-destroy', ['q' => 'Phone']))
+            ->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'matched' => 1,
+                'deleted' => 1,
+            ]);
+
+        $this->assertDatabaseMissing('products', ['id' => $allowedMatched->id]);
+        $this->assertDatabaseHas('products', ['id' => $allowedNotMatched->id]);
+        $this->assertDatabaseHas('products', ['id' => $blockedMatched->id]);
+    }
+
     public function test_subuser_manual_product_group_dropdown_only_shows_allowed_groups(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);

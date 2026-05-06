@@ -104,12 +104,12 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::post('/dashboard/products', [DashboardProductController::class, 'store'])->name('dashboard.products.store');
+    Route::delete('/dashboard/products/bulk-delete', [ProductController::class, 'destroyFilteredFromDashboard'])->name('dashboard.products.bulk-destroy');
+    Route::delete('/dashboard/products/{product}', [ProductController::class, 'destroyFromDashboard'])->name('dashboard.products.destroy');
 
     Route::middleware('owner')->group(function () {
-        Route::delete('/dashboard/products/bulk-delete', [ProductController::class, 'destroyFilteredFromDashboard'])->name('dashboard.products.bulk-destroy');
         Route::post('/dashboard/products/assign-group/{productGroup}', [ProductController::class, 'assignFilteredGroupFromDashboard'])->name('dashboard.products.assign-group');
         Route::put('/dashboard/products/{product}/url', [ProductController::class, 'updateUrl'])->name('dashboard.products.url.update');
-        Route::delete('/dashboard/products/{product}', [ProductController::class, 'destroyFromDashboard'])->name('dashboard.products.destroy');
         Route::match(['put', 'post', 'get'], '/dashboard/products/{product}/competitor-sites/{competitorSite}', [CompetitorController::class, 'upsertUrl'])->name('dashboard.products.competitors.upsert');
         Route::post('/dashboard/products/{product}/competitor-sites/{competitorSite}/note', [CompetitorController::class, 'updateNote'])->name('dashboard.products.competitors.note');
         Route::post('/dashboard/competitor-sites', [DashboardCompetitorSetupController::class, 'storeSite'])->name('dashboard.competitors.sites.store');
