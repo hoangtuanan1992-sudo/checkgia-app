@@ -151,11 +151,24 @@ class ScrapeAgentJobService
         $created = 0;
         $now = now('Asia/Ho_Chi_Minh');
         $hasScheduleTimes = Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times');
+        $hasScrapePriority = Schema::hasColumn('user_scrape_settings', 'scrape_priority');
         $settings = UserScrapeSetting::query()->get()->keyBy('user_id');
         $userIds = Product::query()
             ->whereNotNull('product_url')
             ->distinct()
-            ->pluck('user_id');
+            ->pluck('user_id')
+            ->all();
+
+        usort($userIds, function ($a, $b) use ($settings, $hasScrapePriority): int {
+            $priorityA = $hasScrapePriority ? (int) ($settings->get((int) $a)->scrape_priority ?? 50) : 50;
+            $priorityB = $hasScrapePriority ? (int) ($settings->get((int) $b)->scrape_priority ?? 50) : 50;
+
+            if ($priorityA !== $priorityB) {
+                return $priorityA <=> $priorityB;
+            }
+
+            return (int) $a <=> (int) $b;
+        });
 
         foreach ($userIds as $userId) {
             if ($created >= $targetQueueSize) {
@@ -166,7 +179,9 @@ class ScrapeAgentJobService
                 'user_id' => (int) $userId,
                 'scrape_interval_minutes' => 10,
                 'scrape_schedule_times' => '',
+                'scrape_priority' => 50,
             ]);
+            $scrapePriority = $this->scrapePriority($setting);
             $scheduledHours = $hasScheduleTimes ? $setting->scheduledHours() : [];
 
             if ($scheduledHours !== []) {
@@ -199,12 +214,12 @@ class ScrapeAgentJobService
                     break;
                 }
 
-                if ($this->ensureProductJob($product)) {
+                if ($this->ensureProductJob($product, $scrapePriority)) {
                     $created++;
                 }
 
                 foreach ($product->competitors as $competitor) {
-                    if ($this->ensureCompetitorJob($competitor)) {
+                    if ($this->ensureCompetitorJob($competitor, $scrapePriority)) {
                         $created++;
                     }
                 }
@@ -212,7 +227,7 @@ class ScrapeAgentJobService
         }
     }
 
-    private function ensureProductJob(Product $product): bool
+    private function ensureProductJob(Product $product, int $scrapePriority): bool
     {
         $url = trim((string) $product->product_url);
         if ($url === '') {
@@ -228,11 +243,11 @@ class ScrapeAgentJobService
             'domain' => CompetitorSite::normalizedDomainFromUrl($url),
             'variant_key' => null,
             'variant_name' => null,
-            'priority' => 10,
+            'priority' => $scrapePriority,
         ]);
     }
 
-    private function ensureCompetitorJob(Competitor $competitor): bool
+    private function ensureCompetitorJob(Competitor $competitor, int $scrapePriority): bool
     {
         $url = trim((string) $competitor->url);
         if ($url === '') {
@@ -248,8 +263,22 @@ class ScrapeAgentJobService
             'domain' => CompetitorSite::normalizedDomainFromUrl($url),
             'variant_key' => $competitor->variant_key,
             'variant_name' => $competitor->variant_name,
-            'priority' => 50,
+            'priority' => $this->competitorJobPriority($scrapePriority),
         ]);
+    }
+
+    private function scrapePriority(UserScrapeSetting $setting): int
+    {
+        if (! Schema::hasColumn('user_scrape_settings', 'scrape_priority')) {
+            return 50;
+        }
+
+        return max(1, min(100, (int) ($setting->scrape_priority ?: 50)));
+    }
+
+    private function competitorJobPriority(int $scrapePriority): int
+    {
+        return max(1, min(110, $scrapePriority + 10));
     }
 
     /**
@@ -262,6 +291,12 @@ class ScrapeAgentJobService
             return false;
         }
         if ($job && $job->status === 'pending') {
+            if ((int) $job->priority !== (int) ($attributes['priority'] ?? $job->priority)) {
+                $job->forceFill([
+                    'priority' => (int) $attributes['priority'],
+                ])->save();
+            }
+
             return false;
         }
 

@@ -16,6 +16,7 @@ Artisan::command('inspire', function () {
 Artisan::command('checkgia:scrape-due', function () {
     $now = now('Asia/Ho_Chi_Minh');
     $hasScheduleTimes = Schema::hasColumn('user_scrape_settings', 'scrape_schedule_times');
+    $hasScrapePriority = Schema::hasColumn('user_scrape_settings', 'scrape_priority');
     $columns = [
         'user_id',
         'own_name_xpath',
@@ -27,11 +28,27 @@ Artisan::command('checkgia:scrape-due', function () {
         $columns[] = 'scrape_schedule_times';
     }
 
+    if ($hasScrapePriority) {
+        $columns[] = 'scrape_priority';
+    }
+
     $settings = UserScrapeSetting::query()->get($columns)->keyBy('user_id');
     $userIds = Product::query()
         ->whereNotNull('product_url')
         ->distinct()
-        ->pluck('user_id');
+        ->pluck('user_id')
+        ->all();
+
+    usort($userIds, function ($a, $b) use ($settings, $hasScrapePriority): int {
+        $priorityA = $hasScrapePriority ? (int) ($settings->get((int) $a)->scrape_priority ?? 50) : 50;
+        $priorityB = $hasScrapePriority ? (int) ($settings->get((int) $b)->scrape_priority ?? 50) : 50;
+
+        if ($priorityA !== $priorityB) {
+            return $priorityA <=> $priorityB;
+        }
+
+        return (int) $a <=> (int) $b;
+    });
 
     foreach ($userIds as $userId) {
         $setting = $settings->get($userId) ?? new UserScrapeSetting([
@@ -57,6 +74,9 @@ Artisan::command('checkgia:scrape-due', function () {
             ->where(function ($q) use ($cutoff) {
                 $q->whereNull('last_scraped_at')->orWhere('last_scraped_at', '<=', $cutoff);
             })
+            ->orderByRaw('last_scraped_at is null desc')
+            ->orderBy('last_scraped_at')
+            ->orderBy('id')
             ->pluck('id');
 
         foreach ($productIds as $id) {

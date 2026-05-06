@@ -111,6 +111,18 @@
                                 @error('scrape_schedule_times')<div class="error">{{ $message }}</div>@enderror
                                 <div class="hint">Để trống thì cập nhật 10 phút/lần. VD: nhập 5 10 20 thì mỗi ngày cập nhật lúc 05:00, 10:00 và 20:00.</div>
                             </div>
+                            @php($scrapePriority = (int) old('scrape_priority', 50))
+                            <div class="field" style="margin-top:12px;max-width:360px">
+                                <label class="label" for="scrape_priority">Ưu tiên cập nhật</label>
+                                <select class="input" id="scrape_priority" name="scrape_priority">
+                                    <option value="1" @selected($scrapePriority === 1)>Rất cao</option>
+                                    <option value="20" @selected($scrapePriority === 20)>Cao</option>
+                                    <option value="50" @selected(! in_array($scrapePriority, [1, 20, 80], true))>Bình thường</option>
+                                    <option value="80" @selected($scrapePriority === 80)>Thấp</option>
+                                </select>
+                                @error('scrape_priority')<div class="error">{{ $message }}</div>@enderror
+                                <div class="hint">Shop có mức ưu tiên cao sẽ được đưa lên trước trong hàng chờ cập nhật của hosting và Windows Agent. Mặc định là Bình thường.</div>
+                            </div>
                         </div>
                     </div>
 

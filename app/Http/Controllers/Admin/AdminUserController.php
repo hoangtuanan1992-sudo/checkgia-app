@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Product;
+use App\Models\ScrapeAgentJob;
 use App\Models\User;
 use App\Models\UserScrapeSetting;
 use App\Support\ProductLimit;
@@ -130,6 +132,7 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'scrape_schedule_times' => ['nullable', 'string', 'max:255', $this->scrapeScheduleTimesRule()],
+            'scrape_priority' => ['nullable', 'integer', 'min:1', 'max:100'],
             'auto_delete_failed_products_enabled' => ['nullable', 'boolean'],
             'auto_delete_failed_products_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
@@ -182,10 +185,11 @@ class AdminUserController extends Controller
         $user = User::create($createData);
 
         if ($data['role'] === 'owner' && Schema::hasTable('user_scrape_settings')) {
-            UserScrapeSetting::query()->updateOrCreate(
+            $scrapeSetting = UserScrapeSetting::query()->updateOrCreate(
                 ['user_id' => $user->id],
                 $this->scrapeSettingPayload($data)
             );
+            $this->syncPendingScrapeAgentJobPriority($user, (int) ($scrapeSetting->scrape_priority ?? 50));
         }
 
         return redirect()->route('admin.users.index')->with('status', 'Đã tạo tài khoản');
@@ -232,6 +236,7 @@ class AdminUserController extends Controller
             'service_start_date' => ['nullable', 'date'],
             'service_end_date' => ['nullable', 'date', 'after_or_equal:service_start_date'],
             'scrape_schedule_times' => ['nullable', 'string', 'max:255', $this->scrapeScheduleTimesRule()],
+            'scrape_priority' => ['nullable', 'integer', 'min:1', 'max:100'],
             'auto_delete_failed_products_enabled' => ['nullable', 'boolean'],
             'auto_delete_failed_products_days' => ['nullable', 'integer', 'min:1', 'max:365'],
             'admin_note' => ['nullable', 'string', 'max:10000'],
@@ -287,10 +292,11 @@ class AdminUserController extends Controller
         $user->update($updates);
 
         if ($updates['role'] === 'owner' && Schema::hasTable('user_scrape_settings')) {
-            UserScrapeSetting::query()->updateOrCreate(
+            $scrapeSetting = UserScrapeSetting::query()->updateOrCreate(
                 ['user_id' => $user->id],
                 $this->scrapeSettingPayload($data)
             );
+            $this->syncPendingScrapeAgentJobPriority($user, (int) ($scrapeSetting->scrape_priority ?? 50));
         }
 
         return redirect()->route('admin.users.index')->with('status', 'Đã cập nhật người dùng');
@@ -346,6 +352,10 @@ class AdminUserController extends Controller
             $payload['scrape_schedule_times'] = $this->normalizeScrapeScheduleTimes($data['scrape_schedule_times'] ?? '');
         }
 
+        if (Schema::hasColumn('user_scrape_settings', 'scrape_priority')) {
+            $payload['scrape_priority'] = $this->normalizeScrapePriority($data['scrape_priority'] ?? 50);
+        }
+
         if (Schema::hasColumn('user_scrape_settings', 'auto_delete_failed_products_enabled')) {
             $payload['auto_delete_failed_products_enabled'] = (bool) ($data['auto_delete_failed_products_enabled'] ?? false);
         }
@@ -355,6 +365,49 @@ class AdminUserController extends Controller
         }
 
         return $payload;
+    }
+
+    private function normalizeScrapePriority(mixed $value): int
+    {
+        return max(1, min(100, (int) ($value ?: 50)));
+    }
+
+    private function competitorJobPriority(int $scrapePriority): int
+    {
+        return max(1, min(110, $scrapePriority + 10));
+    }
+
+    private function syncPendingScrapeAgentJobPriority(User $user, int $scrapePriority): void
+    {
+        if (! Schema::hasTable('scrape_agent_jobs') || ! Schema::hasColumn('scrape_agent_jobs', 'priority')) {
+            return;
+        }
+
+        $productIds = Product::query()
+            ->where('user_id', (int) $user->id)
+            ->select('id');
+
+        ScrapeAgentJob::query()
+            ->where('status', 'pending')
+            ->where('type', 'product')
+            ->whereIn('product_id', $productIds)
+            ->update([
+                'priority' => $scrapePriority,
+                'updated_at' => now(),
+            ]);
+
+        $productIds = Product::query()
+            ->where('user_id', (int) $user->id)
+            ->select('id');
+
+        ScrapeAgentJob::query()
+            ->where('status', 'pending')
+            ->where('type', 'competitor')
+            ->whereIn('product_id', $productIds)
+            ->update([
+                'priority' => $this->competitorJobPriority($scrapePriority),
+                'updated_at' => now(),
+            ]);
     }
 
     private function scrapeScheduleTimesRule(): \Closure

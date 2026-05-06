@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['user_id', 'own_name_xpath', 'own_price_xpath', 'price_regex', 'scrape_interval_minutes', 'scrape_schedule_times', 'auto_delete_failed_products_enabled', 'auto_delete_failed_products_days'])]
+#[Fillable(['user_id', 'own_name_xpath', 'own_price_xpath', 'price_regex', 'scrape_interval_minutes', 'scrape_schedule_times', 'scrape_priority', 'auto_delete_failed_products_enabled', 'auto_delete_failed_products_days'])]
 class UserScrapeSetting extends Model
 {
     use HasFactory;
@@ -15,6 +15,7 @@ class UserScrapeSetting extends Model
     protected function casts(): array
     {
         return [
+            'scrape_priority' => 'integer',
             'auto_delete_failed_products_enabled' => 'boolean',
             'auto_delete_failed_products_days' => 'integer',
         ];
