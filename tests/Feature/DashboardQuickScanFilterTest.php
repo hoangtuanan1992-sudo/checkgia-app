@@ -157,6 +157,39 @@ class DashboardQuickScanFilterTest extends TestCase
             ->assertDontSee('-- Không chọn nhóm --');
     }
 
+    public function test_legacy_subuser_quick_scan_only_lists_allowed_product_groups(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $now = now();
+        $allowedGroupId = DB::table('product_groups')->insertGetId([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Legacy Quick Group',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        DB::table('product_groups')->insert([
+            'user_id' => $owner->id,
+            'name' => 'Blocked Legacy Quick Group',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $jobId = $this->insertJob('legacy-viewer-group-list-job', $now);
+        $this->insertProduct($jobId, 'Legacy Viewer Product', 'https://example.com/legacy-viewer-product', 1000000, $now);
+
+        $subUser = User::factory()->create([
+            'role' => 'owner',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$allowedGroupId],
+        ]);
+
+        $this->actingAs($subUser)
+            ->get(route('dashboard.quick-scan', ['website_url' => 'https://example.com/']))
+            ->assertOk()
+            ->assertSee('Allowed Legacy Quick Group')
+            ->assertDontSee('Blocked Legacy Quick Group')
+            ->assertDontSee('-- Không chọn nhóm --');
+    }
+
     public function test_subuser_must_add_scanned_products_to_an_allowed_product_group(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);

@@ -174,6 +174,32 @@ class SubUserGroupVisibilityTest extends TestCase
             ->assertDontSee('Blocked Manual Dropdown Group');
     }
 
+    public function test_legacy_subuser_with_parent_id_still_only_sees_allowed_group_dropdown_options(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $allowedProductGroup = ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Allowed Legacy Dropdown Group',
+        ]);
+        ProductGroup::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Blocked Legacy Dropdown Group',
+        ]);
+
+        $subUser = User::factory()->create([
+            'role' => 'owner',
+            'parent_user_id' => $owner->id,
+            'visible_product_group_ids' => [$allowedProductGroup->id],
+        ]);
+
+        $this->actingAs($subUser)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Allowed Legacy Dropdown Group')
+            ->assertDontSee('Blocked Legacy Dropdown Group')
+            ->assertDontSee('-- Chưa chọn --');
+    }
+
     public function test_subuser_without_allowed_groups_sees_no_comparison_products_or_competitor_sites(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);

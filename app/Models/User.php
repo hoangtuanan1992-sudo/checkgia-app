@@ -96,7 +96,7 @@ class User extends Authenticatable
 
     public function isViewer(): bool
     {
-        return $this->role === 'viewer';
+        return $this->role === 'viewer' || ! empty($this->parent_user_id);
     }
 
     public function isAdmin(): bool
