@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Admin\AdminSettingController;
 use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminWindowsAgentController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\CompetitorController;
@@ -98,6 +99,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/impersonate/stop', [AdminUserController::class, 'stopImpersonate'])->name('impersonate.stop.get');
         Route::get('/settings', [AdminSettingController::class, 'edit'])->name('settings.edit');
         Route::put('/settings', [AdminSettingController::class, 'update'])->name('settings.update');
+        Route::get('/windows-agent', [AdminWindowsAgentController::class, 'index'])->name('windows-agent.index');
         Route::post('/settings/ai/{provider}/test', [AdminSettingController::class, 'testAiProvider'])->name('settings.ai.test');
         Route::post('/settings/ai/{provider}/models', [AdminSettingController::class, 'scanAiProviderModels'])->name('settings.ai.models');
         Route::post('/xpath-templates', [AdminSettingController::class, 'upsertXpathTemplate'])->name('xpath-templates.upsert');

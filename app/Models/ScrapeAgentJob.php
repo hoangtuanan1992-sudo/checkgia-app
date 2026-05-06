@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'attempts',
     'max_attempts',
     'leased_by_agent_id',
+    'completed_by_agent_id',
     'lease_token',
     'leased_at',
     'lease_expires_at',

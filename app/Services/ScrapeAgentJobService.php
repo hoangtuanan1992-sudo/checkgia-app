@@ -91,7 +91,7 @@ class ScrapeAgentJobService
             }
 
             $error = is_array($payload['error'] ?? null) ? $payload['error'] : [];
-            $job->forceFill([
+            $jobUpdates = [
                 'status' => $status === 'failed' ? 'failed' : 'done',
                 'leased_by_agent_id' => null,
                 'lease_token' => null,
@@ -101,7 +101,11 @@ class ScrapeAgentJobService
                 'last_error_code' => isset($error['code']) ? mb_substr((string) $error['code'], 0, 80) : null,
                 'last_error' => isset($error['message']) ? mb_substr((string) $error['message'], 0, 4000) : null,
                 'result_payload' => $payload,
-            ])->save();
+            ];
+            if (Schema::hasColumn('scrape_agent_jobs', 'completed_by_agent_id')) {
+                $jobUpdates['completed_by_agent_id'] = (string) ($payload['agentId'] ?? '');
+            }
+            $job->forceFill($jobUpdates)->save();
         });
 
         return [
@@ -269,6 +273,9 @@ class ScrapeAgentJobService
             'last_error_code' => null,
             'last_error' => null,
         ]);
+        if (Schema::hasColumn('scrape_agent_jobs', 'completed_by_agent_id')) {
+            $payload['completed_by_agent_id'] = null;
+        }
 
         if ($job) {
             $job->forceFill($payload)->save();

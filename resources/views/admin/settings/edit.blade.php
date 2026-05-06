@@ -10,6 +10,7 @@
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
                     <a class="btn btn-secondary" href="{{ route('admin.users.index') }}">Người dùng</a>
+                    <a class="btn btn-secondary" href="{{ route('admin.windows-agent.index') }}">Windows Agent</a>
                     <a class="btn btn-secondary" href="{{ route('dashboard') }}">Dashboard</a>
                 </div>
             </div>

@@ -135,6 +135,7 @@
                 @endif
                 <a class="btn btn-secondary" href="{{ route('account') }}">Tài khoản</a>
                 @if(auth()->user()->isAdmin())
+                    <a class="btn btn-secondary" href="{{ route('admin.windows-agent.index') }}">Windows Agent</a>
                     <a class="btn btn-secondary" href="{{ route('admin.users.index') }}">Admin</a>
                 @endif
                 <form method="POST" action="{{ route('logout') }}" style="display:inline">

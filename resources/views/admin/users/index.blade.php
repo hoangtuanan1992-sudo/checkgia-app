@@ -11,6 +11,7 @@
                 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
                     <a class="btn" href="{{ route('admin.users.create') }}">Tạo tài khoản</a>
                     <a class="btn btn-secondary" href="{{ route('admin.settings.edit') }}">Cài đặt tổng</a>
+                    <a class="btn btn-secondary" href="{{ route('admin.windows-agent.index') }}">Windows Agent</a>
                     <a class="btn btn-secondary" href="{{ route('dashboard') }}">Dashboard</a>
                 </div>
             </div>
